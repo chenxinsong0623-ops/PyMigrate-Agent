@@ -1,0 +1,53 @@
+# IDE 与操作系统文件
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Python 字节码与工具缓存
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+
+# 覆盖率、打包与构建产物
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+build/
+dist/
+*.egg-info/
+
+# 本地环境与密钥
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+env/
+ENV/
+
+# 日志与本地运行时产物
+*.log
+logs/
+runtime/
+var/uploads/
+var/tmp/
+var/data/
+
+# 上传的压缩包与临时解压目录
+uploads/
+tmp/
+temp/
+
+# 后续本地服务状态（不属于可复现的项目证据）
+qdrant_storage/
+data/runtime/
+
+# 不要宽泛地忽略清单、锁定基准或评测报告：
+# 它们属于发布证据，必须保持可审查。

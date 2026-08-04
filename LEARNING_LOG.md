@@ -1,0 +1,121 @@
+# MigrationLens 学习日志
+
+本日志用于说明构建 MigrationLens 期间学到了什么，以及本人亲自验证了什么。
+计划中的行为和命令不属于证据；只有实际运行相关命令后才能记录结果。
+
+## 每日记录模板
+
+### YYYY-MM-DD — 里程碑
+
+- 目标：
+- 学到的知识：
+- 请求/调用链：
+- 我亲手完成的修改：
+- 实际运行的命令：
+- 精确结果：
+- 失败与诊断：
+- 权衡或替代方案：
+- 面试表述：
+- 待解决问题：
+
+## 2026-08-04 — M01-D1 最小离线骨架
+
+状态：实现与工程验证已完成
+
+### 目标
+
+构建最小的离线 FastAPI 基础：应用工厂、`GET /health/live`、经过校验的配置、
+基于标准库的 JSON 日志、带有 `FakeLLM` 的类型化 LLM 边界、pytest 和 Ruff。
+
+### 需要学习的知识
+
+- 为什么应用工厂能让 FastAPI 应用更容易独立配置和测试。
+- 为什么存活检查不能依赖数据库、模型 API 或其他外部服务。
+- Pydantic Settings 如何将 `MIGRATIONLENS_` 环境变量映射为类型化配置并拒绝
+  非法值。
+- `Protocol` 如何使应用不依赖某个特定的 LLM SDK。
+- 为什么确定性的 Fake 客户端能让离线测试可复现，却不能用于衡量真实模型。
+- 幂等日志配置如何避免重复的处理器和日志行。
+
+### 预期请求/调用链
+
+```text
+Uvicorn 导入 app.main:app
+  -> create_app(settings)
+  -> 配置日志
+  -> 注册健康检查路由
+  -> GET /health/live
+  -> 返回固定的存活检查响应
+```
+
+该健康检查请求不得调用 `FakeLLM`、真实模型、数据库、文件系统、Qdrant 或网络。
+
+### 动手练习
+
+自动检查通过后：
+
+1. 修改所配置的 `FakeLLM` 响应文本。
+2. 更新对应的精确测试断言。
+3. 只运行 `tests/unit/test_llm.py`。
+4. 解释该测试为何具有确定性，以及它为何不能说明真实模型的质量或延迟。
+5. 仅当最终文本仍适合作为项目默认值时才保留它。
+
+### 验证记录
+
+以下命令和结果记录于 2026-08-04：
+
+- `D:\conda_envs\pymigrate-agent\python.exe -m pip check`
+  - 结果：`No broken requirements found.`
+- 指定的 pytest 验收测试集
+  - 结果：`15 passed, 1 warning in 0.37s`。
+- 完整运行 `python -m pytest -q`
+  - 最终重跑结果：`15 passed, 1 warning in 0.36s`。
+- `python -m ruff check app tests --no-cache`
+  - 结果：`All checks passed!`
+- `python -m ruff format --check app tests --no-cache`
+  - 结果：`13 files already formatted`。
+- 仓库全量 Ruff 检查与格式检查
+  - 结果：全部检查通过；24 个文件格式正确。
+- 手工启动 Uvicorn 进程并发送 HTTP 请求
+  - 结果：
+    `{"status":"ok","service":"MigrationLens","version":"0.1.0"}`。
+  - 请求完成后已停止验证进程。
+
+唯一的 pytest 警告是固定版本 FastAPI TestClient 导入触发的上游
+`StarletteDeprecationWarning`。该警告被保留为可见证据，没有通过过滤将其隐藏。
+
+FakeLLM 动手修改练习仍需学习者本人完成；实现 Agent 未将其记录为已完成。
+
+### 面试问题
+
+1. 为什么使用应用工厂，而不是在导入时创建每个依赖？
+2. `/health/live` 与 `/health/ready` 有什么区别？
+3. 为什么让 `FakeLLM` 位于协议之后，而不是由业务逻辑直接导入？
+4. 项目如何避免 API 密钥成为测试的必需条件？
+5. 在宣称真实 LLM 性能之前需要哪些证据？
+
+## 2026-08-04 — M01-D1-CN 中文化与学习交接
+
+状态：已完成
+
+### 完成内容
+
+- 将本轮创建的项目治理文档、README、学习日志和配置说明翻译为中文。
+- 将 `app/` 与 `tests/` 中现存模块、类和函数的文档字符串以及行内注释翻译为中文。
+- 将 FakeLLM 默认说明文本与说明性测试消息改为中文。
+- 保留类名、函数名、环境变量、API 路径、JSON 字段、命令和第三方技术名称，
+  避免本地化造成兼容性变化。
+
+### 验证记录
+
+- 完整 pytest：15 个通过、1 个已知上游警告，用时 0.37 秒。
+- Ruff 检查：全部通过。
+- Ruff 格式检查：24 个文件格式正确。
+- Python 语法树与分词审计：25 个文档字符串和 2 处行内注释全部包含中文。
+- 真实 Uvicorn 存活检查：响应契约保持不变，验证后已停止进程。
+- 原始 MigrationLens 三周规格书 SHA256 保持不变。
+
+### 学习结论
+
+中文化应只改变帮助人理解的内容，不应翻译代码标识符、环境变量、API 路径或
+JSON 字段。这样既能提高学习效率，又不会破坏程序接口和测试契约。
