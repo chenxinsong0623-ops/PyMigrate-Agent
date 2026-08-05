@@ -1,5 +1,57 @@
 # 当前任务
 
+## M01-D2A-1 — 依赖与 SQLite 最小基础设施
+
+状态：`in_progress`
+开始日期：2026-08-05
+
+### 目标
+
+- 仅声明并验证 `aiosqlite==0.22.1`。
+- 增加 SQLite 数据库路径和超时配置。
+- 用单个可控连接实现初始化、`ping`、元数据读取和幂等关闭。
+- 只创建 `system_metadata`，并用 `INSERT OR IGNORE` 初始化
+  `schema_version=1` 与 `document_index_status=not_built`。
+- 对预期的 SQLite/文件系统初始化错误保存安全状态并记录受控结构化日志。
+- 使用跨平台、确定性的非法父路径测试验证失败行为。
+
+### 允许修改
+
+- `pyproject.toml`、`.env.example`。
+- `app/core/config.py`、`app/core/logging.py`、`app/storage/`。
+- `tests/conftest.py`、相关配置/日志单元测试和 SQLite 集成测试。
+- 本任务记录与 `LEARNING_LOG.md`。
+
+### 明确排除
+
+- `ApplicationDependencies`、FastAPI lifespan、`GET /health/ready`。
+- Embedding、Qdrant、Docker、GitHub Actions。
+- analyses/reports 表、文档数据、向量、BM25、RRF、ZIP、AST、LangGraph
+  和真实 LLM。
+- 修改 Day 1 FakeLLM 行为、README、DECISIONS、SPEC、notes 或 `.idea`。
+
+### 当前检查点
+
+- D2A-1：`implementation_complete`
+- D2A-2：`planned`，未经用户确认不得开始
+- D2A-3：`planned`，未经用户确认不得开始
+
+### 验证记录
+
+- 安装前 `python -m pip check`：
+  `No broken requirements found.`
+- 指定安装命令：
+  `Requirement already satisfied: aiosqlite==0.22.1`；没有新增或升级其他包。
+- 安装后 `python -m pip check`：
+  `No broken requirements found.`
+- 直接导入版本：`0.22.1`。
+- D2A-1 最终限定测试：`25 passed in 0.22s`。
+- D2A-1 限定 Ruff 检查：`All checks passed!`。
+- D2A-1 限定 Ruff 格式检查：`7 files already formatted`。
+- `git diff --check`：退出码 0，无输出。
+- 当前 M01-D2A 仍为 `in_progress`；尚未实施或验证 D2A-2、D2A-3、
+  Uvicorn lifespan、`/health/ready`、Docker、Qdrant 或 GitHub Actions。
+
 ## M01-D1-CN — 中文化与 Day 1 学习交接
 
 状态：`completed`  

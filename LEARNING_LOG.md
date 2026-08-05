@@ -146,3 +146,77 @@ JSON 字段。这样既能提高学习效率，又不会破坏程序接口和测
 - `python -m pytest -q`：16 passed
 - `python -m ruff check .`：passed
 - `python -m ruff format --check .`：passed
+
+## 2026-08-05 — M01-D2A-1 SQLite 最小基础设施
+
+状态：D2A-1 `implementation_complete`；M01-D2A 仍为 `in_progress`
+
+### 目标
+
+- 理解 aiosqlite 如何在 FastAPI 后续生命周期中管理单个异步连接。
+- 建立只包含 `system_metadata` 的 SQLite 最小边界。
+- 区分可预期的基础设施失败与不应被吞掉的编程/进程控制异常。
+- 用安全状态和受控 JSON 字段记录初始化失败，不泄露路径、异常原文或堆栈。
+
+### 当前调用链
+
+```text
+Settings
+  -> SQLiteDatabase(path, timeout)
+  -> initialize()
+     -> 创建父目录和连接
+     -> 创建 system_metadata
+     -> INSERT OR IGNORE 两项初始元数据
+     -> 成功：initialized
+     -> sqlite3.Error/OSError：failed + 安全 error_type
+  -> ping() / read_metadata()
+  -> close()：new、failed、initialized、closed 均可安全调用
+```
+
+`ApplicationDependencies`、FastAPI lifespan 和 `/health/ready` 仍属于后续检查点，
+本检查点不把 SQLite 接入 HTTP 应用。
+
+### 已验证的依赖状态
+
+- 安装前 `python -m pip check`：
+  `No broken requirements found.`
+- 执行指定安装命令后，pip 报告目标环境已存在
+  `aiosqlite==0.22.1`，没有升级或安装其他包。
+- 安装后 `python -m pip check`：
+  `No broken requirements found.`
+- 直接导入显示版本为 `0.22.1`。
+
+### 实现与测试结果
+
+- 创建了只管理一个 aiosqlite 连接的 `SQLiteDatabase`。
+- 只创建 `system_metadata`，并以 `INSERT OR IGNORE` 初始化
+  `schema_version=1` 与 `document_index_status=not_built`。
+- 正常路径、重复初始化、重新打开、`ping`、元数据读取和幂等关闭均有真实
+  `tmp_path` 数据库测试。
+- 普通文件父路径会稳定触发 OSError 分支；SQLite
+  `OperationalError` 也通过注入测试验证。
+- 预期的 SQLite/OSError 被转换为安全失败状态；`RuntimeError`、
+  `KeyboardInterrupt` 和 `SystemExit` 不被吞掉。
+- 部分初始化后出现未预期异常时，局部连接会在 `finally` 中关闭后再传播异常。
+- 安全日志仅增加 `component` 与 `error_type` 白名单字段；测试确认不包含路径、
+  原始异常文本、`exception` 或 traceback。
+
+### 实际命令与结果
+
+- 第一次限定 pytest：`18 passed in 0.19s`。
+- 第一次 Ruff check：`All checks passed!`。
+- 第一次 Ruff format check 发现 `app/storage/sqlite.py` 有两处条件表达式需格式化；
+  随后按 Ruff 建议修正，没有放宽规则。
+- 增加边界与资源清理断言后的中间测试：`21 passed in 0.18s`。
+- 最终限定 pytest：
+  `25 passed in 0.22s`。
+- 最终限定 Ruff check：
+  `All checks passed!`。
+- 最终限定 Ruff format check：
+  `7 files already formatted`。
+- `git diff --check`：退出码 0，无输出。
+
+### 尚未实施
+
+本检查点没有创建 `ApplicationDependencies`，没有接入 FastAPI lifespan，也没有
+实现 `/health/ready`。D2A-2 与 D2A-3 必须在用户分别确认后才能开始。

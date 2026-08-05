@@ -96,3 +96,28 @@ def test_reconfiguring_logging_keeps_one_handler_and_one_record(
     ]
     assert len(owned_handlers) == 1
     assert [record["event"] for record in _records(stream)] == ["日志仅配置一次"]
+
+
+def test_structured_logging_only_adds_safe_sqlite_failure_context(
+    restore_migrationlens_logger: logging.Logger,
+) -> None:
+    stream = io.StringIO()
+    settings = Settings(_env_file=None, environment="test")
+
+    logger = configure_logging(settings, stream=stream)
+    logger.error(
+        "sqlite_initialization_failed",
+        extra={
+            "component": "sqlite",
+            "error_type": "OperationalError",
+            "database_path": "不应出现在日志中的路径",
+        },
+    )
+
+    record = _records(stream)[0]
+    assert record["event"] == "sqlite_initialization_failed"
+    assert record["component"] == "sqlite"
+    assert record["error_type"] == "OperationalError"
+    assert "database_path" not in record
+    assert "exception" not in record
+    assert "traceback" not in record

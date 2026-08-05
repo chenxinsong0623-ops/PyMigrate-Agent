@@ -13,6 +13,7 @@ from app.core.config import Settings
 
 LOGGER_NAME: Final = "migrationlens"
 _HANDLER_MARKER: Final = "_migrationlens_json_handler"
+_SAFE_CONTEXT_FIELDS: Final = ("component", "error_type")
 
 
 class JsonFormatter(logging.Formatter):
@@ -36,6 +37,10 @@ class JsonFormatter(logging.Formatter):
             "service": self._service,
             "environment": self._environment,
         }
+        for field_name in _SAFE_CONTEXT_FIELDS:
+            field_value = getattr(record, field_name, None)
+            if isinstance(field_value, str) and field_value:
+                payload[field_name] = field_value
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
         return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
