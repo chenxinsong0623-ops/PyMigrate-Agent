@@ -119,3 +119,30 @@ FakeLLM 动手修改练习仍需学习者本人完成；实现 Agent 未将其�
 
 中文化应只改变帮助人理解的内容，不应翻译代码标识符、环境变量、API 路径或
 JSON 字段。这样既能提高学习效率，又不会破坏程序接口和测试契约。
+
+## 2026-08-05：手动修改 FakeLLM 默认响应
+
+### 本次修改
+
+- 将 FakeLLM 的默认响应从“FakeLLM 的确定性响应。”修改为：
+  “MigrationLens 离线模拟响应：未调用真实大模型。”
+- 在 `tests/unit/test_llm.py` 中新增默认响应测试。
+- 使用精确断言验证 model、content、finish_reason 和 call_count。
+
+### 我的理解
+
+`FakeLLM()` 没有传入 response 时，会使用 `__init__` 中创建的默认
+`LLMResponse`。
+
+`FakeLLM(response=...)` 传入自定义响应时，不会使用默认中文文本，
+因此原来的确定性测试无法覆盖本次默认值修改，需要增加独立测试。
+
+测试中的精确断言能够在默认响应被意外修改时立即失败，防止接口行为
+在没有注意到的情况下发生变化。
+
+### 验证结果
+
+- `python -m pytest tests/unit/test_llm.py -q`：4 passed
+- `python -m pytest -q`：16 passed
+- `python -m ruff check .`：passed
+- `python -m ruff format --check .`：passed

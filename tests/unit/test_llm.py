@@ -27,6 +27,21 @@ def test_fake_llm_satisfies_runtime_client_protocol() -> None:
 
 
 @pytest.mark.asyncio
+async def test_fake_llm_returns_expected_default_response() -> None:
+    fake_llm = FakeLLM()
+
+    response = await fake_llm.complete(
+        _request(),
+        timeout_seconds=1.0,
+    )
+
+    assert response.model == "fake"
+    assert response.content == "MigrationLens 离线模拟响应：未调用真实大模型。"
+    assert response.finish_reason == "stop"
+    assert fake_llm.call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_fake_llm_is_deterministic_and_records_calls() -> None:
     response = LLMResponse(
         model="fake-test",

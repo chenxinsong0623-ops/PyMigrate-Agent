@@ -53,7 +53,7 @@ class FakeLLM:
     def __init__(self, response: LLMResponse | None = None) -> None:
         self._response = response or LLMResponse(
             model="fake",
-            content="FakeLLM 的确定性响应。",
+            content="MigrationLens 离线模拟响应：未调用真实大模型。",
             finish_reason="stop",
         )
         self.calls: list[tuple[LLMRequest, float]] = []
