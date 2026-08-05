@@ -82,7 +82,7 @@ git status --short
 
 已于 2026-08-04 完成验证：
 
-- 指定 pytest 测试集和完整 pytest 测试集：15 个通过、1 个上游警告；
+- 指定 pytest 测试集和完整 pytest 测试集：16 个通过、1 个上游警告；
 - Ruff 检查：通过；
 - Ruff 格式检查：通过；
 - 真实本地 Uvicorn 进程返回了文档所述的存活检查 JSON，并在验证后停止。
