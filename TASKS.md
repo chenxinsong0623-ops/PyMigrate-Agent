@@ -6,11 +6,12 @@
 
 MigrationLens Day 3 — `ApplicationDependencies` 与 FastAPI lifespan
 
-状态：`planned`
+状态：`completed`
 前置状态：MigrationLens Day 1 `completed`；MigrationLens Day 2
 `implementation_complete`
 
-本次文档重构没有实施 Day 3 代码。只有用户确认开始 Day 3 后，才可修改下述代码。
+用户已于 2026-08-06 正式确认开始 Day 3。本日实现、指定测试、完整回归和
+代码质量检查均已完成；Day 4 仍为 `planned`，尚未开始。
 
 ## 2. 当日目标
 
@@ -67,14 +68,26 @@ git diff --check
 
 ## 7. 完成后填写的真实证据
 
-- 局部测试：尚未运行。
-- 完整测试：尚未运行。
-- Ruff check：尚未运行。
-- Ruff format check：尚未运行。
-- `git diff --check`：尚未运行。
-- 实际失败与修复：尚无。
+- `python -m pip check`：`No broken requirements found.`
+- 指定测试：
+  `15 passed, 1 warning`。
+- 完整测试：
+  `44 passed, 1 warning`。
+- Ruff check：`All checks passed!`。
+- Ruff format check：`28 files already formatted`。
+- `git diff --check`：退出码 0，无输出。
+- 唯一警告仍是 FastAPI TestClient 导入触发的上游
+  `StarletteDeprecationWarning`，没有被过滤或抑制。
 
-命令实际运行前，不得将以上项目改为 PASS，不得填写预计测试数量。
+真实失败与修复：
+
+1. 第一次指定测试在收集阶段失败：`test_lifespan.py` 错误地从 `typing`
+   导入内置 `BaseException`。删除该导入并直接使用内置类型后，同一命令通过。
+2. 第一次完整回归为 `44 passed, 1 warning in 0.67s`，Ruff check 通过，但
+   Ruff format check 报告两份新增测试需要格式化。仅对这两份文件执行
+   `ruff format` 后，最终格式检查通过。
+
+本日没有修改 SQLite schema、Day 2 状态机或依赖版本。
 
 ## 8. 已完成 Day 索引
 
@@ -82,6 +95,7 @@ git diff --check
 |---|---|---|
 | MigrationLens Day 1 | `completed` | 2026-08-04 基础与中文化完整集 15 passed、1 warning；2026-08-05 FakeLLM 手动练习后完整集 16 passed |
 | MigrationLens Day 2 | `implementation_complete` | 2026-08-05 SQLite 相关限定集 25 passed；SQLite 尚未接入 FastAPI |
+| MigrationLens Day 3 | `completed` | 2026-08-06 指定集 15 passed、完整集 44 passed；应用级 SQLite lifespan 已验证，`/health/ready` 仍为 404 |
 
 历史 `M01-D2A-1` 已映射为 MigrationLens Day 2。完整历史和后续每日计划见
 [`notes/MigrationLens_项目说明与每日开发计划.md`](notes/MigrationLens_项目说明与每日开发计划.md)；

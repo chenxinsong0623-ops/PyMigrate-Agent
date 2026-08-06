@@ -277,3 +277,79 @@ MigrationLens Day 3；`/health/ready` 尚未实现，将在后续独立 Day 开�
 结构审计同时确认：`notes/` 恰好三个 Markdown 文件；36 日目标表恰好 36 行，
 55 日保守基线恰好 55 行；MigrationLens 计划 28 日、WDI 计划 21 日；本地
 Markdown 链接无失效目标；`app/`、`tests/` 和 `pyproject.toml` 无 diff。
+
+## 2026-08-06 — MigrationLens Day 3：应用依赖与 FastAPI lifespan
+
+状态：`completed`
+
+### 目标与设计
+
+`ApplicationDependencies` 明确表达“一个 FastAPI 应用拥有哪些基础设施资源”。
+本日容器只持有 SQLite 生命周期边界，不提前加入 Embedding、Qdrant、Agent 或其他
+未来依赖。`build_application_dependencies(settings)` 根据当前应用的
+`sqlite_path` 和 timeout 创建新的 `SQLiteDatabase`，但不在依赖组装时连接数据库。
+
+每次 `create_app()` 都重新创建 `Settings` 解析结果对应的依赖容器，并将容器绑定到
+该应用自己的 lifespan 闭包和 `application.state.dependencies`。因此两个应用不会
+共享容器或 SQLite 连接，启动和关闭其中一个应用不会改变另一个应用的状态。
+
+### 启动、关闭与失败边界
+
+- startup 调用当前应用数据库的 `initialize()`；只有返回 `True` 才完成启动。
+- `initialize()` 返回 `False` 表示已识别的 SQLite/OSError 基础设施失败；
+  lifespan 将其转换为固定的 `ApplicationStartupError("应用基础设施初始化失败")`，
+  不暴露数据库路径、异常原文或敏感信息。
+- `RuntimeError`、`KeyboardInterrupt` 和 `SystemExit` 等未预期异常不被捕获或
+  改写；`finally` 会先尽力关闭当前 lifespan 已拥有的数据库，然后原异常继续传播。
+- 正常 shutdown 也通过同一个 `finally` 关闭当前应用数据库。Day 2 的 `close()`
+  保持安全、幂等。
+- SQLite 连接不能在模块导入或依赖组装时创建，否则导入应用就可能产生文件、
+  占用连接或让多个应用错误共享资源。
+- `SQLiteDatabase.initialize()` 仍只在 schema、seed 和 commit 全部成功后才把
+  局部 connection 发布到实例字段；失败前的局部资源由 Day 2 的 `finally` 清理。
+
+### 健康检查边界
+
+`/health/live` 继续只证明 API 进程可响应，精确返回既有 JSON；测试把数据库
+`ping()` 和 `read_metadata()` 替换为失败探针，确认 live 不会调用它们。
+`/health/ready` 和 `ReadinessService` 没有实现，端点仍返回 404。
+
+### 修改文件
+
+- 新增 `app/core/dependencies.py`；
+- 修改 `app/main.py`；
+- 新增 `tests/unit/test_dependencies.py`；
+- 新增 `tests/integration/test_lifespan.py`；
+- 修改 `tests/integration/test_health.py`，使所有启动测试使用 `tmp_path` 数据库；
+- 更新 `TASKS.md` 与 `LEARNING_LOG.md`。
+
+没有修改 `app/storage/sqlite.py`、SQLite schema、依赖版本或 Day 4 以后功能。
+
+### 第一次失败与修复
+
+1. 第一次指定测试在收集阶段失败，因为新增测试错误地执行
+   `from typing import BaseException`。`BaseException` 是内置类型；删除错误导入
+   并直接用于注解后，指定测试通过。
+2. 第一次完整回归为 `44 passed, 1 warning in 0.67s`，Ruff lint 通过，但
+   format check 报告两份新增测试的多行断言需要机械格式化。仅运行 Ruff formatter
+   处理这两份测试后，格式检查通过；没有放宽断言或隐藏警告。
+
+### 实际命令与最终结果
+
+- `python -m pip check`：`No broken requirements found.`。
+- 指定 pytest：
+  `15 passed, 1 warning`。
+- 完整 pytest：
+  `44 passed, 1 warning`。
+- `python -m ruff check .`：`All checks passed!`。
+- `python -m ruff format --check .`：`28 files already formatted`。
+- `git diff --check`：退出码 0，无输出。
+
+唯一警告仍是 FastAPI TestClient 导入产生的上游
+`StarletteDeprecationWarning`，没有被过滤。
+
+### Day 4 仍未实现
+
+本日没有实现 `/health/ready`、ReadinessService、Embedding、FakeEmbedding、
+Qdrant、Docker、GitHub Actions、报告表、文档快照、索引、ZIP、AST、RAG、
+LangGraph Agent、Citation Guard、真实 LLM 或 WDI-ClaimCheck。

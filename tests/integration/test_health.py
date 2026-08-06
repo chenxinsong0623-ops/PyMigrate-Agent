@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -9,12 +10,13 @@ from app.main import create_app
 
 
 @pytest.fixture
-def application() -> FastAPI:
+def application(tmp_path: Path) -> FastAPI:
     settings = Settings(
         _env_file=None,
         environment="test",
         log_level="INFO",
         llm_backend="fake",
+        sqlite_path=tmp_path / "health.sqlite3",
     )
     return create_app(settings)
 
@@ -64,9 +66,14 @@ def test_health_ready_is_not_implemented(client: TestClient) -> None:
 
 def test_application_starts_without_an_api_key(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    settings = Settings(_env_file=None, environment="test")
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        sqlite_path=tmp_path / "health.sqlite3",
+    )
 
     application = create_app(settings)
 
