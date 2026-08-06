@@ -7,12 +7,28 @@
 
 ## 范围来源
 
-本规格仅源自 `notes/MigrationLens_三周项目规格书.md`。
+`SPEC.md` 仍是 MigrationLens P0 业务范围的权威文件。
 
-- 来源文件 SHA256：
+历史来源记录：
+
+- 原始来源文件：`notes/MigrationLens_三周项目规格书.md`
+- 原始来源 SHA256：
   `C579D39BD258535850D40E1376ACD45BAB7E99045CE12EEAA02A7AEBDD7066A1`
-- 六周总计划和 Codex 工作流可以指导排期与工程过程，但不得增加业务功能。
-- WDI-ClaimCheck 文档不属于本产品范围。
+- 该历史文件已按 D-009 合并并从当前工作树删除；Git 历史继续保留其原始内容。
+
+当前可读来源：
+
+- [`notes/MigrationLens_项目说明与每日开发计划.md`](notes/MigrationLens_项目说明与每日开发计划.md)
+- 当前文件 SHA256：
+  `475C438CC6D888F801ED83FE5832244C5E60F75D3BEB3FE64F6B32EC1205A5AE`
+
+当前可读来源是对历史规格、六周计划、Codex 工作流程以及截至 2026-08-06 的代码、
+测试和 Git 证据所做的结构化整理。文件路径、结构和 hash 变化不改变本 SPEC
+已冻结的 P0、P1、八类规则、安全边界、Agent 工具、API 契约或评测数量。
+
+[`notes/六周双项目AI大模型应用开发总计划.md`](notes/六周双项目AI大模型应用开发总计划.md)
+可以指导排期和工程过程，但不得增加 MigrationLens 业务功能。WDI-ClaimCheck
+文档不属于 MigrationLens 产品范围。
 
 ## 产品说明
 

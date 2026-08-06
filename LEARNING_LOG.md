@@ -3,6 +3,17 @@
 本日志用于说明构建 MigrationLens 期间学到了什么，以及本人亲自验证了什么。
 计划中的行为和命令不属于证据；只有实际运行相关命令后才能记录结果。
 
+## 文档导航
+
+- `LEARNING_LOG.md` 只记录已经发生的学习、修改、失败和真实验证证据。
+- 当前开发日及允许修改范围见 `TASKS.md`。
+- MigrationLens 完整范围和每日计划见
+  `notes/MigrationLens_项目说明与每日开发计划.md`。
+- 双项目总体排期见 `notes/六周双项目AI大模型应用开发总计划.md`。
+- P0 权威范围见 `SPEC.md`；长期决策见 `DECISIONS.md`。
+
+未来计划不得提前写入本日志作为完成证据。
+
 ## 每日记录模板
 
 ### YYYY-MM-DD — 里程碑
@@ -18,7 +29,7 @@
 - 面试表述：
 - 待解决问题：
 
-## 2026-08-04 — M01-D1 最小离线骨架
+## 2026-08-04 — MigrationLens Day 1：最小离线骨架（历史编号 M01-D1）
 
 状态：实现与工程验证已完成
 
@@ -84,7 +95,8 @@ Uvicorn 导入 app.main:app
 唯一的 pytest 警告是固定版本 FastAPI TestClient 导入触发的上游
 `StarletteDeprecationWarning`。该警告被保留为可见证据，没有通过过滤将其隐藏。
 
-FakeLLM 动手修改练习仍需学习者本人完成；实现 Agent 未将其记录为已完成。
+该动手练习当时尚未完成，随后已于 2026-08-05 由学习者完成；真实修改和验证结果
+见下文“手动修改 FakeLLM 默认响应”记录。
 
 ### 面试问题
 
@@ -94,7 +106,7 @@ FakeLLM 动手修改练习仍需学习者本人完成；实现 Agent 未将其�
 4. 项目如何避免 API 密钥成为测试的必需条件？
 5. 在宣称真实 LLM 性能之前需要哪些证据？
 
-## 2026-08-04 — M01-D1-CN 中文化与学习交接
+## 2026-08-04 — MigrationLens Day 1：中文化与学习交接（历史编号 M01-D1-CN）
 
 状态：已完成
 
@@ -120,7 +132,7 @@ FakeLLM 动手修改练习仍需学习者本人完成；实现 Agent 未将其�
 中文化应只改变帮助人理解的内容，不应翻译代码标识符、环境变量、API 路径或
 JSON 字段。这样既能提高学习效率，又不会破坏程序接口和测试契约。
 
-## 2026-08-05：手动修改 FakeLLM 默认响应
+## 2026-08-05 — MigrationLens Day 1：手动修改 FakeLLM 默认响应
 
 ### 本次修改
 
@@ -147,9 +159,9 @@ JSON 字段。这样既能提高学习效率，又不会破坏程序接口和测
 - `python -m ruff check .`：passed
 - `python -m ruff format --check .`：passed
 
-## 2026-08-05 — M01-D2A-1 SQLite 最小基础设施
+## 2026-08-05 — MigrationLens Day 2：SQLite 最小基础设施（历史编号 M01-D2A-1）
 
-状态：D2A-1 `implementation_complete`；M01-D2A 仍为 `in_progress`
+状态：`implementation_complete`
 
 ### 目标
 
@@ -173,8 +185,9 @@ Settings
   -> close()：new、failed、initialized、closed 均可安全调用
 ```
 
-`ApplicationDependencies`、FastAPI lifespan 和 `/health/ready` 仍属于后续检查点，
-本检查点不把 SQLite 接入 HTTP 应用。
+`ApplicationDependencies` 和 FastAPI lifespan 尚未实现，已重新安排为 planned
+MigrationLens Day 3；`/health/ready` 尚未实现，将在后续独立 Day 开发。SQLite
+当前仍未接入 HTTP 应用。
 
 ### 已验证的依赖状态
 
@@ -218,5 +231,49 @@ Settings
 
 ### 尚未实施
 
-本检查点没有创建 `ApplicationDependencies`，没有接入 FastAPI lifespan，也没有
-实现 `/health/ready`。D2A-2 与 D2A-3 必须在用户分别确认后才能开始。
+本日没有创建 `ApplicationDependencies`，没有接入 FastAPI lifespan，也没有实现
+`/health/ready`。这些边界已按一天一个目标重新安排，开始每个后续 Day 前仍须由
+用户确认。
+
+## 2026-08-06 — 文档与计划重构
+
+状态：`completed`（仅文档组织与排期）
+
+### 完成内容
+
+- 将原五个 notes 文件的中心内容整理到三个新文件。
+- 将后续编号统一为 `MigrationLens Day N` 和 `WDI Day N`。
+- 将 M01-D1、M01-D1-CN 和 FakeLLM 手动练习合并为 MigrationLens Day 1
+  的历史与学习记录。
+- 将 M01-D2A-1 映射为 MigrationLens Day 2；其状态保持
+  `implementation_complete`。
+- 将未实施的 lifespan、readiness、Embedding 和 Qdrant 分配到独立后续 Day。
+- 本次没有修改 Python 业务行为、依赖版本、P0 范围或 locked test 原则。
+
+### 测试证据的时间边界
+
+- 2026-08-04 Day 1 基础与中文化验证：完整测试集 `15 passed, 1 warning`。
+- 2026-08-05 FakeLLM 手动练习完成后：LLM 单测 `4 passed`，当时完整测试集
+  `16 passed`。
+- 2026-08-05 Day 2 SQLite 限定测试集：`25 passed in 0.22s`；该数字不是当时
+  或当前仓库的完整测试数量。
+- 2026-08-06 本次重构前只读基线：完整测试集
+  `34 passed, 1 warning in 0.48s`；`pip check`、Ruff check 和 Ruff format
+  check 均通过。
+
+历史的 15、16、25 和当前的 34 分别对应不同日期与测试范围，不得互相替换。
+
+### 重构完成后的验证
+
+三份新 notes、根文档同步和旧文件删除完成后，使用
+`D:\conda_envs\pymigrate-agent\python.exe` 实际运行：
+
+- `python -m pip check`：`No broken requirements found.`
+- `python -m pytest -q`：`34 passed, 1 warning`。
+- `python -m ruff check .`：`All checks passed!`。
+- `python -m ruff format --check .`：`25 files already formatted`。
+- `git diff --check`：退出码 0，无输出。
+
+结构审计同时确认：`notes/` 恰好三个 Markdown 文件；36 日目标表恰好 36 行，
+55 日保守基线恰好 55 行；MigrationLens 计划 28 日、WDI 计划 21 日；本地
+Markdown 链接无失效目标；`app/`、`tests/` 和 `pyproject.toml` 无 diff。
