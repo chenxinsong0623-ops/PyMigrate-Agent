@@ -9,10 +9,11 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 |---|---|---|
 | MigrationLens Day 1 | `completed` | FastAPI 应用工厂、`/health/live`、Settings、JSON 日志、LLMClient/FakeLLM、pytest/Ruff，以及中文化和 FakeLLM 手动练习 |
 | MigrationLens Day 2 | `implementation_complete` | SQLite 最小基础设施、生命周期状态、`system_metadata`、`ping`、元数据读取、安全失败和幂等关闭 |
-| MigrationLens Day 3 | `planned` | `ApplicationDependencies` 与 FastAPI lifespan；尚未实施 |
+| MigrationLens Day 3 | `completed` | `ApplicationDependencies`、应用独立 SQLite 所有权与 FastAPI lifespan |
+| MigrationLens Day 4 | `completed` | 可注入 `ReadinessService`、逐项短 timeout 与结构化 `/health/ready` |
 
-Day 2 的 SQLite 尚未接入 FastAPI lifespan，`/health/ready` 尚未实现。当前
-SQLite 只包含最小 `system_metadata`，不能描述为已经运行的报告存储。
+当前 SQLite 已接入 FastAPI lifespan，但仍只包含最小 `system_metadata`，不能
+描述为已经运行的报告存储。文档索引尚未构建，retriever backend 尚未配置。
 
 尚未实现：
 
@@ -48,6 +49,7 @@ SQLite 只包含最小 `system_metadata`，不能描述为已经运行的报告�
 | `MIGRATIONLENS_LLM_BACKEND` | `fake` | 离线 LLM 实现 |
 | `MIGRATIONLENS_SQLITE_PATH` | 本地文件路径 | SQLite 数据库路径 |
 | `MIGRATIONLENS_SQLITE_TIMEOUT_SECONDS` | `>0` 且 `<=30` | SQLite 连接和 busy timeout |
+| `MIGRATIONLENS_READINESS_TIMEOUT_SECONDS` | `>0` 且 `<=5` | 每项 readiness 检查的短 timeout |
 
 当前不定义真实模型、Embedding 或 Qdrant 配置；只有对应功能实际实现后才会增加。
 
@@ -68,8 +70,23 @@ $Py = 'D:\conda_envs\pymigrate-agent\python.exe'
 }
 ```
 
-`/health/live` 只表示 API 进程可响应，不访问 LLM、SQLite、Qdrant、文件系统或
-网络。当前 `/health/ready` 返回 404，这是尚未实现的真实边界。
+`/health/live` 只表示 API 进程可响应，不访问 readiness、SQLite 或 retriever。
+`/health/ready` 检查当前应用自己的 SQLite、`document_index_status` 和实际配置的
+retriever backend。当前默认应用会诚实返回 HTTP 503：
+
+```json
+{
+  "status": "not_ready",
+  "checks": {
+    "sqlite": {"status": "ok"},
+    "document_index": {"status": "not_built"},
+    "retriever_backend": {"status": "not_configured", "backend": null}
+  }
+}
+```
+
+这表示应用进程仍存活，但处理未来业务请求所需的索引和检索后端尚未就绪；它不表示
+Qdrant、Embedding 或文档索引已经实现。
 
 ## 验证
 
@@ -121,11 +138,9 @@ git diff --check
 
 ## 下一开发日
 
-MigrationLens Day 3 当前为 `planned`：只实现 `ApplicationDependencies` 与
-FastAPI lifespan，在启动时初始化 SQLite、关闭时释放 SQLite。Day 3 不实现
-`/health/ready`、Embedding、Qdrant、Docker 或其他后续模块。
-
-当前执行契约见 [`TASKS.md`](TASKS.md)。本次文档重构没有实施 Day 3 代码。
+MigrationLens Day 5 Embedding 边界仍为 `planned`，尚未开始；Qdrant、文档
+索引、Docker 和其他后续模块仍未实现。当前完成证据见
+[`TASKS.md`](TASKS.md)。
 
 ## 项目文档
 

@@ -6,10 +6,11 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from app.core.config import Settings
+from app.core.readiness import ReadinessService, SQLiteReadinessProtocol
 from app.storage.sqlite import SQLiteDatabase
 
 
-class SQLiteLifecycle(Protocol):
+class SQLiteLifecycle(SQLiteReadinessProtocol, Protocol):
     """FastAPI lifespan 所需的最小 SQLite 生命周期边界。"""
 
     async def initialize(self) -> bool:
@@ -26,13 +27,20 @@ class ApplicationDependencies:
     """一个 FastAPI 应用实例独立拥有的依赖集合。"""
 
     sqlite: SQLiteLifecycle
+    readiness: ReadinessService
 
 
 def build_application_dependencies(settings: Settings) -> ApplicationDependencies:
     """根据当前应用配置组装依赖，但不提前初始化外部资源。"""
+    sqlite = SQLiteDatabase(
+        settings.sqlite_path,
+        timeout_seconds=settings.sqlite_timeout_seconds,
+    )
     return ApplicationDependencies(
-        sqlite=SQLiteDatabase(
-            settings.sqlite_path,
-            timeout_seconds=settings.sqlite_timeout_seconds,
-        )
+        sqlite=sqlite,
+        readiness=ReadinessService(
+            sqlite=sqlite,
+            retriever_backend=None,
+            timeout_seconds=settings.readiness_timeout_seconds,
+        ),
     )

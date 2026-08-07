@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 import app.main as main_module
 from app.core.config import Settings
 from app.core.dependencies import ApplicationDependencies
+from app.core.readiness import ReadinessService
 from app.main import ApplicationStartupError, create_app
 from app.storage.sqlite import SQLiteDatabase, SQLiteInitializationState
 
@@ -37,7 +38,16 @@ def test_lifespan_initializes_and_closes_its_sqlite_database(
             "service": "MigrationLens",
             "version": "0.1.0",
         }
-        assert client.get("/health/ready").status_code == 404
+        readiness_response = client.get("/health/ready")
+        assert readiness_response.status_code == 503
+        assert readiness_response.json()["checks"] == {
+            "sqlite": {"status": "ok"},
+            "document_index": {"status": "not_built"},
+            "retriever_backend": {
+                "status": "not_configured",
+                "backend": None,
+            },
+        }
 
     assert database.initialization_state is SQLiteInitializationState.CLOSED
     assert database_path.is_file()
@@ -58,13 +68,18 @@ def test_two_applications_have_isolated_dependencies_and_lifecycles(
     assert second.state.settings is second_settings
     assert first.state.dependencies is not second.state.dependencies
     assert first_database is not second_database
+    assert first.state.dependencies.readiness is not second.state.dependencies.readiness
     assert first_database.initialization_state is SQLiteInitializationState.NEW
     assert second_database.initialization_state is SQLiteInitializationState.NEW
 
-    with TestClient(first):
+    with TestClient(first) as client:
         assert (
             first_database.initialization_state is SQLiteInitializationState.INITIALIZED
         )
+        assert second_database.initialization_state is SQLiteInitializationState.NEW
+        first_readiness = client.get("/health/ready")
+        assert first_readiness.status_code == 503
+        assert first_readiness.json()["checks"]["sqlite"] == {"status": "ok"}
         assert second_database.initialization_state is SQLiteInitializationState.NEW
 
     assert first_database.initialization_state is SQLiteInitializationState.CLOSED
@@ -128,7 +143,10 @@ async def test_unexpected_startup_error_propagates_after_cleanup(
     unexpected_error: BaseException,
 ) -> None:
     database = _UnexpectedFailureSQLite(unexpected_error)
-    dependencies = ApplicationDependencies(sqlite=database)
+    dependencies = ApplicationDependencies(
+        sqlite=database,
+        readiness=AsyncMock(spec=ReadinessService),
+    )
     monkeypatch.setattr(
         main_module,
         "build_application_dependencies",

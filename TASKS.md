@@ -4,54 +4,57 @@
 
 ## 1. 当前开发日
 
-MigrationLens Day 3 — `ApplicationDependencies` 与 FastAPI lifespan
+MigrationLens Day 4 — `ReadinessService` 与 `/health/ready`
 
 状态：`completed`
 前置状态：MigrationLens Day 1 `completed`；MigrationLens Day 2
-`implementation_complete`
+`implementation_complete`；MigrationLens Day 3 `completed`
 
-用户已于 2026-08-06 正式确认开始 Day 3。本日实现、指定测试、完整回归和
-代码质量检查均已完成；Day 4 仍为 `planned`，尚未开始。
+用户已于 2026-08-06 正式确认开始 Day 4。本日实现、指定测试、完整回归、代码
+质量检查和真实 Uvicorn 验证均已完成；Day 5 仍为 `planned`，尚未开始。
 
 ## 2. 当日目标
 
-建立一个明确拥有应用基础设施依赖的 `ApplicationDependencies`，并通过 FastAPI
-lifespan 在应用启动时初始化 SQLite、在关闭时释放 SQLite。
+实现可注入、可独立测试的 `ReadinessService`，并提供结构化
+`GET /health/ready`。每次请求检查当前应用自己的 SQLite、文档索引元数据和实际
+配置的 retriever backend，且每项可能阻塞的检查都有独立短 timeout。
 
-本日只有“依赖组装与生命周期”一个工程边界，不实现 readiness。
+本日只聚合并诚实报告就绪状态，不负责让应用真正 ready。
 
 ## 3. 允许修改
 
-正式开始 Day 3 后，仅允许修改：
+- `app/core/readiness.py`；
+- `app/core/dependencies.py`；
+- `app/core/config.py`；
+- `app/api/health.py`；
+- `.env.example`；
+- readiness、配置、依赖、health 和 lifespan 的直接相关测试；
+- `TASKS.md`、`LEARNING_LOG.md`；
+- `README.md` 中与 live/ready 当前真实行为直接相关的最小内容。
 
-- 应用依赖容器与 lifespan 所需的 `app/` 文件；
-- `app/main.py`；
-- `tests/unit/test_dependencies.py`；
-- `tests/integration/test_lifespan.py`；
-- 为保持既有健康检查契约所必需的相关测试；
-- `TASKS.md` 与 `LEARNING_LOG.md` 的真实完成记录。
-
-如果实际实现需要超出上述范围，应先停止并由用户确认。
+如需修改 SQLite schema、metadata seed 或 `app/storage/sqlite.py`，必须先停止并
+向用户报告。
 
 ## 4. 明确不做
 
-- `GET /health/ready` 和 ReadinessService；
-- Embedding、Qdrant、Docker、GitHub Actions；
-- 修改 SQLite schema 或增加 analyses/reports 表；
-- 文档快照、chunker、索引、ZIP、AST、RAG、Agent 或真实 LLM；
-- WDI-ClaimCheck 业务实现；
-- 修改 locked test；
+- Embedding、FakeEmbedding、Qdrant、文档索引构建或网络探针实现；
+- Docker、Docker Compose、GitHub Actions；
+- analyses/reports 表；
+- 文档快照、chunker、BM25、RRF、ZIP、AST、规则、RAG、Agent 或真实 LLM；
+- WDI-ClaimCheck、Day 5 或以后功能；
+- 修改 locked test 或增加第三方依赖；
 - 宣称未运行的测试、Docker、CI 或性能结果。
 
 ## 5. 必须行为
 
-- 每个 FastAPI 应用实例拥有独立的依赖容器。
-- lifespan 启动阶段初始化该应用自己的 `SQLiteDatabase`。
-- lifespan 关闭阶段只关闭该应用自己的 `SQLiteDatabase`。
-- 启动失败时已经创建的局部资源得到清理，未预期异常继续传播。
-- `/health/live` 的响应契约保持不变，且不查询 SQLite。
-- `/health/ready` 在本日结束时仍不存在。
-- Day 2 已验证的 SQLite 预期/未预期异常边界保持不变。
+- `ReadinessService` 使用依赖容器中同一个 SQLite 对象，不创建第二个数据库。
+- 每个应用拥有独立的依赖容器、SQLite 和 readiness service。
+- `ping()`、`read_metadata("document_index_status")` 和已配置 backend probe
+  分别受短 timeout 保护。
+- 默认索引仍为 `not_built`，backend 未配置，因此真实应用返回 HTTP 503。
+- HTTP 503 保持与 HTTP 200 相同的结构化响应模型。
+- `/health/live` 响应体完全不变，且不调用任何 readiness 检查。
+- 已知基础设施失败转换为安全状态，timeout 单独报告，未预期程序错误继续传播。
 
 ## 6. 验收命令
 
@@ -59,7 +62,7 @@ lifespan 在应用启动时初始化 SQLite、在关闭时释放 SQLite。
 $Py = 'D:\conda_envs\pymigrate-agent\python.exe'
 
 & $Py -m pip check
-& $Py -m pytest tests/unit/test_dependencies.py tests/integration/test_lifespan.py tests/integration/test_health.py -q
+& $Py -m pytest tests/unit/test_readiness.py tests/integration/test_health_ready.py tests/unit/test_dependencies.py tests/unit/test_config.py tests/integration/test_health.py tests/integration/test_lifespan.py -q
 & $Py -m pytest -q
 & $Py -m ruff check .
 & $Py -m ruff format --check .
@@ -69,25 +72,42 @@ git diff --check
 ## 7. 完成后填写的真实证据
 
 - `python -m pip check`：`No broken requirements found.`
-- 指定测试：
-  `15 passed, 1 warning`。
-- 完整测试：
-  `44 passed, 1 warning`。
+- 指定 pytest：`64 passed, 1 warning in 0.94s`。
+- 完整 pytest：`80 passed, 1 warning in 0.99s`。
 - Ruff check：`All checks passed!`。
-- Ruff format check：`28 files already formatted`。
+- Ruff format check：`31 files already formatted`。
 - `git diff --check`：退出码 0，无输出。
+- `git status --short`：只列出 Day 4 允许范围内的 16 个修改或新增文件。
 - 唯一警告仍是 FastAPI TestClient 导入触发的上游
   `StarletteDeprecationWarning`，没有被过滤或抑制。
 
+真实 Uvicorn 验证：
+
+- 实际命令使用
+  `D:\conda_envs\pymigrate-agent\python.exe -m uvicorn app.main:app
+  --host 127.0.0.1 --port 8000`。
+- `/health/live`：HTTP 200，响应体为
+  `{"status":"ok","service":"MigrationLens","version":"0.1.0"}`。
+- `/health/ready`：HTTP 503，SQLite 为 `ok`，文档索引为 `not_built`，
+  retriever backend 为 `not_configured` 且 `backend=null`。
+- 成功验证进程 PID 28408 已停止。
+
 真实失败与修复：
 
-1. 第一次指定测试在收集阶段失败：`test_lifespan.py` 错误地从 `typing`
-   导入内置 `BaseException`。删除该导入并直接使用内置类型后，同一命令通过。
-2. 第一次完整回归为 `44 passed, 1 warning in 0.67s`，Ruff check 通过，但
-   Ruff format check 报告两份新增测试需要格式化。仅对这两份文件执行
-   `ruff format` 后，最终格式检查通过。
+1. 第一次指定 pytest 一次通过：`64 passed, 1 warning in 1.00s`，没有测试失败。
+2. 第一次 Ruff check 通过；第一次 Ruff format check 报告 4 个新增或修改 Python
+   文件需要机械格式化。只对这 4 个文件执行 Ruff formatter 后，最终
+   `31 files already formatted`，没有放宽断言或规则。
+3. 第一次 Uvicorn 后台启动脚本因 Windows PowerShell 继承环境中的 `Path/PATH`
+   重复键失败，未创建 PID。第二次诊断脚本使用当前 .NET 不支持的
+   `Kill(true)` 重载并超时；PID 32832 随后确认已不存在。第三次脚本未加载
+   `System.Net.Http`，但 PID 5604 已成功停止。前台短时启动证明应用 startup
+   正常；最终显式加载系统程序集并使用隐藏的 `ProcessStartInfo` 后，在 8000
+   端口完成两次真实 HTTP 请求并停止 PID 28408。
 
-本日没有修改 SQLite schema、Day 2 状态机或依赖版本。
+本日没有修改 `app/main.py`、SQLite schema、metadata seed、
+`app/storage/sqlite.py`、依赖版本或任何 Day 5 以后功能。默认 ready=503 是当前
+基础设施事实，不是验收失败。
 
 ## 8. 已完成 Day 索引
 
@@ -95,7 +115,8 @@ git diff --check
 |---|---|---|
 | MigrationLens Day 1 | `completed` | 2026-08-04 基础与中文化完整集 15 passed、1 warning；2026-08-05 FakeLLM 手动练习后完整集 16 passed |
 | MigrationLens Day 2 | `implementation_complete` | 2026-08-05 SQLite 相关限定集 25 passed；SQLite 尚未接入 FastAPI |
-| MigrationLens Day 3 | `completed` | 2026-08-06 指定集 15 passed、完整集 44 passed；应用级 SQLite lifespan 已验证，`/health/ready` 仍为 404 |
+| MigrationLens Day 3 | `completed` | 2026-08-06 指定集 15 passed、完整集 44 passed；应用级 SQLite lifespan 已验证，`/health/ready` 当时仍为 404 |
+| MigrationLens Day 4 | `completed` | 2026-08-06 指定集 64 passed、完整集 80 passed；真实 Uvicorn live=200、ready=503 |
 
 历史 `M01-D2A-1` 已映射为 MigrationLens Day 2。完整历史和后续每日计划见
 [`notes/MigrationLens_项目说明与每日开发计划.md`](notes/MigrationLens_项目说明与每日开发计划.md)；

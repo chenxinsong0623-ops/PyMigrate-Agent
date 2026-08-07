@@ -58,10 +58,21 @@ def test_openapi_exposes_health_live(application: FastAPI) -> None:
     assert "get" in paths["/health/live"]
 
 
-def test_health_ready_is_not_implemented(client: TestClient) -> None:
+def test_health_ready_reports_default_not_ready_state(client: TestClient) -> None:
     response = client.get("/health/ready")
 
-    assert response.status_code == 404
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "not_ready",
+        "checks": {
+            "sqlite": {"status": "ok"},
+            "document_index": {"status": "not_built"},
+            "retriever_backend": {
+                "status": "not_configured",
+                "backend": None,
+            },
+        },
+    }
 
 
 def test_application_starts_without_an_api_key(

@@ -9,6 +9,7 @@ from app.core.dependencies import (
     ApplicationDependencies,
     build_application_dependencies,
 )
+from app.core.readiness import ReadinessService
 from app.storage.sqlite import SQLiteDatabase, SQLiteInitializationState
 
 
@@ -38,6 +39,7 @@ def test_build_application_dependencies_uses_the_app_settings(
 
     assert isinstance(dependencies, ApplicationDependencies)
     assert dependencies.sqlite is database
+    assert isinstance(dependencies.readiness, ReadinessService)
     database_factory.assert_called_once_with(
         settings.sqlite_path,
         timeout_seconds=settings.sqlite_timeout_seconds,
@@ -52,6 +54,7 @@ def test_build_application_dependencies_returns_independent_containers(
 
     assert first is not second
     assert first.sqlite is not second.sqlite
+    assert first.readiness is not second.readiness
     assert isinstance(first.sqlite, SQLiteDatabase)
     assert isinstance(second.sqlite, SQLiteDatabase)
 
@@ -66,5 +69,6 @@ def test_building_dependencies_does_not_initialize_sqlite_or_require_api_key(
     dependencies = build_application_dependencies(_settings(database_path))
 
     assert isinstance(dependencies.sqlite, SQLiteDatabase)
+    assert isinstance(dependencies.readiness, ReadinessService)
     assert dependencies.sqlite.initialization_state is SQLiteInitializationState.NEW
     assert not database_path.exists()

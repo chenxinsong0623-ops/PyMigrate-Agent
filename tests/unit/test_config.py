@@ -14,6 +14,7 @@ def test_settings_have_offline_defaults() -> None:
     assert settings.llm_backend == "fake"
     assert settings.sqlite_path == Path("var/data/migrationlens.sqlite3")
     assert settings.sqlite_timeout_seconds == 2.0
+    assert settings.readiness_timeout_seconds == 1.0
 
 
 def test_settings_read_prefixed_environment_variables(
@@ -24,6 +25,7 @@ def test_settings_read_prefixed_environment_variables(
     monkeypatch.setenv("MIGRATIONLENS_LLM_BACKEND", "fake")
     monkeypatch.setenv("MIGRATIONLENS_SQLITE_PATH", "var/test/custom.sqlite3")
     monkeypatch.setenv("MIGRATIONLENS_SQLITE_TIMEOUT_SECONDS", "3.5")
+    monkeypatch.setenv("MIGRATIONLENS_READINESS_TIMEOUT_SECONDS", "0.75")
 
     settings = Settings(_env_file=None)
 
@@ -32,6 +34,7 @@ def test_settings_read_prefixed_environment_variables(
     assert settings.llm_backend == "fake"
     assert settings.sqlite_path == Path("var/test/custom.sqlite3")
     assert settings.sqlite_timeout_seconds == 3.5
+    assert settings.readiness_timeout_seconds == 0.75
 
 
 @pytest.mark.parametrize(
@@ -68,3 +71,20 @@ def test_settings_accept_sqlite_timeout_upper_boundary() -> None:
     settings = Settings(_env_file=None, sqlite_timeout_seconds=30.0)
 
     assert settings.sqlite_timeout_seconds == 30.0
+
+
+@pytest.mark.parametrize(
+    "invalid_timeout",
+    [0, -1, 5.1, float("nan"), float("inf"), float("-inf")],
+)
+def test_settings_reject_invalid_readiness_timeout(
+    invalid_timeout: float,
+) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, readiness_timeout_seconds=invalid_timeout)
+
+
+def test_settings_accept_readiness_timeout_upper_boundary() -> None:
+    settings = Settings(_env_file=None, readiness_timeout_seconds=5.0)
+
+    assert settings.readiness_timeout_seconds == 5.0

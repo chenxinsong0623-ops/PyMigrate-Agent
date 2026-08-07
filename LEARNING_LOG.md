@@ -353,3 +353,116 @@ Markdown 链接无失效目标；`app/`、`tests/` 和 `pyproject.toml` 无 diff
 本日没有实现 `/health/ready`、ReadinessService、Embedding、FakeEmbedding、
 Qdrant、Docker、GitHub Actions、报告表、文档快照、索引、ZIP、AST、RAG、
 LangGraph Agent、Citation Guard、真实 LLM 或 WDI-ClaimCheck。
+
+## 2026-08-06 — MigrationLens Day 4：ReadinessService 与 `/health/ready`
+
+状态：`completed`
+
+### live 与 ready 的职责
+
+`/health/live` 只回答 FastAPI 进程能否响应，因此不能调用 readiness、SQLite 或
+retriever。它继续精确返回既有 JSON。`/health/ready` 回答应用是否具备处理未来
+业务请求所需的基础设施条件；HTTP 503 只表示这些条件尚未全部满足，不表示
+FastAPI 进程已经死亡。
+
+当前默认应用的 SQLite 已在 lifespan 中成功初始化并可 `ping`，但
+`document_index_status=not_built`，且没有配置 retriever backend，所以 ready
+必须诚实返回 503。不能修改 metadata seed、伪造 Qdrant 或把 FakeLLM 当成
+retriever 来换取 HTTP 200。
+
+### 服务、依赖所有权与隔离
+
+`ReadinessService` 通过构造函数接收 `SQLiteReadinessProtocol`、可选的
+`RetrieverReadinessProbe` 和 timeout。服务构造时不访问数据库、文件系统或网络；
+每次 `check()` 都重新调用公共 `ping()` 和
+`read_metadata("document_index_status")`，没有缓存陈旧状态。
+
+`build_application_dependencies()` 先创建一个 `SQLiteDatabase`，再把同一个对象
+传给 `ReadinessService`。这样 readiness 观察的连接就是 lifespan 初始化和关闭的
+连接，不会创建第二个数据库或绕过应用资源所有权。每次 `create_app()` 都创建新的
+容器、SQLite 和 service；测试确认启动或关闭一个应用不会改变另一个应用的 SQLite
+生命周期，第一个应用的 readiness 也只读取第一个应用的依赖。
+
+readiness 不硬编码 Qdrant。探针协议只暴露安全的 `backend_name` 和异步 `ping()`；
+当前传入 `None`，所以返回 `not_configured` 且完全不进行网络访问。未来实际 backend
+只有在其所属 Day 实现后才通过该协议接入。
+
+### timeout、状态与异常边界
+
+配置 `readiness_timeout_seconds` 默认 1.0 秒，校验范围为 `>0` 且 `<=5`，环境变量
+为 `MIGRATIONLENS_READINESS_TIMEOUT_SECONDS`。SQLite ping、metadata 读取和
+retriever probe 分别使用 Python 3.11 `asyncio.timeout()`，因此某一项阻塞不会获得
+无限等待时间；测试用不可完成的异步 Event 在毫秒级触发 timeout，没有真实等待数秒。
+
+状态含义保持分离：
+
+- `not_built`：metadata 明确说明索引尚未构建；
+- `not_configured`：当前没有 retriever probe，因此没有网络调用；
+- `error`：已知基础设施操作返回失败或抛出公开定义的安全异常；
+- `timeout`：该单项检查超过短 timeout。
+
+SQLite 的已知 `sqlite3.Error`、`OSError` 和 `SQLiteNotInitializedError` 以及
+项目定义的 `ReadinessProbeError` 会变成脱敏 `error`。`RuntimeError`、
+`TypeError` 等未预期程序错误继续传播，因为把所有 `Exception` 都改写为
+`not_ready` 会隐藏代码缺陷。响应模型只包含白名单 status 和安全 backend 名称，
+不保存或返回异常原文、数据库路径、连接信息、traceback、API key 或环境变量。
+
+### HTTP 契约与调用链
+
+路由从 `request.app.state.dependencies` 获取当前应用的 service，只负责把
+`ReadinessResult.status` 映射为 HTTP 200 或 503。两种状态使用同一个冻结的
+Pydantic v2 响应模型；OpenAPI 同时声明 200 和结构化 503。
+
+```text
+GET /health/ready
+  -> request.app.state.dependencies.readiness.check()
+  -> sqlite.ping()
+  -> sqlite.read_metadata("document_index_status")
+  -> configured retriever probe.ping()，或 None -> not_configured
+  -> ReadinessResult
+  -> ready: HTTP 200 / not_ready: HTTP 503
+```
+
+### 修改文件
+
+- 新增 `app/core/readiness.py`；
+- 修改 `app/core/dependencies.py`、`app/core/config.py`、
+  `app/api/health.py` 和 `.env.example`；
+- 新增 `tests/unit/test_readiness.py` 和
+  `tests/integration/test_health_ready.py`；
+- 修改配置、依赖、health、lifespan 的直接相关测试与 `tests/conftest.py`；
+- 更新 `TASKS.md`、`LEARNING_LOG.md` 和 `README.md`。
+- 对 `notes/MigrationLens_项目说明与每日开发计划.md` 做 Day 3/Day 4
+  状态事实的最小同步，不改变后续排期。
+
+没有修改 `app/main.py`、`app/storage/sqlite.py`、SQLite schema、metadata seed、
+依赖版本或后续 Day 的范围与排期。
+
+### 测试与真实运行结果
+
+- `python -m pip check`：`No broken requirements found.`
+- 指定测试：
+  `64 passed, 1 warning in 0.94s`。
+- 完整回归：
+  `80 passed, 1 warning in 0.99s`。
+- Ruff check：`All checks passed!`。
+- Ruff format check：`31 files already formatted`。
+- `git diff --check`：退出码 0，无输出。
+- 唯一警告为既有的上游 `StarletteDeprecationWarning`，没有被屏蔽。
+- 真实 Uvicorn 使用端口 8000：live HTTP 200；ready HTTP 503，SQLite=`ok`、
+  document_index=`not_built`、retriever_backend=`not_configured`；成功验证 PID
+  28408 已停止。
+
+### 真实失败与修复
+
+第一次指定 pytest 一次通过，没有测试失败。第一次 Ruff format check 报告 4 个
+文件需要格式化；只运行 formatter 后通过。真实 Uvicorn 的第一次后台脚本因
+Windows PowerShell 的 `Path/PATH` 重复键失败；后续诊断还暴露当前 .NET 不支持
+`Kill(true)` 以及 PowerShell 未预加载 `System.Net.Http`。每次都核对并只清理本次
+PID；最终使用隐藏 `ProcessStartInfo`、显式加载系统程序集完成请求并停止进程。
+
+### Day 5 仍未开始
+
+EmbeddingClient、FakeEmbedding、模型下载、Qdrant、文档快照、索引、Docker、
+GitHub Actions、ZIP、AST、RAG、Agent、报告表、业务分析 API、真实 LLM 和
+WDI-ClaimCheck 均未实现。Day 5 仍为 `planned`，没有自动开始。

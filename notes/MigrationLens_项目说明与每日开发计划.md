@@ -119,16 +119,15 @@ Day 1 合并以下历史工作，不再把中文化或手动练习计算为独�
 
 `25 passed` 是限定测试集，不是当时或当前仓库的完整测试数量。
 
-以下内容明确尚未实现：
+在 Day 2 完成时，以下内容尚未实现：
 
-- `ApplicationDependencies`；
-- FastAPI lifespan；
-- `/health/ready`；
+- `ApplicationDependencies` 和 FastAPI lifespan（后于 Day 3 完成）；
+- `/health/ready`（后于 Day 4 完成）；
 - analyses/reports 表；
 - Embedding、Qdrant、Docker、GitHub Actions。
 
-SQLite 当前没有接入 HTTP 应用，也不是已经运行的报告存储，因此 Day 2 不得改写为
-`completed` 或 `runtime_verified`。
+Day 2 的历史状态仍为 `implementation_complete`，不能用后续 Day 的接线结果把它
+改写为 `completed` 或 `runtime_verified`。
 
 ### 2.4 2026-08-06 当前基线
 
@@ -145,6 +144,10 @@ SQLite 当前没有接入 HTTP 应用，也不是已经运行的报告存储，�
 当前代码中还没有官方文档快照、chunker、索引、ZIP Guard、AST scanner、import
 graph、八类规则、RAG、LangGraph、五个工具、Citation Guard、业务分析 API、
 报告存储、benchmark、Locust、真实 LLM 或 WDI 业务实现。
+
+同日后续已完成 Day 3 的应用级依赖与 SQLite lifespan，以及 Day 4 的
+`ReadinessService` 和 `/health/ready`。默认 ready=503，因为索引仍为
+`not_built` 且 retriever backend 尚未配置。
 
 ## 3. P0、P1 和不做范围
 
@@ -470,9 +473,9 @@ P0 响应中的说明性文本只使用 `zh-CN`。同步分析响应至少遵守
 
 ### 9.2 SQLite 与 Qdrant
 
-当前 SQLite 只有 `system_metadata`，尚未接入 lifespan。P0 后续才增加分析摘要和
-报告存储。Qdrant collection 使用 384 维向量并保存完整来源 payload。两个客户端
-都要可注入、有 timeout、生命周期关闭和故障测试。
+当前 SQLite 只有 `system_metadata`，已在 Day 3 接入 lifespan。P0 后续才增加分析
+摘要和报告存储。Qdrant collection 使用 384 维向量并保存完整来源 payload。两个
+客户端都要可注入、有 timeout、生命周期关闭和故障测试。
 
 ### 9.3 ZIP 安全
 
@@ -597,8 +600,8 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 |---|---|---|---|---|---|---|---|
 | MigrationLens Day 1 | 2026-08-04 | `completed` | 最小离线 FastAPI 骨架 | app factory、live、Settings、JSON 日志、LLMClient/FakeLLM；中文化与手动练习并入历史 | 8 月 4 日完整集 15 passed；8 月 5 日手动练习后 16 passed；历史 Ruff/live 证据 | 应用工厂、live、协议与 Fake 边界 | SQLite、ready、Embedding、扫描/RAG/Agent |
 | MigrationLens Day 2 | 2026-08-05 | `implementation_complete` | SQLite 最小基础设施 | 配置、单连接、生命周期、metadata、ping/read/close、安全错误 | 历史限定集 25 passed；当前仍未接 lifespan | 异步资源、状态机、错误脱敏 | lifespan、ready、报告表、Qdrant |
-| MigrationLens Day 3 | 2026-08-06 | `planned` | 依赖组装与 lifespan | `ApplicationDependencies`；startup 初始化和 shutdown 关闭 SQLite | 启停、失败清理、应用隔离、live 不变；共同门禁 | FastAPI 生命周期与资源所有权 | ready、Embedding、Qdrant |
-| MigrationLens Day 4 | 2026-08-07 | `planned` | ReadinessService 与 `/health/ready` | SQLite、索引状态、实际 retriever backend 检查和短 timeout | SQLite 成败、not-built、timeout；共同门禁 | live 与 ready 的职责 | 实现 Qdrant/Embedding/索引 |
+| MigrationLens Day 3 | 2026-08-06 | `completed` | 依赖组装与 lifespan | `ApplicationDependencies`；startup 初始化和 shutdown 关闭 SQLite | 指定集 15 passed、完整集 44 passed；启停、失败清理、应用隔离和 live 不变 | FastAPI 生命周期与资源所有权 | ready、Embedding、Qdrant |
+| MigrationLens Day 4 | 2026-08-06 | `completed` | ReadinessService 与 `/health/ready` | SQLite、索引状态、实际 retriever backend 检查和短 timeout | 指定集 64 passed、完整集 80 passed；真实 Uvicorn live=200、ready=503 | live 与 ready 的职责 | 实现 Qdrant/Embedding/索引 |
 | MigrationLens Day 5 | 2026-08-08 | `planned` | Embedding 边界与 FakeEmbedding | 类型化 client、确定性 fake、维度/批量/timeout、前缀契约 | 无网络、空输入、维度、timeout、prefix；共同门禁 | 可注入模型边界 | 下载真实模型、Qdrant、调参 |
 | MigrationLens Day 6 | 2026-08-10 | `planned` | Qdrant 最小基础设施 | 可注入 client、384 维 collection、ping/init/close、受控错误 | backend 故障不得伪装空结果；共同门禁 | 向量后端生命周期 | Docker、写文档、RRF |
 | MigrationLens Day 7 | 2026-08-11 | `planned` | Docker Compose 基线 | 非 root API 镜像、API+Qdrant、healthcheck、`.dockerignore` | compose config；可用时 up/live/ready/down；live 应成功，文档索引尚未构建时 ready 必须诚实报告 not-ready；共同门禁 | 容器边界与依赖健康 | CI、扫描器、P1 |

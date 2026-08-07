@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     llm_backend: LLMBackend = "fake"
     sqlite_path: Path = Path("var/data/migrationlens.sqlite3")
     sqlite_timeout_seconds: float = Field(default=2.0, gt=0, le=30)
+    readiness_timeout_seconds: float = Field(default=1.0, gt=0, le=5)
 
     @field_validator("sqlite_path", mode="before")
     @classmethod
