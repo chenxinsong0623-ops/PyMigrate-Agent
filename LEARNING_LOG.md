@@ -466,3 +466,103 @@ PID；最终使用隐藏 `ProcessStartInfo`、显式加载系统程序集完成�
 EmbeddingClient、FakeEmbedding、模型下载、Qdrant、文档快照、索引、Docker、
 GitHub Actions、ZIP、AST、RAG、Agent、报告表、业务分析 API、真实 LLM 和
 WDI-ClaimCheck 均未实现。Day 5 仍为 `planned`，没有自动开始。
+
+## 2026-08-07 — MigrationLens Day 5：Embedding 边界与 FakeEmbedding
+
+状态：`completed`
+
+### Embedding 在 RAG 中的作用
+
+Embedding 将 query 和官方文档 passage 映射到同一固定维度的向量空间，供后续
+dense retrieval 比较相关性。今天只固定输入、输出和注入边界，因为真实
+`intfloat/multilingual-e5-small` adapter 属于 Day 10，Qdrant 属于 Day 6；提前
+下载模型会混淆接口测试与真实模型证据，并引入本日不需要的网络、缓存和重依赖。
+
+### 类型化边界
+
+`EmbeddingRequest` 使用 `input_type=query|passage` 和不可变 `texts` tuple，
+调用方只能传原始文本。边界统一生成：
+
+```text
+query: <原始文本>
+passage: <原始文本>
+```
+
+已经带有 `query:` 或 `passage:` 的文本被拒绝，因此调用方不能绕过边界，也不会
+产生双重或混用 prefix。`EmbeddingResponse` 固定记录 model、dimension、vectors
+和 input_count，并校验向量数量、384 维及有限 float。
+
+`EmbeddingClient` 使用 `runtime_checkable Protocol`，让未来真实 adapter 和当前
+fake 共享同一异步接口，同时不暴露 sentence-transformers 类型，也不绑定 Qdrant。
+timeout 是 `embed(request, timeout_seconds)` 的公开参数。
+
+### FakeEmbedding 的确定性与证据边界
+
+`FakeEmbedding` 先让 prefix 参与模型输入，再用标准库 `hashlib.shake_256` 产生
+固定字节并映射为 384 个有限 float。它不使用 Python `hash()`，因为内置 hash
+默认存在跨进程随机化，不能作为可复现向量依据；也不使用全局随机状态。
+
+相同 input type 和文本跨调用产生相同 vector；相同原始文本在 query/passage
+模式下因为 prefix 不同而稳定区分。batch 不排序、不去重，输出数量和顺序与输入
+完全一致；重复文本保留为重复位置，单项结果与其在 batch 中的结果一致。
+
+FakeEmbedding 能证明：
+
+- Protocol、类型、prefix、384 维、batch 和输入校验契约；
+- 调用记录、确定性及完全离线的工程边界；
+- timeout 参数存在，且 0、负数、NaN、inf、bool 和非数值被拒绝。
+
+FakeEmbedding 不能证明：
+
+- 真实语义相似度、Recall/MRR 或 RAG 质量；
+- `intfloat/multilingual-e5-small` 的模型速度、timeout 或 GPU 性能；
+- Qdrant、dense index、模型下载或生产检索已经可用。
+
+Fake 本身没有阻塞 I/O，因此 Day 5 没有伪造实际模型 timeout；今天验证的是 timeout
+接口和非法值边界。
+
+### 空输入、离线性与运行时隔离
+
+空 batch、空字符串、纯空白文本、非法 input type、额外字段和预加 prefix 都由
+Pydantic v2 边界拒绝。响应也拒绝数量不匹配、非 384 维或非有限向量。
+
+离线测试同时阻断 socket 连接和文件打开，并删除 API key/HF token；FakeEmbedding
+构造与调用仍通过。仓库审计没有模型文件、Hugging Face/model/Qdrant 目录或新依赖。
+现有 var 中两个 SQLite 文件均早于 Day 5，本日没有生成或修改它们。
+
+本日没有把 Embedding 接入 `ApplicationDependencies`，因为当前还没有业务消费者。
+这避免无意义的 FastAPI wiring，也保证 FakeEmbedding 不会被 ReadinessService
+当作 retriever backend。Day 4 默认 ready 仍应是 SQLite=`ok`、
+document_index=`not_built`、retriever_backend=`not_configured` 的 HTTP 503。
+
+### 修改文件
+
+- 新增 `app/core/embedding.py`；
+- 新增 `tests/unit/test_embedding.py`；
+- 更新 `TASKS.md`、`LEARNING_LOG.md`、`README.md`；
+- 仅同步 `notes/MigrationLens_项目说明与每日开发计划.md` 的 Day 5 状态与证据。
+
+没有修改 `ApplicationDependencies`、FastAPI、readiness、配置、`pyproject.toml`
+或任何依赖声明。
+
+### 实际命令与结果
+
+- `python -m pip check`：`No broken requirements found.`
+- Day 5 指定 pytest：`30 passed in 0.07s`。
+- 完整 pytest：`110 passed, 1 warning in 0.93s`。
+- Ruff check：`All checks passed!`。
+- Ruff format check：`33 files already formatted`。
+- `git diff --check`：退出码 0，无输出。
+- 唯一警告为既有上游 `StarletteDeprecationWarning`，没有被过滤。
+
+### 真实失败与修复
+
+第一次指定测试为 `30 passed in 0.10s`，没有测试失败。第一次 Ruff check 通过，
+但 format check 报告新增实现和测试需要机械格式化。只对这两个文件运行 formatter
+后通过，没有删除或放宽 prefix、384 维、timeout、离线或非法输入测试。
+
+### Day 6 尚未开始
+
+Day 6 的 Qdrant client、384 维 collection、生命周期和健康探针均未实现。
+真实 e5 adapter、模型下载和 dense index 也未开始；其中真实 e5 adapter 仍按计划
+属于 Day 10。

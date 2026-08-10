@@ -11,13 +11,17 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 2 | `implementation_complete` | SQLite 最小基础设施、生命周期状态、`system_metadata`、`ping`、元数据读取、安全失败和幂等关闭 |
 | MigrationLens Day 3 | `completed` | `ApplicationDependencies`、应用独立 SQLite 所有权与 FastAPI lifespan |
 | MigrationLens Day 4 | `completed` | 可注入 `ReadinessService`、逐项短 timeout 与结构化 `/health/ready` |
+| MigrationLens Day 5 | `completed` | 类型化 `EmbeddingClient`、e5 prefix 契约、384 维和确定性离线 `FakeEmbedding` |
 
 当前 SQLite 已接入 FastAPI lifespan，但仍只包含最小 `system_metadata`，不能
 描述为已经运行的报告存储。文档索引尚未构建，retriever backend 尚未配置。
 
+Day 5 的 `FakeEmbedding` 只验证接口、prefix、维度、batch、输入校验、timeout 参数
+和确定性，不代表真实语义相似度、检索质量、模型速度或 GPU 性能。
+
 尚未实现：
 
-- Embedding 和 Qdrant；
+- 真实 `intfloat/multilingual-e5-small` adapter、模型下载和 Qdrant；
 - Docker Compose 和 GitHub Actions；
 - Pydantic 官方文档快照、chunker 和索引；
 - ZIP Guard、AST scanner、八类规则和一跳 import；
@@ -136,11 +140,23 @@ git diff --check
 本次只改变 Markdown 文档和 `.env.example` 注释；没有修改 `app/`、`tests/`、
 `pyproject.toml` 或运行时行为。
 
+### Day 5 真实验证
+
+2026-08-07 使用项目解释器实际运行：
+
+- Day 5 指定测试：`30 passed in 0.07s`；
+- 完整测试：`110 passed, 1 warning in 0.93s`；
+- Ruff check：`All checks passed!`；
+- Ruff format check：`33 files already formatted`；
+- 没有新增依赖、模型文件、Hugging Face cache 或 Qdrant 数据。
+
+唯一警告仍是上游 `StarletteDeprecationWarning`，未被屏蔽。
+
 ## 下一开发日
 
-MigrationLens Day 5 Embedding 边界仍为 `planned`，尚未开始；Qdrant、文档
-索引、Docker 和其他后续模块仍未实现。当前完成证据见
-[`TASKS.md`](TASKS.md)。
+MigrationLens Day 6 Qdrant 最小基础设施仍为 `planned`，尚未开始。真实 e5
+adapter 按计划属于 Day 10；模型下载、dense index、Docker 和其他后续模块仍未
+实现。当前完成证据见 [`TASKS.md`](TASKS.md)。
 
 ## 项目文档
 
