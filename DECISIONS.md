@@ -120,3 +120,26 @@
 - 依据：Qdrant 官方 collection 文档说明同一向量配置必须固定维度与 metric，并以
   `models.VectorParams(size=..., distance=models.Distance.COSINE)` 展示创建方式：
   <https://qdrant.tech/documentation/manage-data/collections/>。
+
+## D-011 — Day 7 容器所有权与 required startup 策略
+
+- 日期：2026-08-11
+- 状态：已接受
+- 决策：
+  - API 镜像固定使用已核实存在的 `python:3.11.15-slim-bookworm`，进程以数值
+    UID/GID `10001:10001` 运行；
+  - 本地 Compose 固定使用官方 `qdrant/qdrant:v1.18.3-unprivileged`，API 与 Qdrant
+    数据分别保存在 named volume；
+  - SQLite 先初始化、Qdrant 后初始化；任一 required dependency 返回初始化失败都
+    阻止应用启动，关闭时按 Qdrant、SQLite 的相反顺序释放；
+  - API 容器通过 Compose service name `qdrant` 访问 `http://qdrant:6333`，不使用
+    容器自身的 localhost。
+- 原因：非 root 降低容器越权风险；named volume 隔离本机目录并适配 Windows；
+  required startup 防止应用在尚未建立或验证固定 collection 契约时假装可运行；
+  反向释放保持资源所有权与失败清理一致。
+- 替代方案：未采用 root API、宿主机 bind mount、Qdrant 初始化失败后继续启动，或在
+  API 容器中使用 `127.0.0.1:6333`。这些方案分别扩大权限、增加 Windows 权限/数据
+  风险、模糊 required dependency 状态，或指向错误容器。
+- 影响范围：`Dockerfile`、`compose.yaml`、`ApplicationDependencies`、FastAPI
+  lifespan、readiness、部署说明与 Day 7 测试。`qdrant-client==1.18.0` 与 Qdrant
+  Server image tag 是彼此独立的客户端和服务端版本，不要求数字相同。

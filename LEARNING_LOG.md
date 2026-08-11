@@ -671,3 +671,228 @@ Day 6 第一次指定测试为 `1 failed, 61 passed in 1.22s`。原因是参数�
 Day 7 尚未开始，其起点是 Docker Compose API + Qdrant 运行时接线、真实容器启动与
 健康验证。Day 10 才实现真实 e5 adapter、passage upsert、query dense search 和
 payload；当前没有文档索引、search/upsert、BM25、RRF 或真实检索质量证据。
+
+## 2026-08-11 — MigrationLens Day 7：Docker Compose 基线与 Qdrant runtime wiring
+
+状态：`completed`（离线实现、测试、Compose 静态配置与真实容器 runtime 均已验证）
+
+### 为什么现在接 Docker，以及 Day 6/Day 7 的证据差异
+
+Day 6 先用 FakeQdrantClient 固定 async client、384 维 Cosine collection、timeout、
+错误脱敏和 close 契约，使后端本身可独立测试。Day 7 才让 FastAPI 真正拥有该后端，
+并建立 API 与 Qdrant 的容器边界。这样单元边界和真实 runtime 边界不会混在同一天。
+
+FakeQdrantClient 能证明方法调用、状态机和错误路径，不能证明 Qdrant Server image
+能启动、网络可达或 collection 在真实 Server 中存在。`docker compose config` 又只
+能证明 YAML 展开和 Compose 结构有效，不能证明 image 已拉取或 container 已运行。
+只有 daemon 可用后实际 build/up/HTTP/collection/down，才属于真实 runtime 证据。
+
+### Dockerfile、non-root 与 build context
+
+API 使用已在 Docker Official Image 页面核实存在的
+`python:3.11.15-slim-bookworm`，与项目 Python 3.11 契约一致且没有使用 `latest`。
+镜像只复制 `pyproject.toml`、`README.md` 和 `app/`，再安装当前 production 依赖；
+没有安装 curl、模型、编译工具或 Day 7 不需要的 AI 框架。
+
+最终 `USER 10001:10001` 让 Uvicorn 以非 root 运行。数值用户不依赖额外创建 Linux
+账户；镜像构建阶段只把 `/app/var` 交给该 UID/GID 写入，程序代码和 site-packages
+保持只读使用。non-root 不能消除所有风险，但能减少进程被利用后拥有的默认权限。
+
+`.dockerignore` 与 `.gitignore` 职责不同：前者控制发送给 Docker builder 的 context，
+后者控制 Git 跟踪。Day 7 排除了 `.git`、`.env*`、虚拟环境、cache、`var/`、本地
+Qdrant/model 目录、测试与开发文档，但保留 Docker build 所需的 `pyproject.toml`、
+`README.md` 和 `app/`。因此本机 SQLite、Qdrant storage、token 或模型文件不会因
+`COPY . .` 进入镜像；Dockerfile 本身也没有使用宽泛 `COPY . .`。
+
+### Compose 网络、service name 与 named volume
+
+Compose 创建默认网络后，service name `qdrant` 可由 Docker DNS 解析为 Qdrant
+container。API container 内的 `127.0.0.1` 只指向 API container 自己，因此配置必须
+覆盖为：
+
+```text
+MIGRATIONLENS_QDRANT_URL=http://qdrant:6333
+```
+
+主机直接运行仍默认 `http://127.0.0.1:6333`；两种环境共用同一 Settings 字段，没有
+增加第二套 Qdrant 配置。`api_data:/app/var` 与
+`qdrant_data:/qdrant/storage` 分别保存 SQLite/var 和 Qdrant 数据，不硬编码个人
+Windows 路径，也不把用户现有目录作为清理目标。停止时普通 `docker compose down`
+保留数据；只有确认独立验证 project/volume 后才可考虑 `-v`。
+
+### image tag、healthcheck 与 depends_on
+
+Qdrant 使用 Docker Hub 已核实存在的官方
+`qdrant/qdrant:v1.18.3-unprivileged`。Qdrant 官方安全文档推荐 unprivileged image；
+官方 monitoring 文档确认 6333 提供 `/healthz`、`/livez`、`/readyz`。但官方 image
+Dockerfile 没有安装 curl/wget，官方 issue 也明确记录不能假设这些工具存在，因此
+Compose healthcheck 没有伪造 curl 命令。
+
+Qdrant healthcheck 使用该 image 的 Debian `/bin/sh` 内建 `read/case` 读取
+`/proc/net/tcp*`，确认 6333（十六进制 `18BD`）处于 LISTEN。该检查只证明监听 socket；
+API startup 随后通过 `QdrantBackend.initialize()` 调用真实 Qdrant API，并创建或校验
+collection，才验证更强的应用契约。API healthcheck 使用 Python 标准库 urllib 请求
+`/health/live`，不额外安装 curl。
+
+`depends_on.qdrant.condition=service_healthy` 只控制 API container 的启动顺序，不等于
+MigrationLens 业务 ready。应用自己的 lifespan 仍必须验证 Qdrant collection；运行期
+readiness 仍必须重新 ping backend。三个层次不能互相替代。
+
+### ApplicationDependencies、lifespan 与 failure cleanup
+
+`ApplicationDependencies` 现在拥有：
+
+```text
+sqlite
+retriever_backend -> QdrantBackend
+readiness -> 同一个 retriever_backend
+```
+
+`build_application_dependencies()` 只构造 `SQLiteDatabase`、官方 Qdrant client/backend
+和 `ReadinessService`，不执行网络或创建数据库文件。测试通过注入离线 backend 证明
+builder 没有 initialize/ping/close 调用，也证明 readiness 的 ping 落在依赖容器拥有的
+同一个逻辑资源上，而不是创建第二个 client。
+
+startup 顺序为 SQLite initialize 后 Qdrant initialize；任一 required dependency
+返回 False 都转换为固定、脱敏的 `ApplicationStartupError`。程序错误如 TypeError
+继续传播。shutdown 和 startup 中途失败都按 Qdrant close、SQLite close 的相反顺序
+释放；嵌套 finally 保证 Qdrant close 的程序错误也不会阻止 SQLite close。Day 6
+`QdrantBackend` 自身保证底层 client 最多 close 一次，所以初始化失败内部 cleanup 与
+lifespan cleanup 不会重复关闭底层资源。
+
+每次 `create_app()` 默认构造新的依赖容器、SQLite、QdrantBackend 和 readiness；测试
+确认不同 FastAPI application 不共享生命周期资源。`create_app(..., dependencies=...)`
+只用于显式注入和离线测试，不改变默认生产 builder。
+
+### live、ready 与当前 503
+
+`/health/live` 继续只返回 API 进程状态，不 ping SQLite、Qdrant，不读 metadata，也不
+调用 readiness。API container healthcheck 因而使用 live，而不是当前必然 not-ready
+的业务端点。
+
+离线 runtime wiring 测试实际得到：
+
+```text
+live = HTTP 200
+sqlite = ok
+retriever_backend = ok / qdrant
+document_index = not_built
+overall ready = not_ready / HTTP 503
+```
+
+503 的唯一原因是文档索引尚未建立，不是 Qdrant 或 SQLite 失败。若运行期 Qdrant
+ping 返回 False，retriever 状态会变成 `error`；若外层 readiness timeout 先到，会变成
+`timeout`。系统没有把 `document_index_status` 改成 ready，也没有为了容器变绿绕过
+检查。
+
+### collection 384 + Cosine 的当前证据
+
+Day 6/Day 7 离线测试继续证明 QdrantBackend 会创建或校验单一未命名的 384 维 Cosine
+collection，并在不匹配时安全失败且不 recreate。Docker 补验从真实 Server 读取到
+`migrationlens-documents` 的 size=384、distance=Cosine、points_count=0，因此该
+collection 的真实创建与配置已经验证。仍没有 passage upsert、query search、dense
+retrieval、BM25 或 RRF。
+
+### 修改文件
+
+- runtime：`app/core/dependencies.py`、`app/main.py`；
+- container：`Dockerfile`、`compose.yaml`、`.dockerignore`；
+- 测试：`tests/conftest.py`、`tests/unit/test_dependencies.py`、
+  `tests/integration/test_health.py`、`tests/integration/test_health_ready.py`、
+  `tests/integration/test_lifespan.py`；
+- 说明：`.env.example`、`TASKS.md`、`README.md`、`LEARNING_LOG.md`、
+  `notes/MigrationLens_项目说明与每日开发计划.md`；
+- 长期决策：仅向 `DECISIONS.md` 追加 D-011，没有修改旧决策；
+- `AGENTS.md`、`SPEC.md`、`pyproject.toml`、SQLite schema 和 Day 6 Qdrant 实现均未改。
+
+### 第一次失败、诊断与修复
+
+1. 开发前第一次完整 pytest 跑完 153 个测试主体后，在清理系统 temp 的
+   `pytest-current` 时触发 `WinError 5`，所以该命令不能记为通过。仅把本测试进程的
+   TEMP/TMP 指到仓库已忽略的隔离目录后，基线为
+   `153 passed, 1 warning in 1.97s`；测试参数和断言未改变。
+2. Day 7 新接线测试第一次为 `28 errors in 2.15s`，共同根因是生产
+   `app.core.dependencies` 尚无 `build_qdrant_backend`，离线替身无法进入真实 builder。
+   实现 retriever ownership、builder wiring 和 lifespan 后，同一组测试变为
+   `28 passed, 1 warning in 0.85s`。没有删除测试或把 retriever 改回 None。
+3. `docker compose config` 第一次即退出码 0；输出附带两条读取本机
+   `C:\Users\Administrator\.docker\config.json` 的 Access denied warning，但服务、
+   environment、healthcheck、dependency 和 volume 均成功展开。该 warning 没有被
+   改写为 daemon 可用证据。
+4. `docker info` 退出码 1：找不到 `npipe:////./pipe/docker_engine`，所以没有尝试把
+   CLI 存在写成 runtime verified，也没有自动安装或启动 Docker Desktop。
+5. 增加“真实 Qdrant builder 只构造 client、不做网络 I/O”测试后，最终完整 pytest
+   已通过，但第一次最终 Ruff check 报 I001：两个 `app.retrieval.qdrant` import 应合并。
+   只合并 import 后复核，不修改测试行为或生产代码。
+
+### 实际命令与结果
+
+- `git branch --show-current`：`main`；开发前 `git status --short` 无输出；最近提交
+  `14db49d feat:Day6 add qdrant backend lifecycle`，确认 Day 6 commit 存在。
+- 开发前 `python -m pip check`：`No broken requirements found.`。
+- 开发前隔离 temp 后完整 pytest：`153 passed, 1 warning in 1.97s`。
+- Day 7 runtime wiring 首次红测：`28 errors in 2.15s`；修复后：
+  `28 passed, 1 warning in 0.85s`。
+- Day 7 最终指定集：`122 passed, 1 warning in 1.14s`。
+- 完整 pytest：`159 passed, 1 warning in 1.23s`。
+- Ruff check：`All checks passed!`；Ruff format check：
+  `36 files already formatted`；`git diff --check` 退出码 0。
+- `docker --version`：Docker 29.4.2；`docker compose version`：v5.1.3；两者都伴随
+  本机 Docker config Access denied warning。
+- `docker compose config`：退出码 0；静态配置通过。
+- 初次 `docker info`：退出码 1，daemon 当时不可访问；该结果只记录初次环境状态。
+- 初次未运行 Docker build/up/health/HTTP/Qdrant/down；Docker Desktop 启动后的实际
+  补验结果记录在下一节，不能用初次状态覆盖后续真实结果。
+- 最终 Git 审计为 13 个预期 modified 文件、3 个新 Docker 文件、0 个 staged 文件；
+  `.env` 不存在。本轮 8 个 `var/tmp/day7-*` 已删除；两个 8 月 5/6 日既有 ignored
+  SQLite 文件时间戳未改变，没有被删除或加入 Git。
+
+### Docker Desktop 启动后的真实 runtime 补验
+
+Docker daemon Server 29.4.2 可访问后，第一次和第二次 Compose build 都在已配置的
+DaoCloud mirror TLS handshake timeout；直接指定另两个 mirror 也在 daemon 代理链路
+超时。本机代理为 `127.0.0.1:7897`，显式经该代理访问 Registry 超时，而绕过代理直连
+DaoCloud `/v2/` 在约 0.12 秒返回预期的未认证 HTTP 401。用户保持 Docker Desktop
+proxy=`System proxy`，只把 Containers proxy 设为 `No proxy`；ChatGPT 所需 VPN 未关闭。
+
+随后两个锁定 image pull 成功：
+
+- `python:3.11.15-slim-bookworm`：
+  `sha256:d29f48a31a8b408ed19272ca1e7b10ebae13b240a27e862d3d4217c528e2e0c3`；
+- `qdrant/qdrant:v1.18.3-unprivileged`：
+  `sha256:affb67e1d6f2f93d7d20b90d238a7d4b974d36351c162e73bda794e4b2e03483`。
+
+使用隔离 project name `migrationlens-day7-verify` 的实际结果：
+
+- `docker compose build` 退出码 0，用时 79.8 秒；build context 129.65 kB；API image
+  `USER="10001:10001"`、`WORKDIR="/app"`，没有使用宽泛 build context；
+- `docker compose up -d` 退出码 0，Qdrant 先 healthy，API 后启动并 healthy；
+- `/health/live` 返回 HTTP 200 和 `status=ok`；`/health/ready` 返回预期 HTTP 503，
+  SQLite=`ok`、retriever=`ok/qdrant`，唯一未就绪项为 document index=`not_built`；
+- Qdrant `/healthz` 返回 HTTP 200；真实 collection 为 size=384、distance=Cosine、
+  points_count=0；Qdrant 日志也记录了 collection create 的真实 PUT 200；
+- API 容器实际 UID/GID=10001/10001，Qdrant URL=`http://qdrant:6333`，SQLite path=
+  `/app/var/data/migrationlens.sqlite3`；named volume 分别挂载 `/app/var` 和
+  `/qdrant/storage`；
+- API stop 日志包含 `Application shutdown complete`；Qdrant stop 日志包含
+  `SIGTERM received; starting graceful shutdown`；
+- `docker compose down -v --rmi local --remove-orphans` 只清理该 project 的 container、
+  network、volume 和临时 API image。清理后四类资源均无残留；两个锁定基础 image
+  保留，既有 Dify container 仍持续运行。
+- runtime 文档同步后的最终门禁：`pip check` 无 broken requirements；指定集
+  `122 passed, 1 warning in 1.33s`；完整集 `159 passed, 1 warning in 1.19s`；Ruff
+  check 通过；Ruff format check 为 `36 files already formatted`；`git diff --check`
+  与 `docker compose config --quiet` 均退出码 0。隔离测试 temp 已删除。
+
+这些结果证明 Day 7 的真实容器生命周期和 Qdrant collection runtime；不证明文档已
+索引、检索质量、模型性能、CI、locked evaluation 或生产部署。
+
+唯一 pytest 警告仍是既有 FastAPI TestClient 的上游
+`StarletteDeprecationWarning`，没有被屏蔽。
+
+### 当前仍未实现与 Day 8 起点
+
+当前仍没有官方文档快照、Markdown chunk、真实 e5、passage upsert、query search、
+dense retrieval、BM25、RRF、ZIP Guard、AST scanner、八类规则、Agent、分析 API、
+报告表、CI、Locust、P1 或 WDI。Day 8 仍为 `planned`；只有用户正式确认后才开始固定
+Pydantic 官方文档、LICENSE、manifest、hash、归属、下载失败与缓存边界。

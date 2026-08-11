@@ -58,6 +58,8 @@ class FakeRetrieverProbe:
     ) -> None:
         self._backend_name = backend_name
         self._available = available
+        self.initialize_calls = 0
+        self.close_calls = 0
         self.ping_calls = 0
 
     @property
@@ -69,6 +71,13 @@ class FakeRetrieverProbe:
         if isinstance(self._available, BaseException):
             raise self._available
         return self._available
+
+    async def initialize(self) -> bool:
+        self.initialize_calls += 1
+        return True
+
+    async def close(self) -> None:
+        self.close_calls += 1
 
 
 def _settings(path: Path, *, readiness_timeout_seconds: float = 0.05) -> Settings:
@@ -89,6 +98,7 @@ def _injected_application(
 ) -> FastAPI:
     dependencies = ApplicationDependencies(
         sqlite=sqlite,
+        retriever_backend=probe,
         readiness=ReadinessService(
             sqlite=sqlite,
             retriever_backend=probe,
@@ -133,8 +143,8 @@ def test_default_application_is_live_but_honestly_not_ready(
             "sqlite": {"status": "ok"},
             "document_index": {"status": "not_built"},
             "retriever_backend": {
-                "status": "not_configured",
-                "backend": None,
+                "status": "ok",
+                "backend": "qdrant",
             },
         },
     }

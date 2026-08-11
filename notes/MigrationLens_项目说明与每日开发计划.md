@@ -1,6 +1,6 @@
 # MigrationLens 项目说明与每日开发计划
 
-更新时间：2026-08-07
+更新时间：2026-08-11
 产品：MigrationLens — Pydantic v1→v2 升级影响分析 Agent
 权威范围：`SPEC.md`
 
@@ -92,7 +92,7 @@ Day 1 合并以下历史工作，不再把中文化或手动练习计算为独�
 
 ### 2.3 MigrationLens Day 2
 
-状态：`implementation_complete`
+状态：`completed`
 日期：2026-08-05
 
 已实现：
@@ -164,6 +164,34 @@ initialize、ping、close 的外部异步调用都使用短 timeout，预期 Qdr
 `ApplicationDependencies`、FastAPI lifespan 或 readiness 接线。默认应用继续报告
 retriever backend `not_configured`。真实 API + Qdrant 容器接线属于 Day 7；真实
 e5、upsert 和 dense search 属于 Day 10。
+
+### 2.6 MigrationLens Day 7
+
+状态：`implementation_complete`
+日期：2026-08-11
+
+已新增 `Dockerfile`、`compose.yaml` 和 `.dockerignore`。API 镜像使用
+`python:3.11.15-slim-bookworm` 并以 UID/GID `10001:10001` 非 root 运行；Compose
+使用官方 `qdrant/qdrant:v1.18.3-unprivileged`，通过 `api_data` 与 `qdrant_data`
+named volume 分离 SQLite/var 和 Qdrant storage。API 容器使用
+`MIGRATIONLENS_QDRANT_URL=http://qdrant:6333`，不把容器自身 localhost 误当作
+Qdrant。
+
+`ApplicationDependencies` 现在同时拥有 SQLite、实际 `QdrantBackend` 和
+`ReadinessService`，readiness 与 lifespan 使用同一个 backend。startup 按 SQLite、
+Qdrant 顺序初始化，任一 required dependency 失败都阻止启动；shutdown 和失败清理按
+Qdrant、SQLite 反向执行。`/health/live` 仍不访问外部依赖。离线集成测试确认当
+SQLite=`ok`、Qdrant=`ok/qdrant`、document index=`not_built` 时，ready 仍为 HTTP
+503，而不是为容器 healthcheck 伪造 200。
+
+`docker compose config` 已实际通过，并确认两个 service、healthcheck、
+`service_healthy` 依赖、ports、environment 与 named volumes。Docker Server 29.4.2
+和 Compose v5.1.3 可用；隔离 project name 的真实 build/up/health/down 已通过。API
+与 Qdrant 均 healthy；live HTTP 200；ready HTTP 503 且唯一未就绪项为预期的 document
+index=`not_built`。真实 Qdrant collection 为 384 维 Cosine、points_count=0；API
+实际 UID/GID=10001/10001 并通过 `http://qdrant:6333` 连接。API 与 Qdrant 均完成
+优雅停止，本次 container、network、volume 与临时 API image 已隔离清理。因此 Day 7
+状态为 `completed`，真实容器 runtime 已验证。
 
 ## 3. P0、P1 和不做范围
 
@@ -265,8 +293,9 @@ flowchart LR
 - 报告：JSON 与 Markdown 的 finding ID 和数量必须一致。
 
 建议代码边界包括 `security/`、`scanner/`、`ingestion/`、`retrieval/`、`agent/`、
-`reporting/` 和 `storage/`。这只是目标结构；当前真实代码仍只有基础
-`app/api`、`app/core` 和 `app/storage/sqlite.py`。
+`reporting/` 和 `storage/`。这只是目标结构；当前真实代码包含基础 `app/api`、
+`app/core`、`app/storage/sqlite.py` 和 Qdrant lifecycle 所在的 `app/retrieval`，尚无
+scanner、ingestion、agent 或 reporting 业务实现。
 
 ## 6. 数据与文档快照
 
@@ -490,8 +519,9 @@ P0 响应中的说明性文本只使用 `zh-CN`。同步分析响应至少遵守
 ### 9.2 SQLite 与 Qdrant
 
 当前 SQLite 只有 `system_metadata`，已在 Day 3 接入 lifespan。P0 后续才增加分析
-摘要和报告存储。Qdrant collection 使用 384 维向量并保存完整来源 payload。两个
-客户端都要可注入、有 timeout、生命周期关闭和故障测试。
+摘要和报告存储。Qdrant lifecycle 已在 Day 7 接入应用，startup 只创建或校验
+384 维 Cosine collection；尚未写入来源 payload，也没有 search/upsert。两个客户端
+均可注入、有 timeout、生命周期关闭和故障测试。
 
 ### 9.3 ZIP 安全
 
@@ -620,7 +650,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 4 | 2026-08-06 | `completed` | ReadinessService 与 `/health/ready` | SQLite、索引状态、实际 retriever backend 检查和短 timeout | 指定集 64 passed、完整集 80 passed；真实 Uvicorn live=200、ready=503 | live 与 ready 的职责 | 实现 Qdrant/Embedding/索引 |
 | MigrationLens Day 5 | 2026-08-07 | `completed` | Embedding 边界与 FakeEmbedding | 类型化 client、确定性 fake、维度/批量/timeout、前缀契约 | 指定集 30 passed、完整集 110 passed；无网络/模型文件/新依赖 | 可注入模型边界 | 下载真实模型、Qdrant、调参 |
 | MigrationLens Day 6 | 2026-08-10 | `completed` | Qdrant 最小基础设施 | 可注入 client、384 维 Cosine collection、ping/init/close、受控错误 | Fake client 专项测试和共同门禁通过；真实 Qdrant 未验证 | 向量后端生命周期 | Docker、写文档、RRF |
-| MigrationLens Day 7 | 2026-08-11 | `planned` | Docker Compose 基线 | 非 root API 镜像、API+Qdrant、healthcheck、`.dockerignore` | compose config；可用时 up/live/ready/down；live 应成功，文档索引尚未构建时 ready 必须诚实报告 not-ready；共同门禁 | 容器边界与依赖健康 | CI、扫描器、P1 |
+| MigrationLens Day 7 | 2026-08-11 | `completed` | Docker Compose 基线 | 非 root API 镜像、API+Qdrant、healthcheck、`.dockerignore`、Qdrant runtime wiring | 指定集 122 passed、完整集 159 passed；compose config/build/up/health/down 通过；live=200、ready=503、真实 collection=384/Cosine、API UID/GID=10001/10001 | 容器边界、反向清理与 live/ready 分离 | CI、扫描器、P1 |
 | MigrationLens Day 8 | 2026-08-12 | `planned` | 官方文档快照 | 验证 ref、迁移文档、LICENSE、manifest、hash、notices、cache | HTTP 成败/timeout/retry/cache；真实来源字段；共同门禁 | 可复现来源与许可证 | chunk、索引；未抓取不得称完成 |
 | MigrationLens Day 9 | 2026-08-13 | `planned` | Markdown chunker | H2/H3、代码块、长度/overlap、稳定 ID、完整元数据 | 重复构建稳定、代码块和超长段落；共同门禁 | 内容寻址与结构切分 | BM25、dense、评测 |
 | MigrationLens Day 10 | 2026-08-14 | `planned` | e5 稠密索引与检索 | 真实 adapter、passage 入库、query 检索、payload、top-8 | prefix、384 维、批量、empty index、故障；共同门禁 | e5 语义检索 | BM25、RRF、locked |

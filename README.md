@@ -13,19 +13,23 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 4 | `completed` | 可注入 `ReadinessService`、逐项短 timeout 与结构化 `/health/ready` |
 | MigrationLens Day 5 | `completed` | 类型化 `EmbeddingClient`、e5 prefix 契约、384 维和确定性离线 `FakeEmbedding` |
 | MigrationLens Day 6 | `completed` | 可注入 Qdrant async client、384 维 Cosine collection 契约及 initialize/ping/close 生命周期 |
+| MigrationLens Day 7 | `completed` | 非 root API 镜像、API + Qdrant Compose、named volumes、healthcheck，以及 Qdrant 对 `ApplicationDependencies`、lifespan 和 readiness 的正式接线；真实容器 runtime 已验证 |
 
-当前 SQLite 已接入 FastAPI lifespan，但仍只包含最小 `system_metadata`，不能
-描述为已经运行的报告存储。文档索引尚未构建，retriever backend 尚未配置。
+当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite 仍只包含最小
+`system_metadata`，不能描述为已经运行的报告存储；Qdrant startup 只创建或校验
+384 维 Cosine collection，不写入 passage，也不提供 search。文档索引仍是
+`not_built`。
 
 Day 5 的 `FakeEmbedding` 只验证接口、prefix、维度、batch、输入校验、timeout 参数
 和确定性，不代表真实语义相似度、检索质量、模型速度或 GPU 性能。Day 6 的
 FakeQdrantClient 单元测试只验证 wrapper 工程契约；没有运行真实 Qdrant server。
+Day 7 离线测试验证 runtime wiring，`docker compose config` 验证 Compose 结构；随后
+实际 build/up/health/HTTP/Qdrant/down 已完成，真实 container 证据与离线证据分开记录。
 
 尚未实现：
 
-- 真实 `intfloat/multilingual-e5-small` adapter、模型下载、Qdrant 运行时接线和
-  dense search/upsert；
-- Docker Compose 和 GitHub Actions；
+- 真实 `intfloat/multilingual-e5-small` adapter、模型下载和 dense search/upsert；
+- GitHub Actions；
 - Pydantic 官方文档快照、chunker 和索引；
 - ZIP Guard、AST scanner、八类规则和一跳 import；
 - BM25/dense/RRF；
@@ -39,11 +43,13 @@ FakeQdrantClient 单元测试只验证 wrapper 工程契约；没有运行真实
 ## 环境要求
 
 - Python 3.11
-- 当前工作区记录的项目解释器：
+- 本机 Python 路径使用当前工作区记录的项目解释器：
   `D:\conda_envs\pymigrate-agent\python.exe`
+- Docker Compose 路径需要可访问的 Docker daemon。
 
-当前直接依赖和开发工具声明在 `pyproject.toml`。已实现路径不需要 API key 或
-外部服务。
+当前直接依赖和开发工具声明在 `pyproject.toml`。已实现路径不需要 API key；API
+startup 现在把 SQLite 与 Qdrant 视为 required dependency，本机直接运行时必须先让
+配置的 Qdrant 服务可访问。
 
 ## 配置
 
@@ -57,21 +63,56 @@ FakeQdrantClient 单元测试只验证 wrapper 工程契约；没有运行真实
 | `MIGRATIONLENS_SQLITE_PATH` | 本地文件路径 | SQLite 数据库路径 |
 | `MIGRATIONLENS_SQLITE_TIMEOUT_SECONDS` | `>0` 且 `<=30` | SQLite 连接和 busy timeout |
 | `MIGRATIONLENS_READINESS_TIMEOUT_SECONDS` | `>0` 且 `<=5` | 每项 readiness 检查的短 timeout |
-| `MIGRATIONLENS_QDRANT_URL` | HTTP(S) URL | 未来 Qdrant 服务地址；配置不代表服务已启动 |
+| `MIGRATIONLENS_QDRANT_URL` | HTTP(S) URL | 主机默认 `http://127.0.0.1:6333`；Compose 覆盖为 `http://qdrant:6333` |
 | `MIGRATIONLENS_QDRANT_COLLECTION_NAME` | 字母或数字开头，后续可含 `._-`，最长 255 | 文档向量 collection 名称 |
 | `MIGRATIONLENS_QDRANT_TIMEOUT_SECONDS` | 正整数，`>0` 且 `<=30` | client 与每次 async backend 调用的 timeout |
 
 Day 6 声明并验证直接依赖 `qdrant-client==1.18.0`，用于官方异步 API adapter；
 该包许可证为 Apache-2.0。直接使用 HTTPX 会重复维护 Qdrant API schema，FastEmbed
 或 LangChain/LlamaIndex 又会引入本日不需要的模型或框架边界，因此没有采用。
-配置只用于构造 backend，不表示本机已有 Qdrant 服务，也未在 Day 6 接入 FastAPI。
+Day 7 已把该 backend 接入 FastAPI。配置 URL 仍不等于服务可用；lifespan 会真实创建
+或校验 collection。`qdrant-client==1.18.0` 是 Python 客户端版本，Compose 的
+`qdrant/qdrant:v1.18.3-unprivileged` 是独立的 Server image tag，两者不要求同版本号。
 
 ## 本地运行
+
+先确保 Qdrant 可通过 `http://127.0.0.1:6333` 访问，或用
+`MIGRATIONLENS_QDRANT_URL` 指向实际服务，然后运行：
 
 ```powershell
 $Py = 'D:\conda_envs\pymigrate-agent\python.exe'
 & $Py -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
+
+若 SQLite 或 Qdrant 初始化失败，应用会以固定、脱敏的 startup error 退出；不会只把
+required dependency 失败写成一个仍可服务的状态。
+
+## Docker Compose 运行
+
+`compose.yaml` 包含 `qdrant` 和 `api` 两个服务。API 容器中的 localhost 只指向 API
+容器自身，因此必须通过 Docker DNS service name 使用 `http://qdrant:6333`。
+
+```powershell
+docker compose up --build -d
+docker compose ps
+```
+
+API 使用 `python:3.11.15-slim-bookworm`，以 UID/GID `10001:10001` 非 root 运行；
+Qdrant 使用 `qdrant/qdrant:v1.18.3-unprivileged`。`api_data` 保存容器内 SQLite/var，
+`qdrant_data` 保存 Qdrant storage，均不绑定个人 Windows 路径。API healthcheck 使用
+Python 标准库请求 `/health/live`；Qdrant healthcheck 不假设镜像包含 curl、wget 或
+bash，而是用镜像已有 `/bin/sh` 检查 6333 监听 socket。随后 API startup 通过真实
+Qdrant API 创建或校验 collection，构成更强的应用级验证。
+
+停止服务但保留 named volume：
+
+```powershell
+docker compose down
+```
+
+不要对未知或已有项目盲目使用 `down -v`。Day 7 验证使用隔离 project name
+`migrationlens-day7-verify`，只删除带该 project label 的 container、network、volume 和
+临时 API image；用户拉取的锁定基础 image 与既有 Dify 资源均保留。
 
 随后访问 `http://127.0.0.1:8000/health/live`：
 
@@ -84,8 +125,9 @@ $Py = 'D:\conda_envs\pymigrate-agent\python.exe'
 ```
 
 `/health/live` 只表示 API 进程可响应，不访问 readiness、SQLite 或 retriever。
-`/health/ready` 检查当前应用自己的 SQLite、`document_index_status` 和实际配置的
-retriever backend。当前默认应用会诚实返回 HTTP 503：
+`/health/ready` 检查当前应用自己的 SQLite、`document_index_status` 和同一个
+Qdrant lifecycle backend。SQLite 与 Qdrant 都健康但索引尚未构建时，会诚实返回
+HTTP 503：
 
 ```json
 {
@@ -93,14 +135,15 @@ retriever backend。当前默认应用会诚实返回 HTTP 503：
   "checks": {
     "sqlite": {"status": "ok"},
     "document_index": {"status": "not_built"},
-    "retriever_backend": {"status": "not_configured", "backend": null}
+    "retriever_backend": {"status": "ok", "backend": "qdrant"}
   }
 }
 ```
 
-这表示应用进程仍存活，但处理未来业务请求所需的索引和检索后端尚未就绪。Day 6
-虽已实现 Qdrant 生命周期对象，但尚未注入应用，因此默认 readiness 仍保持这一真实
-语义；文档索引、真实 Embedding 和 dense retrieval 也尚未实现。
+这不是容器死亡：live=200 说明 API 进程存活，Qdrant=`ok` 说明实际配置的 backend
+可以响应，而整体 ready=503 只因为 `document_index_status=not_built`。运行期间若
+Qdrant ping 失败，retriever check 会变为 `error` 或 `timeout`，仍不会伪装成 ready。
+真实 Embedding、passage upsert 和 dense retrieval 仍未实现。
 
 ## 验证
 
@@ -114,6 +157,7 @@ $Py = 'D:\conda_envs\pymigrate-agent\python.exe'
 & $Py -m ruff check .
 & $Py -m ruff format --check .
 git diff --check
+docker compose config
 ```
 
 ### 当前基线证据
@@ -169,11 +213,26 @@ git diff --check
 [`LEARNING_LOG.md`](LEARNING_LOG.md)。没有连接真实 Qdrant，也没有生成 Qdrant
 数据目录、模型文件或 Docker 文件。
 
+### Day 7 验证边界
+
+2026-08-11 使用项目解释器实际验证 runtime wiring 与离线回归；指定测试、完整测试、
+Ruff 和 diff check 均通过，精确命令与数量见 [`TASKS.md`](TASKS.md) 和
+[`LEARNING_LOG.md`](LEARNING_LOG.md)。`docker compose config` 退出码 0，展开结果
+包含两个服务、两个 healthcheck、`service_healthy` 依赖、两个 named volume 和
+`http://qdrant:6333`，没有 secret。
+
+本机 Docker Server 29.4.2 与 Compose v5.1.3 可用。使用隔离 project name 实际完成
+build/up/health：API 和 Qdrant 均 healthy，live HTTP 200；ready HTTP 503 且原因仅为
+Day 8 前预期的 `document_index=not_built`，SQLite 与 Qdrant check 均为 `ok`。真实
+`migrationlens-documents` collection 为 384 维 Cosine、points_count=0；API 实际以
+UID/GID 10001/10001 运行并使用 `http://qdrant:6333`。优雅停止和隔离清理也已验证，
+因此 Day 7 状态为 `completed`。
+
 ## 下一开发日
 
-MigrationLens Day 7 仍为 `planned`，尚未开始；其明确起点是 Docker Compose 的
-API + Qdrant 运行时接线和真实容器健康验证。真实 e5 adapter、向量入库和 dense
-retrieval 按计划属于 Day 10，当前均未实现。
+MigrationLens Day 8 仍为 `planned`，尚未开始；其明确起点是固定 Pydantic 官方文档
+快照、LICENSE、manifest、hash、归属与失败/缓存边界。真实 e5 adapter、向量入库和
+dense retrieval 按计划属于 Day 10，当前均未实现。
 
 ## 项目文档
 

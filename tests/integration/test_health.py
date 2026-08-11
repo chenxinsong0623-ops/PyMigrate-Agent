@@ -68,8 +68,8 @@ def test_health_ready_reports_default_not_ready_state(client: TestClient) -> Non
             "sqlite": {"status": "ok"},
             "document_index": {"status": "not_built"},
             "retriever_backend": {
-                "status": "not_configured",
-                "backend": None,
+                "status": "ok",
+                "backend": "qdrant",
             },
         },
     }

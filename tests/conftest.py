@@ -2,6 +2,33 @@ from collections.abc import Iterator
 
 import pytest
 
+import app.core.dependencies as dependencies_module
+
+
+class OfflineQdrantBackend:
+    """普通 pytest 使用的离线 Qdrant 生命周期替身。"""
+
+    backend_name = "qdrant"
+
+    def __init__(self) -> None:
+        self.initialize_calls = 0
+        self.ping_calls = 0
+        self.close_calls = 0
+        self.initialized = False
+
+    async def initialize(self) -> bool:
+        self.initialize_calls += 1
+        self.initialized = True
+        return True
+
+    async def ping(self) -> bool:
+        self.ping_calls += 1
+        return self.initialized
+
+    async def close(self) -> None:
+        self.close_calls += 1
+        self.initialized = False
+
 
 @pytest.fixture(autouse=True)
 def clear_application_environment(
@@ -23,3 +50,13 @@ def clear_application_environment(
         monkeypatch.delenv(variable, raising=False)
 
     yield
+
+
+@pytest.fixture(autouse=True)
+def use_offline_qdrant_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    """让普通测试保留完整 runtime wiring，同时不依赖真实 Qdrant server。"""
+    monkeypatch.setattr(
+        dependencies_module,
+        "build_qdrant_backend",
+        lambda _settings: OfflineQdrantBackend(),
+    )
