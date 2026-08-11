@@ -566,3 +566,108 @@ document_index=`not_built`、retriever_backend=`not_configured` 的 HTTP 503。
 Day 6 的 Qdrant client、384 维 collection、生命周期和健康探针均未实现。
 真实 e5 adapter、模型下载和 dense index 也未开始；其中真实 e5 adapter 仍按计划
 属于 Day 10。
+
+## 2026-08-10 — MigrationLens Day 6：Qdrant 最小基础设施
+
+状态：`completed`（工程边界和单元验收完成；真实 Qdrant runtime 未验证）
+
+### Qdrant、Embedding 与 collection 契约
+
+EmbeddingClient 负责把文本转换为向量，Qdrant 负责保存和比较向量。Day 5 已固定
+`EMBEDDING_DIMENSION=384`，所以 Day 6 collection 直接复用该常量，避免两个边界
+各自维护可能漂移的数字。D-010 新选择 Cosine；Qdrant 官方文档说明同一向量配置
+具有固定维度与 metric，并展示 `VectorParams(size, distance)` 创建方式。
+
+已有 collection 的 384 维或 Cosine 任一不匹配时，initialize 安全失败并关闭拥有的
+client，不删除、recreate 或覆盖集合。自动重建会不可逆地丢失未知已有数据，也会把
+配置错误伪装成成功。
+
+### 两层注入边界与状态机
+
+`QdrantClientProtocol` 只暴露 collection exists/config/create、ping 和 close；
+`QdrantClientAdapter` 使用 `qdrant-client==1.18.0` 的公开异步 API；
+`QdrantBackend` 聚合 MigrationLens 生命周期。测试注入 FakeQdrantClient，不需要
+服务器。构造 backend 只保存依赖和配置，不执行网络。
+
+状态为 `NEW -> INITIALIZING -> INITIALIZED`，预期失败或程序错误后进入 `FAILED`，
+关闭后进入 `CLOSED`。成功 initialize 可重复调用而不重复创建；FAILED/CLOSED 不在
+同一对象上 retry/reopen，需要新建 backend，避免复用状态未知的网络 client。close
+在任意时点最多调用底层一次，包含初始化失败、初始化前关闭和 close timeout。
+
+initialize 负责建立或验证 collection；ping 只在初始化成功后检查当前服务可访问性。
+二者不能互换。空检索结果表示一次成功查询没有命中，backend error 表示查询根本
+没有可靠完成；Day 6 没有 search 方法，所以也不存在用 `[]` 掩盖错误的路径。
+
+### timeout、错误和日志
+
+Settings 增加 URL、collection name 与 `1..30` 秒的整数 timeout。官方 client 自身
+收到 timeout，同时每一个外部 async 调用还受 `asyncio.timeout()` 保护；单元测试用
+永不完成的 `asyncio.Event` 在毫秒级验证 initialize、ping 和 close，不真实等待数秒。
+
+官方 client 的 `ApiException` 在 adapter 转换为不含原文的
+`QdrantInfrastructureError`。backend 将这类预期基础设施错误和 TimeoutError 转换为
+False 或安全清理；集合契约不匹配使用独立安全错误。TypeError、AttributeError、
+RuntimeError 等程序缺陷继续传播，因为统一吞成“不可用”会隐藏实现 bug。日志只写
+component、operation 和 error_type，不写 URL、collection、API key、异常原文或
+traceback。
+
+`QdrantBackend` 已提供稳定 `backend_name="qdrant"` 和 async `ping()`，天然满足
+`RetrieverReadinessProbe` 的结构契约。本日没有修改 ApplicationDependencies、
+lifespan 或 ReadinessService；因此默认应用仍诚实返回 retriever backend
+`not_configured`，而不是在没有真实服务时假装健康。
+
+### 依赖、文件和证据边界
+
+目标 Python 3.11 环境中已存在 `qdrant-client 1.18.0`，无需下载或升级；本日只把
+它作为直接依赖精确 pin 到 pyproject。包元数据报告 Apache-2.0。直接维护 HTTP API
+会重复 Qdrant schema，FastEmbed/LangChain/LlamaIndex 会增加本日不需要的模型或
+框架依赖，均未采用；也没有加入 sentence-transformers、transformers 或 torch。
+
+新增：
+
+- `app/retrieval/__init__.py`；
+- `app/retrieval/qdrant.py`；
+- `tests/unit/test_qdrant.py`。
+
+修改：
+
+- `app/core/config.py`、`.env.example`、`pyproject.toml`；
+- `tests/conftest.py`、`tests/unit/test_config.py`；
+- `TASKS.md`、`DECISIONS.md`、`LEARNING_LOG.md`、`README.md`；
+- `notes/MigrationLens_项目说明与每日开发计划.md`。
+
+没有生成模型文件、Qdrant 数据目录、Docker 文件、`.env` 或密钥，也没有运行真实
+Qdrant。FakeQdrantClient 能证明注入、状态、配置、timeout、错误和关闭契约，不能
+证明服务器可连接、真实集合已创建、网络 timeout、dense Recall 或 e5 检索质量。
+
+### 实际命令与精确结果
+
+- `python -m pip check`：`No broken requirements found.`；
+- Day 6 指定 pytest：`63 passed in 1.04s`；
+- 完整 pytest：`153 passed, 1 warning in 2.25s`；
+- Ruff check：`All checks passed!`；
+- Ruff format check：机械格式化一个只含 docstring 的 `__init__.py` 后为
+  `36 files already formatted`；
+- `git diff --check`：退出码 0，无输出。
+
+唯一警告为既有 FastAPI TestClient 的上游 `StarletteDeprecationWarning`，没有被
+过滤。pytest 使用仓库内临时目录作为本进程 TEMP/TMP，以避开系统 temp 清理权限；
+测试参数和断言没有改变。
+
+### 真实失败与修复
+
+开发前第一次完整 pytest 在 110 个测试主体结束后因系统 temp `pytest-current` 清理
+触发 `WinError 5`。第一次仓库 basetemp 又因父目录不存在产生
+`79 passed, 1 warning, 31 errors`；创建明确父目录后得到真实基线
+`110 passed, 1 warning in 1.32s`。
+
+Day 6 第一次指定测试为 `1 failed, 61 passed in 1.22s`。原因是参数化测试写入
+`create_collection_error`，FakeQdrantClient 实际读取 `create_error`；只修正测试
+装置字段映射后通过。最终 format check 第一次仅报告新 `__init__.py` 末尾空行，执行
+机械 formatter 后通过。没有删除测试、放宽断言、屏蔽警告或吞掉程序错误。
+
+### Day 7 与 Day 10 边界
+
+Day 7 尚未开始，其起点是 Docker Compose API + Qdrant 运行时接线、真实容器启动与
+健康验证。Day 10 才实现真实 e5 adapter、passage upsert、query dense search 和
+payload；当前没有文档索引、search/upsert、BM25、RRF 或真实检索质量证据。

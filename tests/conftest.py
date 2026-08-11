@@ -15,6 +15,9 @@ def clear_application_environment(
         "MIGRATIONLENS_SQLITE_PATH",
         "MIGRATIONLENS_SQLITE_TIMEOUT_SECONDS",
         "MIGRATIONLENS_READINESS_TIMEOUT_SECONDS",
+        "MIGRATIONLENS_QDRANT_URL",
+        "MIGRATIONLENS_QDRANT_COLLECTION_NAME",
+        "MIGRATIONLENS_QDRANT_TIMEOUT_SECONDS",
         "OPENAI_API_KEY",
     ):
         monkeypatch.delenv(variable, raising=False)

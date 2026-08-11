@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, HttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["development", "test", "production"]
@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     sqlite_path: Path = Path("var/data/migrationlens.sqlite3")
     sqlite_timeout_seconds: float = Field(default=2.0, gt=0, le=30)
     readiness_timeout_seconds: float = Field(default=1.0, gt=0, le=5)
+    qdrant_url: HttpUrl = HttpUrl("http://127.0.0.1:6333")
+    qdrant_collection_name: str = Field(
+        default="migrationlens-documents",
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$",
+    )
+    qdrant_timeout_seconds: int = Field(default=2, gt=0, le=30)
 
     @field_validator("sqlite_path", mode="before")
     @classmethod

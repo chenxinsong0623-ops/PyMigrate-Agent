@@ -15,6 +15,9 @@ def test_settings_have_offline_defaults() -> None:
     assert settings.sqlite_path == Path("var/data/migrationlens.sqlite3")
     assert settings.sqlite_timeout_seconds == 2.0
     assert settings.readiness_timeout_seconds == 1.0
+    assert str(settings.qdrant_url) == "http://127.0.0.1:6333/"
+    assert settings.qdrant_collection_name == "migrationlens-documents"
+    assert settings.qdrant_timeout_seconds == 2
 
 
 def test_settings_read_prefixed_environment_variables(
@@ -26,6 +29,9 @@ def test_settings_read_prefixed_environment_variables(
     monkeypatch.setenv("MIGRATIONLENS_SQLITE_PATH", "var/test/custom.sqlite3")
     monkeypatch.setenv("MIGRATIONLENS_SQLITE_TIMEOUT_SECONDS", "3.5")
     monkeypatch.setenv("MIGRATIONLENS_READINESS_TIMEOUT_SECONDS", "0.75")
+    monkeypatch.setenv("MIGRATIONLENS_QDRANT_URL", "http://qdrant.test:6333")
+    monkeypatch.setenv("MIGRATIONLENS_QDRANT_COLLECTION_NAME", "migrationlens-test")
+    monkeypatch.setenv("MIGRATIONLENS_QDRANT_TIMEOUT_SECONDS", "4")
 
     settings = Settings(_env_file=None)
 
@@ -35,6 +41,9 @@ def test_settings_read_prefixed_environment_variables(
     assert settings.sqlite_path == Path("var/test/custom.sqlite3")
     assert settings.sqlite_timeout_seconds == 3.5
     assert settings.readiness_timeout_seconds == 0.75
+    assert str(settings.qdrant_url) == "http://qdrant.test:6333/"
+    assert settings.qdrant_collection_name == "migrationlens-test"
+    assert settings.qdrant_timeout_seconds == 4
 
 
 @pytest.mark.parametrize(
@@ -88,3 +97,35 @@ def test_settings_accept_readiness_timeout_upper_boundary() -> None:
     settings = Settings(_env_file=None, readiness_timeout_seconds=5.0)
 
     assert settings.readiness_timeout_seconds == 5.0
+
+
+@pytest.mark.parametrize(
+    "invalid_timeout",
+    [0, -1, 31, 1.5, float("nan"), float("inf"), float("-inf")],
+)
+def test_settings_reject_invalid_qdrant_timeout(invalid_timeout: float) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, qdrant_timeout_seconds=invalid_timeout)
+
+
+def test_settings_accept_qdrant_timeout_upper_boundary() -> None:
+    settings = Settings(_env_file=None, qdrant_timeout_seconds=30)
+
+    assert settings.qdrant_timeout_seconds == 30
+
+
+@pytest.mark.parametrize(
+    "invalid_collection_name",
+    ["", " leading", "slash/name", "name with spaces", "x" * 256],
+)
+def test_settings_reject_invalid_qdrant_collection_name(
+    invalid_collection_name: str,
+) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, qdrant_collection_name=invalid_collection_name)
+
+
+@pytest.mark.parametrize("invalid_url", ["", "localhost:6333", "file:///tmp/qdrant"])
+def test_settings_reject_invalid_qdrant_url(invalid_url: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, qdrant_url=invalid_url)

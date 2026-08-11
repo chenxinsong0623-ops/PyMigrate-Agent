@@ -149,6 +149,22 @@ graph、八类规则、RAG、LangGraph、五个工具、Citation Guard、业务�
 `ReadinessService` 和 `/health/ready`。默认 ready=503，因为索引仍为
 `not_built` 且 retriever backend 尚未配置。
 
+### 2.5 MigrationLens Day 6
+
+状态：`completed`
+日期：2026-08-10
+
+已实现 `QdrantClientProtocol`、官方 `AsyncQdrantClient` adapter 和最小
+`QdrantBackend`。collection 固定复用 `EMBEDDING_DIMENSION=384` 并采用 D-010
+记录的 Cosine；不存在时创建，已存在时校验，配置不匹配时不删除或 recreate。
+initialize、ping、close 的外部异步调用都使用短 timeout，预期 Qdrant API/transport
+失败转换为安全失败，程序错误继续传播。
+
+本日只使用 FakeQdrantClient 验证工程契约，没有连接真实 Qdrant，也没有修改
+`ApplicationDependencies`、FastAPI lifespan 或 readiness 接线。默认应用继续报告
+retriever backend `not_configured`。真实 API + Qdrant 容器接线属于 Day 7；真实
+e5、upsert 和 dense search 属于 Day 10。
+
 ## 3. P0、P1 和不做范围
 
 ### 3.1 P0 必须完成
@@ -603,7 +619,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 3 | 2026-08-06 | `completed` | 依赖组装与 lifespan | `ApplicationDependencies`；startup 初始化和 shutdown 关闭 SQLite | 指定集 15 passed、完整集 44 passed；启停、失败清理、应用隔离和 live 不变 | FastAPI 生命周期与资源所有权 | ready、Embedding、Qdrant |
 | MigrationLens Day 4 | 2026-08-06 | `completed` | ReadinessService 与 `/health/ready` | SQLite、索引状态、实际 retriever backend 检查和短 timeout | 指定集 64 passed、完整集 80 passed；真实 Uvicorn live=200、ready=503 | live 与 ready 的职责 | 实现 Qdrant/Embedding/索引 |
 | MigrationLens Day 5 | 2026-08-07 | `completed` | Embedding 边界与 FakeEmbedding | 类型化 client、确定性 fake、维度/批量/timeout、前缀契约 | 指定集 30 passed、完整集 110 passed；无网络/模型文件/新依赖 | 可注入模型边界 | 下载真实模型、Qdrant、调参 |
-| MigrationLens Day 6 | 2026-08-10 | `planned` | Qdrant 最小基础设施 | 可注入 client、384 维 collection、ping/init/close、受控错误 | backend 故障不得伪装空结果；共同门禁 | 向量后端生命周期 | Docker、写文档、RRF |
+| MigrationLens Day 6 | 2026-08-10 | `completed` | Qdrant 最小基础设施 | 可注入 client、384 维 Cosine collection、ping/init/close、受控错误 | Fake client 专项测试和共同门禁通过；真实 Qdrant 未验证 | 向量后端生命周期 | Docker、写文档、RRF |
 | MigrationLens Day 7 | 2026-08-11 | `planned` | Docker Compose 基线 | 非 root API 镜像、API+Qdrant、healthcheck、`.dockerignore` | compose config；可用时 up/live/ready/down；live 应成功，文档索引尚未构建时 ready 必须诚实报告 not-ready；共同门禁 | 容器边界与依赖健康 | CI、扫描器、P1 |
 | MigrationLens Day 8 | 2026-08-12 | `planned` | 官方文档快照 | 验证 ref、迁移文档、LICENSE、manifest、hash、notices、cache | HTTP 成败/timeout/retry/cache；真实来源字段；共同门禁 | 可复现来源与许可证 | chunk、索引；未抓取不得称完成 |
 | MigrationLens Day 9 | 2026-08-13 | `planned` | Markdown chunker | H2/H3、代码块、长度/overlap、稳定 ID、完整元数据 | 重复构建稳定、代码块和超长段落；共同门禁 | 内容寻址与结构切分 | BM25、dense、评测 |

@@ -12,16 +12,19 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 3 | `completed` | `ApplicationDependencies`、应用独立 SQLite 所有权与 FastAPI lifespan |
 | MigrationLens Day 4 | `completed` | 可注入 `ReadinessService`、逐项短 timeout 与结构化 `/health/ready` |
 | MigrationLens Day 5 | `completed` | 类型化 `EmbeddingClient`、e5 prefix 契约、384 维和确定性离线 `FakeEmbedding` |
+| MigrationLens Day 6 | `completed` | 可注入 Qdrant async client、384 维 Cosine collection 契约及 initialize/ping/close 生命周期 |
 
 当前 SQLite 已接入 FastAPI lifespan，但仍只包含最小 `system_metadata`，不能
 描述为已经运行的报告存储。文档索引尚未构建，retriever backend 尚未配置。
 
 Day 5 的 `FakeEmbedding` 只验证接口、prefix、维度、batch、输入校验、timeout 参数
-和确定性，不代表真实语义相似度、检索质量、模型速度或 GPU 性能。
+和确定性，不代表真实语义相似度、检索质量、模型速度或 GPU 性能。Day 6 的
+FakeQdrantClient 单元测试只验证 wrapper 工程契约；没有运行真实 Qdrant server。
 
 尚未实现：
 
-- 真实 `intfloat/multilingual-e5-small` adapter、模型下载和 Qdrant；
+- 真实 `intfloat/multilingual-e5-small` adapter、模型下载、Qdrant 运行时接线和
+  dense search/upsert；
 - Docker Compose 和 GitHub Actions；
 - Pydantic 官方文档快照、chunker 和索引；
 - ZIP Guard、AST scanner、八类规则和一跳 import；
@@ -54,8 +57,14 @@ Day 5 的 `FakeEmbedding` 只验证接口、prefix、维度、batch、输入校�
 | `MIGRATIONLENS_SQLITE_PATH` | 本地文件路径 | SQLite 数据库路径 |
 | `MIGRATIONLENS_SQLITE_TIMEOUT_SECONDS` | `>0` 且 `<=30` | SQLite 连接和 busy timeout |
 | `MIGRATIONLENS_READINESS_TIMEOUT_SECONDS` | `>0` 且 `<=5` | 每项 readiness 检查的短 timeout |
+| `MIGRATIONLENS_QDRANT_URL` | HTTP(S) URL | 未来 Qdrant 服务地址；配置不代表服务已启动 |
+| `MIGRATIONLENS_QDRANT_COLLECTION_NAME` | 字母或数字开头，后续可含 `._-`，最长 255 | 文档向量 collection 名称 |
+| `MIGRATIONLENS_QDRANT_TIMEOUT_SECONDS` | 正整数，`>0` 且 `<=30` | client 与每次 async backend 调用的 timeout |
 
-当前不定义真实模型、Embedding 或 Qdrant 配置；只有对应功能实际实现后才会增加。
+Day 6 声明并验证直接依赖 `qdrant-client==1.18.0`，用于官方异步 API adapter；
+该包许可证为 Apache-2.0。直接使用 HTTPX 会重复维护 Qdrant API schema，FastEmbed
+或 LangChain/LlamaIndex 又会引入本日不需要的模型或框架边界，因此没有采用。
+配置只用于构造 backend，不表示本机已有 Qdrant 服务，也未在 Day 6 接入 FastAPI。
 
 ## 本地运行
 
@@ -89,8 +98,9 @@ retriever backend。当前默认应用会诚实返回 HTTP 503：
 }
 ```
 
-这表示应用进程仍存活，但处理未来业务请求所需的索引和检索后端尚未就绪；它不表示
-Qdrant、Embedding 或文档索引已经实现。
+这表示应用进程仍存活，但处理未来业务请求所需的索引和检索后端尚未就绪。Day 6
+虽已实现 Qdrant 生命周期对象，但尚未注入应用，因此默认 readiness 仍保持这一真实
+语义；文档索引、真实 Embedding 和 dense retrieval 也尚未实现。
 
 ## 验证
 
@@ -152,11 +162,18 @@ git diff --check
 
 唯一警告仍是上游 `StarletteDeprecationWarning`，未被屏蔽。
 
+### Day 6 真实验证
+
+2026-08-10 使用项目解释器和完全隔离的 FakeQdrantClient 验证 Qdrant wrapper。
+精确命令、测试数量、首次失败及临时目录环境问题见 [`TASKS.md`](TASKS.md) 与
+[`LEARNING_LOG.md`](LEARNING_LOG.md)。没有连接真实 Qdrant，也没有生成 Qdrant
+数据目录、模型文件或 Docker 文件。
+
 ## 下一开发日
 
-MigrationLens Day 6 Qdrant 最小基础设施仍为 `planned`，尚未开始。真实 e5
-adapter 按计划属于 Day 10；模型下载、dense index、Docker 和其他后续模块仍未
-实现。当前完成证据见 [`TASKS.md`](TASKS.md)。
+MigrationLens Day 7 仍为 `planned`，尚未开始；其明确起点是 Docker Compose 的
+API + Qdrant 运行时接线和真实容器健康验证。真实 e5 adapter、向量入库和 dense
+retrieval 按计划属于 Day 10，当前均未实现。
 
 ## 项目文档
 

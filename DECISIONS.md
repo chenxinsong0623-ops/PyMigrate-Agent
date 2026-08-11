@@ -105,3 +105,18 @@
     未获取前不得宣称快照/hash 的证据边界仍然有效。
 - 范围影响：不改变 MigrationLens P0、P1、八类规则、API 契约、安全边界或
   评测数量，也不开始 WDI-ClaimCheck 的业务实现。
+
+## D-010 — Qdrant collection 距离度量
+
+- 日期：2026-08-10
+- 状态：已接受
+- 决策：MigrationLens 的 Qdrant 默认单向量 collection 使用 Cosine
+  distance，向量维度复用 `app.core.embedding.EMBEDDING_DIMENSION=384`。
+- 原因：已冻结 SPEC 规定 `intfloat/multilingual-e5-small` 和 384 维，但没有
+  指定 Qdrant distance metric。Cosine 是本项目对 e5 检索的 Day 6 实现
+  选择，不是此前已冻结的历史要求。
+- 数据安全边界：已有 collection 的维度或 distance 不匹配时安全失败；
+  不自动删除、recreate 或覆盖现有数据。
+- 依据：Qdrant 官方 collection 文档说明同一向量配置必须固定维度与 metric，并以
+  `models.VectorParams(size=..., distance=models.Distance.COSINE)` 展示创建方式：
+  <https://qdrant.tech/documentation/manage-data/collections/>。
