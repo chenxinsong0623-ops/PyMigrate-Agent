@@ -1,6 +1,6 @@
 # MigrationLens 项目说明与每日开发计划
 
-更新时间：2026-08-11
+更新时间：2026-08-12
 产品：MigrationLens — Pydantic v1→v2 升级影响分析 Agent
 权威范围：`SPEC.md`
 
@@ -141,7 +141,7 @@ Day 2 的历史状态仍为 `implementation_complete`，不能用后续 Day 的�
 唯一警告为 FastAPI TestClient 导入触发的上游
 `StarletteDeprecationWarning`，没有被过滤隐藏。
 
-当前代码中还没有官方文档快照、chunker、索引、ZIP Guard、AST scanner、import
+该基线时的代码中还没有官方文档快照、chunker、索引、ZIP Guard、AST scanner、import
 graph、八类规则、RAG、LangGraph、五个工具、Citation Guard、业务分析 API、
 报告存储、benchmark、Locust、真实 LLM 或 WDI 业务实现。
 
@@ -167,7 +167,7 @@ e5、upsert 和 dense search 属于 Day 10。
 
 ### 2.6 MigrationLens Day 7
 
-状态：`implementation_complete`
+状态：`completed`
 日期：2026-08-11
 
 已新增 `Dockerfile`、`compose.yaml` 和 `.dockerignore`。API 镜像使用
@@ -192,6 +192,37 @@ index=`not_built`。真实 Qdrant collection 为 384 维 Cosine、points_count=0
 实际 UID/GID=10001/10001 并通过 `http://qdrant:6333` 连接。API 与 Qdrant 均完成
 优雅停止，本次 container、network、volume 与临时 API image 已隔离清理。因此 Day 7
 状态为 `completed`，真实容器 runtime 已验证。
+
+### 2.7 MigrationLens Day 8
+
+状态：`completed`
+日期：2026-08-12
+
+已从官方仓库 `https://github.com/pydantic/pydantic` 验证 annotated tag `v2.13.4`；
+tag object 为 `07b73712023f052c7c008c4a9c5121b4894e44ec`，peel 后 immutable commit 为
+`cf67d4b3193c3fe43ede18612ed62785eee11382`。`docs/migration.md` 与 `LICENSE` 均从
+该 commit 的 raw URL 获取，没有使用 `main`、`latest`、网页缓存或第三方转载。
+
+正式 raw snapshot 位于 `data/snapshots/pydantic-v2-migration/migration.md`，大小
+50,035 bytes，SHA256 为
+`3a33c005259e6ede170df1904a168a4a64e8d8efc5b7fed360b65e5c000c05b7`。同 commit LICENSE
+保存为 `third_party/pydantic-LICENSE`，大小 1,129 bytes，SHA256 为
+`a9e186f3ca16b5eef84318e7a701721351a00cb7b8ae3a4394b67b49e3529ef3`。来源 manifest
+位于 `data/manifests/pydantic-v2-migration.json`，归属位于
+`THIRD_PARTY_NOTICES.md`，真实获取时间为 `2026-08-12T02:18:21Z`。
+
+显式 builder 使用 Python 标准库 HTTP，timeout=15 秒；首次请求后最多三次 retry，
+指数退避 0.5/1.0/2.0 秒。timeout、连接错误、408、429 与 5xx retry，404 等永久错误
+立即失败。`var/cache/pydantic-snapshot/<commit>/` 保存 raw bytes 与并列 SHA256；有效
+cache hit 不访问网络、不更新 retrieved timestamp。损坏 cache 明确失败，refresh 在
+migration 与 LICENSE 全部获取和验证前不会覆盖已有正式 artifact。发布使用同目录
+临时文件、fsync、`os.replace` 和 rollback，避免半成品 manifest。
+
+首次真实命令报告 `source_state=downloaded`，第二次报告 `source_state=cache_hit`；
+第二次运行四个正式 artifact 的 hash 与 mtime 均不变。本地重新读取 manifest、snapshot
+和 LICENSE 后，两份 SHA256 与 byte length 均完全匹配。普通 pytest 使用 fake fetcher、
+fake clock/sleeper 和临时目录，不访问 GitHub。Day 8 没有 chunk、embedding、Qdrant
+upsert/search，也没有修改 `document_index_status=not_built`；Day 9 仍为 `planned`。
 
 ## 3. P0、P1 和不做范围
 
@@ -293,18 +324,20 @@ flowchart LR
 - 报告：JSON 与 Markdown 的 finding ID 和数量必须一致。
 
 建议代码边界包括 `security/`、`scanner/`、`ingestion/`、`retrieval/`、`agent/`、
-`reporting/` 和 `storage/`。这只是目标结构；当前真实代码包含基础 `app/api`、
-`app/core`、`app/storage/sqlite.py` 和 Qdrant lifecycle 所在的 `app/retrieval`，尚无
-scanner、ingestion、agent 或 reporting 业务实现。
+`reporting/` 和 `storage/`。当前真实代码包含基础 `app/api`、`app/core`、
+`app/storage/sqlite.py`、Qdrant lifecycle 所在的 `app/retrieval`，以及 Day 8 最小
+`app/ingestion/pydantic_snapshot.py`；尚无 scanner、chunker、agent 或 reporting
+业务实现。
 
 ## 6. 数据与文档快照
 
 ### 6.1 Pydantic 官方文档
 
-计划 ref 为 `v2.13.4`，与当前 Pydantic 运行时版本一致。当前尚未实际抓取或验证，
-因此没有可声明的文档快照 hash。
+已验证 ref `v2.13.4` 与当前 Pydantic 运行时版本一致；annotated tag 解析到 commit
+`cf67d4b3193c3fe43ede18612ed62785eee11382`。migration snapshot、同 commit LICENSE、
+manifest 与 notices 已在 2026-08-12 真实生成并完成 round-trip hash 验证。
 
-构建时必须：
+当前构建规则：
 
 1. 验证真实存在的 tag 或 commit；
 2. 获取该 ref 的 `docs/migration.md`；
@@ -314,19 +347,26 @@ scanner、ingestion、agent 或 reporting 业务实现。
 6. 网络调用设置 timeout、最多三次重试、指数退避和原始缓存；
 7. 下载失败时失败退出，不替换成模拟文档。
 
-来源 manifest 至少包含：
+实际来源 manifest 包含：
 
 ```json
 {
   "source_id": "pydantic-v2-migration",
   "upstream_repo": "https://github.com/pydantic/pydantic",
-  "git_ref": "<actual-tag-or-commit>",
+  "git_ref": "v2.13.4",
+  "resolved_commit_sha": "cf67d4b3193c3fe43ede18612ed62785eee11382",
   "path": "docs/migration.md",
-  "retrieved_at_utc": "<timestamp>",
-  "sha256": "<sha256>",
+  "retrieved_at_utc": "2026-08-12T02:18:21Z",
+  "sha256": "3a33c005259e6ede170df1904a168a4a64e8d8efc5b7fed360b65e5c000c05b7",
   "license": "MIT",
   "license_path": "third_party/pydantic-LICENSE",
-  "attribution_path": "THIRD_PARTY_NOTICES.md"
+  "attribution_path": "THIRD_PARTY_NOTICES.md",
+  "source_url": "<immutable commit raw URL>",
+  "snapshot_path": "data/snapshots/pydantic-v2-migration/migration.md",
+  "byte_length": 50035,
+  "license_source_url": "<same immutable commit raw URL>",
+  "license_sha256": "a9e186f3ca16b5eef84318e7a701721351a00cb7b8ae3a4394b67b49e3529ef3",
+  "license_byte_length": 1129
 }
 ```
 
@@ -651,7 +691,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 5 | 2026-08-07 | `completed` | Embedding 边界与 FakeEmbedding | 类型化 client、确定性 fake、维度/批量/timeout、前缀契约 | 指定集 30 passed、完整集 110 passed；无网络/模型文件/新依赖 | 可注入模型边界 | 下载真实模型、Qdrant、调参 |
 | MigrationLens Day 6 | 2026-08-10 | `completed` | Qdrant 最小基础设施 | 可注入 client、384 维 Cosine collection、ping/init/close、受控错误 | Fake client 专项测试和共同门禁通过；真实 Qdrant 未验证 | 向量后端生命周期 | Docker、写文档、RRF |
 | MigrationLens Day 7 | 2026-08-11 | `completed` | Docker Compose 基线 | 非 root API 镜像、API+Qdrant、healthcheck、`.dockerignore`、Qdrant runtime wiring | 指定集 122 passed、完整集 159 passed；compose config/build/up/health/down 通过；live=200、ready=503、真实 collection=384/Cosine、API UID/GID=10001/10001 | 容器边界、反向清理与 live/ready 分离 | CI、扫描器、P1 |
-| MigrationLens Day 8 | 2026-08-12 | `planned` | 官方文档快照 | 验证 ref、迁移文档、LICENSE、manifest、hash、notices、cache | HTTP 成败/timeout/retry/cache；真实来源字段；共同门禁 | 可复现来源与许可证 | chunk、索引；未抓取不得称完成 |
+| MigrationLens Day 8 | 2026-08-12 | `completed` | 官方文档快照 | 已验证 v2.13.4 与 commit；raw migration、同 commit LICENSE、manifest、hash、notices、cache、原子发布 | 真实首次 download 与第二次 cache hit；50,035/1,129 bytes；两份 SHA256 round-trip 匹配；离线专项与共同门禁 | 可复现来源与许可证 | chunk、索引、upsert/search |
 | MigrationLens Day 9 | 2026-08-13 | `planned` | Markdown chunker | H2/H3、代码块、长度/overlap、稳定 ID、完整元数据 | 重复构建稳定、代码块和超长段落；共同门禁 | 内容寻址与结构切分 | BM25、dense、评测 |
 | MigrationLens Day 10 | 2026-08-14 | `planned` | e5 稠密索引与检索 | 真实 adapter、passage 入库、query 检索、payload、top-8 | prefix、384 维、批量、empty index、故障；共同门禁 | e5 语义检索 | BM25、RRF、locked |
 | MigrationLens Day 11 | 2026-08-15 | `planned` | BM25 + RRF 服务 | BM25 top-8、dense top-8、融合去重、top-3 和完整排名元数据 | 三路可独立调用、排序/空查询/单路失败；共同门禁 | lexical/dense 互补 | reranker、Agent、locked 调参 |

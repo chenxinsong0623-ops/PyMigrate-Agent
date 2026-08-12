@@ -1,5 +1,6 @@
 ﻿* text=auto
 
+.gitattributes text eol=lf
 *.py text eol=lf
 *.md text eol=lf
 *.toml text eol=lf
@@ -11,3 +12,7 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
+
+# 官方 snapshot 与同 ref LICENSE 必须保持上游原始 bytes，不做 EOL 转换。
+data/snapshots/** -text -eol
+third_party/pydantic-LICENSE -text -eol

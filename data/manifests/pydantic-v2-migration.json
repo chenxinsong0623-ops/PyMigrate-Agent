@@ -1,0 +1,18 @@
+{
+  "attribution_path": "THIRD_PARTY_NOTICES.md",
+  "byte_length": 50035,
+  "git_ref": "v2.13.4",
+  "license": "MIT",
+  "license_byte_length": 1129,
+  "license_path": "third_party/pydantic-LICENSE",
+  "license_sha256": "a9e186f3ca16b5eef84318e7a701721351a00cb7b8ae3a4394b67b49e3529ef3",
+  "license_source_url": "https://raw.githubusercontent.com/pydantic/pydantic/cf67d4b3193c3fe43ede18612ed62785eee11382/LICENSE",
+  "path": "docs/migration.md",
+  "resolved_commit_sha": "cf67d4b3193c3fe43ede18612ed62785eee11382",
+  "retrieved_at_utc": "2026-08-12T02:18:21Z",
+  "sha256": "3a33c005259e6ede170df1904a168a4a64e8d8efc5b7fed360b65e5c000c05b7",
+  "snapshot_path": "data/snapshots/pydantic-v2-migration/migration.md",
+  "source_id": "pydantic-v2-migration",
+  "source_url": "https://raw.githubusercontent.com/pydantic/pydantic/cf67d4b3193c3fe43ede18612ed62785eee11382/docs/migration.md",
+  "upstream_repo": "https://github.com/pydantic/pydantic"
+}

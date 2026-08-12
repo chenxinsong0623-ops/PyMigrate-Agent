@@ -14,6 +14,7 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 5 | `completed` | 类型化 `EmbeddingClient`、e5 prefix 契约、384 维和确定性离线 `FakeEmbedding` |
 | MigrationLens Day 6 | `completed` | 可注入 Qdrant async client、384 维 Cosine collection 契约及 initialize/ping/close 生命周期 |
 | MigrationLens Day 7 | `completed` | 非 root API 镜像、API + Qdrant Compose、named volumes、healthcheck，以及 Qdrant 对 `ApplicationDependencies`、lifespan 和 readiness 的正式接线；真实容器 runtime 已验证 |
+| MigrationLens Day 8 | `completed` | 固定 Pydantic `v2.13.4` 官方 migration 原始快照、同 commit LICENSE、manifest、SHA256、第三方归属、有界下载、cache 与原子发布 |
 
 当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite 仍只包含最小
 `system_metadata`，不能描述为已经运行的报告存储；Qdrant startup 只创建或校验
@@ -25,12 +26,14 @@ Day 5 的 `FakeEmbedding` 只验证接口、prefix、维度、batch、输入校�
 FakeQdrantClient 单元测试只验证 wrapper 工程契约；没有运行真实 Qdrant server。
 Day 7 离线测试验证 runtime wiring，`docker compose config` 验证 Compose 结构；随后
 实际 build/up/health/HTTP/Qdrant/down 已完成，真实 container 证据与离线证据分开记录。
+Day 8 已真实固定官方 raw source，但没有建立 chunk 或 document index；因此 snapshot
+available 不等于 retrieval available，`document_index_status` 仍是 `not_built`。
 
 尚未实现：
 
 - 真实 `intfloat/multilingual-e5-small` adapter、模型下载和 dense search/upsert；
 - GitHub Actions；
-- Pydantic 官方文档快照、chunker 和索引；
+- Pydantic Markdown chunker 和索引；
 - ZIP Guard、AST scanner、八类规则和一跳 import；
 - BM25/dense/RRF；
 - LangGraph Agent、五个只读工具和 Citation Guard；
@@ -73,6 +76,43 @@ Day 6 声明并验证直接依赖 `qdrant-client==1.18.0`，用于官方异步 A
 Day 7 已把该 backend 接入 FastAPI。配置 URL 仍不等于服务可用；lifespan 会真实创建
 或校验 collection。`qdrant-client==1.18.0` 是 Python 客户端版本，Compose 的
 `qdrant/qdrant:v1.18.3-unprivileged` 是独立的 Server image tag，两者不要求同版本号。
+
+## Pydantic 官方文档快照
+
+Day 8 从官方仓库 <https://github.com/pydantic/pydantic> 验证 annotated tag
+`v2.13.4`，并解析到 immutable commit
+`cf67d4b3193c3fe43ede18612ed62785eee11382`。`docs/migration.md` 与 `LICENSE` 均从
+该 commit 的 raw URL 获取，避免 `main`、`latest` 或不同版本许可证随时间漂移。
+
+正式 artifact：
+
+- 原始 migration snapshot：
+  [`data/snapshots/pydantic-v2-migration/migration.md`](data/snapshots/pydantic-v2-migration/migration.md)，
+  50,035 bytes，SHA256
+  `3a33c005259e6ede170df1904a168a4a64e8d8efc5b7fed360b65e5c000c05b7`；
+- 来源 manifest：
+  [`data/manifests/pydantic-v2-migration.json`](data/manifests/pydantic-v2-migration.json)；
+- 同 commit MIT LICENSE：
+  [`third_party/pydantic-LICENSE`](third_party/pydantic-LICENSE)，1,129 bytes，SHA256
+  `a9e186f3ca16b5eef84318e7a701721351a00cb7b8ae3a4394b67b49e3529ef3`；
+- 第三方归属：[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
+
+使用项目解释器显式构建或验证：
+
+```powershell
+$Py = 'D:\conda_envs\pymigrate-agent\python.exe'
+& $Py -m app.ingestion.pydantic_snapshot
+```
+
+默认 15 秒 HTTP timeout；首次请求后最多 retry 3 次，退避为 0.5、1.0、2.0 秒。
+timeout、连接错误、HTTP 408/429/5xx 会 retry，HTTP 404 等永久错误立即失败。cache 位于
+Git 已忽略的 `var/cache/pydantic-snapshot/<commit>/`，以 raw bytes 加并列 SHA256
+校验；有效 cache hit 不访问网络，也不改写 manifest 时间。损坏 cache 明确失败，需在
+确认来源后使用 `--refresh`；refresh 在两份来源都验证前不会替换已有正式 snapshot。
+
+`data/snapshots/` 被 Ruff formatter 排除，并通过 `.gitattributes` 禁止 Git EOL 转换，
+从而保留上游原始 bytes。普通 import、FastAPI startup、readiness 和 pytest 不会触发
+该下载命令。
 
 ## 本地运行
 
@@ -228,11 +268,24 @@ Day 8 前预期的 `document_index=not_built`，SQLite 与 Qdrant check 均为 `
 UID/GID 10001/10001 运行并使用 `http://qdrant:6333`。优雅停止和隔离清理也已验证，
 因此 Day 7 状态为 `completed`。
 
+### Day 8 验证边界
+
+2026-08-12 使用 `git ls-remote` 和官方 GitHub API 分别验证 `v2.13.4` annotated tag，
+两者解析出的 commit 均为 `cf67d4b3193c3fe43ede18612ed62785eee11382`。首次显式命令
+报告 `source_state=downloaded`；第二次报告 `source_state=cache_hit`，四个正式
+artifact 的 hash 与 mtime 均未变化。manifest 从磁盘重读后，本地重算 migration 与
+LICENSE SHA256 均匹配。普通测试完全使用注入 fake transport，不能冒充真实 upstream
+证据；首次真实命令才证明本轮能够访问并保存官方 fixed-commit raw source。
+
+Day 8 没有修改 FastAPI、readiness、SQLite、Qdrant、Dockerfile 或 Compose，也没有
+构建 chunk、embedding 或 index。因此 `/health/live` 仍为 HTTP 200；SQLite/Qdrant
+健康时 `/health/ready` 仍因 `document_index=not_built` 返回 HTTP 503。
+
 ## 下一开发日
 
-MigrationLens Day 8 仍为 `planned`，尚未开始；其明确起点是固定 Pydantic 官方文档
-快照、LICENSE、manifest、hash、归属与失败/缓存边界。真实 e5 adapter、向量入库和
-dense retrieval 按计划属于 Day 10，当前均未实现。
+MigrationLens Day 9 仍为 `planned`，尚未开始；其明确输入是 Day 8 已冻结的 raw
+snapshot，主要目标是按 Markdown H2/H3 构建保持代码块完整的稳定 chunk。真实 e5
+adapter、向量入库和 dense retrieval 按计划属于 Day 10，当前均未实现。
 
 ## 项目文档
 
@@ -250,7 +303,7 @@ dense retrieval 按计划属于 Day 10，当前均未实现。
 
 ## 证据边界
 
-在实际生成并保存数据/文档 hash、locked 评测、失败记录、Docker 启动、CI、
-模型元数据、样本量和负载测试证据前，MigrationLens 尚未达到可写入简历的发布
-门槛。不得将当前 FakeLLM 骨架、目标阈值、计划数量或未运行命令描述为真实模型或
-生产环境结果。
+Day 8 已生成并验证一份官方文档 hash，但 locked 评测、完整失败记录、CI、模型元数据、
+样本量和负载测试等发布证据仍未完成，因此 MigrationLens 尚未达到可写入简历的发布
+门槛。不得将当前 snapshot、FakeLLM 骨架、目标阈值、计划数量或未运行命令描述为
+检索质量、真实模型或生产环境结果。

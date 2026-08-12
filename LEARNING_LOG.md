@@ -896,3 +896,151 @@ proxy=`System proxy`，只把 Containers proxy 设为 `No proxy`；ChatGPT 所�
 dense retrieval、BM25、RRF、ZIP Guard、AST scanner、八类规则、Agent、分析 API、
 报告表、CI、Locust、P1 或 WDI。Day 8 仍为 `planned`；只有用户正式确认后才开始固定
 Pydantic 官方文档、LICENSE、manifest、hash、归属、下载失败与缓存边界。
+
+## 2026-08-12：MigrationLens Day 8 —— 固定 Pydantic v2 迁移文档快照
+
+### 本日状态与工程目标
+
+Day 8 已完成。本日只解决一个主要目标：把后续 RAG 将依赖的 Pydantic v2 官方迁移
+文档，连同同一版本的 LICENSE、来源、不可变 commit、SHA256、字节数、归属和再分发
+决定，固定成可重复构建、可审计的仓库内 snapshot。没有开始 Day 9 的 Markdown
+chunk、embedding、Qdrant upsert 或检索实现。
+
+后续知识库不能直接依赖“网页当前内容”或可移动的 tag。网页会更新，tag 名也只是
+人类可读入口；因此 builder 先把 `v2.13.4` 解析为不可变 commit
+`cf67d4b3193c3fe43ede18612ed62785eee11382`，再从该 commit 下载
+`docs/migration.md` 与 `LICENSE`。`git ls-remote` 也确认该 annotated tag 的 tag object
+为 `07b73712023f052c7c008c4a9c5121b4894e44ec`，peeled commit 与 builder 结果一致。
+
+### Snapshot、cache 与 provenance 的区别
+
+- snapshot 是正式、可追踪的输入资产：`data/snapshots/.../migration.md`；后续 chunk
+  和评测必须从它构建，不能在运行时偷偷改读最新网页。
+- cache 是网络与重复构建优化：`var/cache/pydantic-snapshot/<commit>/...`；它被 Git
+  忽略，不是正式证据。cache hit 必须先校验 sidecar SHA256；损坏 cache 会明确失败，
+  不能静默当成可信 snapshot。
+- manifest 是 provenance 记录：它回答“来自哪里、哪个 ref、实际哪个 commit、何时
+  获取、多少字节、什么 hash、什么许可证、能否再分发”。只保存正文而没有 manifest，
+  后续无法独立证明输入身份。
+- SHA256 能证明当前 bytes 是否与记录一致，并能发现下载、缓存或换行转换造成的变化；
+  它不能单独证明内容在语义上正确、上游可信或许可证允许所有使用方式。因此仍需固定
+  官方仓库、commit、路径、LICENSE 与人工可读归属。
+
+### 许可证、归属与再分发边界
+
+`third_party/pydantic-LICENSE` 与正文从同一 resolved commit 下载并分别记录 SHA256 和
+字节数。`THIRD_PARTY_NOTICES.md` 记录 Pydantic、上游仓库、ref、commit、原始路径、
+MIT 许可证和“允许随本仓库再分发且须保留许可证与归属”的决定。只写项目名称或只放
+一个网页链接都不够，因为那不能证明实际使用的版本，也不能把具体资产与许可证对应。
+
+正式原始 bytes 不接受 Git 自动换行转换：`.gitattributes` 对 snapshot 和复制的
+LICENSE 关闭 text/eol 处理；Ruff 则在 `pyproject.toml` 中排除上游 Markdown snapshot，
+避免格式化器把它当成本仓库文档重写。这两个设置都服务于“仓库中的 bytes 与 manifest
+hash 一致”，没有改变应用依赖或运行时技术栈。
+
+### 下载安全、超时、重试与退避
+
+网络客户端只使用 Python 标准库并有 15 秒超时，因此没有新依赖。每个请求最多执行
+1 次首次尝试加 3 次重试，退避为 0.5、1.0、2.0 秒。Timeout、连接错误、HTTP 408、
+429 和 5xx 被视为暂时错误；404 等永久 HTTP 错误不重试；调用方式错误等编程异常也
+不被笼统捕获。这样既能吸收短暂抖动，又不会让确定性失败产生无意义等待。
+
+下载结果还会校验 HTTP 状态、Content-Type、最大字节数和内容形态。迁移文档必须是
+非空 Markdown 且不能是 HTML 错误页；LICENSE 必须包含 MIT License 特征。ZIP 成员
+校验不属于本日，因为本日没有下载或处理用户 ZIP。
+
+### 原子发布与失败保护
+
+builder 先在目标目录同盘创建 staging 文件、写入并 `fsync`，完成所有正文、LICENSE、
+manifest 和 notice 校验后才用 `os.replace` 发布；已有文件在事务中有备份，替换失败会
+回滚。正式四个 artifact 作为一个发布事务处理，因此不能出现“新正文 + 旧 LICENSE”
+或只有部分新 manifest 的正式状态。
+
+`--refresh` 会绕过 cache，但下载或校验失败时不会提前覆盖已有有效 snapshot。首次
+成功后再运行同一命令，四个正式文件的 hash 和 mtime 都不变，输出
+`source_state=cache_hit`；这证明重复构建幂等，而不只是“内容碰巧相同”。
+
+### 测试边界：离线替身与真实网络证据
+
+28 个 Day 8 单元/集成测试使用可注入 fake opener 和 fake sleep，覆盖 tag 解析、
+immutable URL、超时参数、可重试与不可重试错误、退避序列、响应大小/类型/HTML 校验、
+正文与 LICENSE hash、manifest、cache hit 零网络、cache 损坏、refresh 失败保留旧版本、
+部分下载失败不发布、构造与 import 不联网、CLI 成功/失败退出码，以及 FastAPI lifespan
+不触发 snapshot 网络请求。这些测试证明确定性契约，但 fake 结果不冒充真实上游下载。
+
+真实网络证据来自一次 builder 下载和一次重复运行。第一次输出 `downloaded`，第二次
+输出 `cache_hit`。正式 artifact 为：
+
+- migration.md：50,035 bytes，SHA256
+  `3a33c005259e6ede170df1904a168a4a64e8d8efc5b7fed360b65e5c000c05b7`；
+- Pydantic LICENSE：1,129 bytes，SHA256
+  `a9e186f3ca16b5eef84318e7a701721351a00cb7b8ae3a4394b67b49e3529ef3`；
+- requested ref：`v2.13.4`；resolved commit：
+  `cf67d4b3193c3fe43ede18612ed62785eee11382`；
+- retrieval timestamp：`2026-08-12T02:18:21Z`。
+
+另用独立本地读取重新计算正式正文和 LICENSE 的 SHA256/字节数，均与 manifest 一致。
+第二次运行前后四个正式文件的 hash 与 mtime 均未变化。
+
+### 红测、诊断与最小修复
+
+1. 先写 Day 8 测试后，第一次收集阶段按预期因 `app.ingestion` 不存在而失败；这证明
+   测试确实先于实现。随后增加最小 ingestion package 和 builder。
+2. 初版实现运行 Day 8 集合为 `20 passed, 8 failed`。共同根因不是契约错误，而是
+   Windows 深层 pytest 临时路径叠加过长 transaction 临时文件名；另一个测试未先创建
+   repo root。只把事务临时名缩短为 `.tmp/.bak` 风格并补测试目录创建，没有放宽断言。
+3. Ruff 首次报告 import 排序和长行；只做机械格式化。Ruff format 随后试图格式化
+   上游 snapshot 内的 Python 示例，因此把 `data/snapshots` 加入 formatter exclude，
+   保护上游原始 bytes，而不是修改 snapshot 迎合格式器。
+
+### 实际门禁与未实现边界
+
+- 开发前：`pip check` 无 broken requirements；完整 pytest
+  `159 passed, 1 warning in 1.41s`；Ruff check/format、Compose config 和
+  `git diff --check` 均通过。
+- Day 8 指定集最终：`28 passed, 1 warning in 0.91s`。
+- 完整回归最终：`187 passed, 1 warning in 1.99s`。
+- Ruff check：`All checks passed!`；format check：`40 files already formatted`；
+  `docker compose config --quiet` 与 `git diff --check` 均退出码 0；Compose 同时输出
+  本机 Docker `config.json` Access denied warning，未被改写为失败或 runtime 证据。
+- 唯一 warning 仍是既有 FastAPI TestClient 的上游 `StarletteDeprecationWarning`，
+  没有被屏蔽。
+
+本日没有修改部署内容，因此只运行静态 `docker compose config`，没有重跑 Day 7
+Docker runtime。SQLite、Qdrant lifecycle、readiness 和容器接线未被修改。
+
+截至本日结束，`document_index_status` 仍为 `not_built`，`/health/ready` 仍应返回 503；
+snapshot 存在不等于已 chunk、embedding 或 upsert。Day 9 仍未开始。尚未实现 Markdown
+chunk、真实 e5、passage upsert、query search、dense retrieval、BM25、RRF、ZIP Guard、
+AST scanner、八类规则、Agent、分析 API、报告、CI、Locust、P1 或 WDI。
+
+### Day 8 后我现在能够解释的 28 个问题
+
+1. 为什么要在 RAG 前冻结官方来源，而不能运行时读网页？
+2. tag、annotated tag object 与 peeled commit 分别是什么？
+3. 为什么 raw 下载 URL 必须绑定 immutable commit？
+4. snapshot 与 cache 的职责为什么不能混在一起？
+5. manifest 怎样形成可审计 provenance？
+6. retrieval timestamp 证明什么，又不证明什么？
+7. SHA256 能发现哪些变化，不能证明哪些语义？
+8. 为什么要同时记录 bytes 和 hash？
+9. 为什么 LICENSE 必须与正文来自同一 commit？
+10. attribution 与 license copy 分别解决什么问题？
+11. 再分发决定为什么要显式记录？
+12. 为什么构造对象和 import 模块不能隐式联网？
+13. 为什么外部网络客户端必须有 timeout？
+14. 哪些 HTTP/网络错误适合重试？
+15. 为什么 404 和编程错误不应重试？
+16. 退避怎样避免快速重试放大故障？
+17. 下载后为什么仍要校验 Content-Type、大小和内容形态？
+18. HTML 错误页为何可能以“下载成功”的形式出现？
+19. cache sidecar hash 怎样阻止损坏缓存静默进入正式资产？
+20. `--refresh` 为什么不能先删除已有 snapshot？
+21. staging、`fsync`、`os.replace` 和 rollback 各自负责什么？
+22. 为什么正文、LICENSE、manifest、notice 要作为一个事务发布？
+23. 如何用零网络调用证明 cache hit？
+24. 如何用 hash 与 mtime 同时证明重复构建幂等？
+25. fake opener 测试能证明什么，不能证明什么？
+26. 真实下载与本地 round-trip 各补充了什么证据？
+27. 为什么 snapshot 已完成但 readiness 仍必须是 503？
+28. Day 9 能消费哪些固定输入，又有哪些事情仍不能宣称完成？
