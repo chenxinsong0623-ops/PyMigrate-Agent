@@ -15,6 +15,7 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 6 | `completed` | 可注入 Qdrant async client、384 维 Cosine collection 契约及 initialize/ping/close 生命周期 |
 | MigrationLens Day 7 | `completed` | 非 root API 镜像、API + Qdrant Compose、named volumes、healthcheck，以及 Qdrant 对 `ApplicationDependencies`、lifespan 和 readiness 的正式接线；真实容器 runtime 已验证 |
 | MigrationLens Day 8 | `completed` | 固定 Pydantic `v2.13.4` 官方 migration 原始快照、同 commit LICENSE、manifest、SHA256、第三方归属、有界下载、cache 与原子发布 |
+| MigrationLens Day 9 | `completed` | 离线 H2/H3 Markdown chunker、fenced code 保护、500–1200 字符目标、120 字符 overlap、稳定 ID、来源元数据、内容 hash、JSON schema v1 artifact 与重复构建审计 |
 
 当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite 仍只包含最小
 `system_metadata`，不能描述为已经运行的报告存储；Qdrant startup 只创建或校验
@@ -28,12 +29,14 @@ Day 7 离线测试验证 runtime wiring，`docker compose config` 验证 Compose
 实际 build/up/health/HTTP/Qdrant/down 已完成，真实 container 证据与离线证据分开记录。
 Day 8 已真实固定官方 raw source，但没有建立 chunk 或 document index；因此 snapshot
 available 不等于 retrieval available，`document_index_status` 仍是 `not_built`。
+Day 9 已从该本地 snapshot 构建 structured chunks，但仍没有 embedding 或 Qdrant
+document points；因此 chunks available 仍不等于 document index ready。
 
 尚未实现：
 
 - 真实 `intfloat/multilingual-e5-small` adapter、模型下载和 dense search/upsert；
 - GitHub Actions；
-- Pydantic Markdown chunker 和索引；
+- 真实 document embedding、Qdrant passage points 和索引状态切换；
 - ZIP Guard、AST scanner、八类规则和一跳 import；
 - BM25/dense/RRF；
 - LangGraph Agent、五个只读工具和 Citation Guard；
@@ -113,6 +116,51 @@ Git 已忽略的 `var/cache/pydantic-snapshot/<commit>/`，以 raw bytes 加并�
 `data/snapshots/` 被 Ruff formatter 排除，并通过 `.gitattributes` 禁止 Git EOL 转换，
 从而保留上游原始 bytes。普通 import、FastAPI startup、readiness 和 pytest 不会触发
 该下载命令。
+
+## Markdown chunk artifact
+
+Day 9 只读取并验证 Day 8 的正式 manifest 与 raw snapshot，不访问 GitHub、Pydantic
+网站或 `var/cache`，也不调用 snapshot downloader。显式离线构建命令：
+
+```powershell
+$Py = 'D:\conda_envs\pymigrate-agent\python.exe'
+& $Py -m app.ingestion.markdown_chunker
+```
+
+正式输出为
+[`data/chunks/pydantic-v2-migration.json`](data/chunks/pydantic-v2-migration.json)，
+使用 UTF-8 deterministic JSON schema v1。每个 chunk 保存精确 source text slice、
+H2/H3 `heading_path`、source character span、官方 URL/ref/resolved commit、Day 8
+snapshot SHA256、`char_length`、文本 UTF-8 SHA256、continuation/overlap metadata 和
+稳定 `chunk_id`。
+
+切分契约：
+
+- H2 建立新根并清除旧 H3；H3 继承最近 H2；H1 不进入 `heading_path`；
+- 第一个 H2 前的 preamble 使用空 heading path，不丢弃；heading-only section 作为
+  非空 short structural chunk 保留；
+- backtick、tilde 和列表缩进 fenced code 由状态机保护，代码内 `##`/`###` 不会触发
+  section split；不可拆代码结构优先于长度目标；
+- 长度使用 Python `len(text)`，目标为 500–1200 字符；短结构允许小于 500；单个
+  不可拆代码块允许大于 1200；
+- 同一超长 section 的安全 continuation 固定 overlap=120；不同 H2/H3 间不 overlap，
+  120 字符起点落入 code fence 时使用 0 overlap，避免截断代码；
+- ID 的 canonical 输入为固定 identity schema、`source_id`、`source_path`、
+  `heading_path`、精确 text 和同身份 occurrence，不使用 UUID4、时间、Python
+  `hash()`、全局序号、绝对路径或 mtime；`content_sha256` 只证明 chunk text；
+- 输出顺序严格保持 document order，不按 hash/标题排序，也不自动去重不同语义位置
+  的重复文本；写入采用同目录 temporary file、flush、fsync 和原子 replace。
+
+本轮真实 snapshot build 得到 62 个 chunks，artifact SHA256 为
+`36ab67593a997edb81cf0385d74213471b95bf5c915e551e92461e88192b1773`。长度最短 106、
+最长 1200；54 个位于目标范围，8 个是 short structural，0 个 oversized；35 个是
+同 section continuation，其中 27 个实际带 120 字符 overlap。独立审计确认 62 个 ID
+全部唯一、62 个 content hash 全部匹配、188/188 source blocks 和 50,005/50,005
+source characters 无缺口覆盖，27/27 fenced code blocks 完整位于单一 chunk。
+
+第二次相同构建报告 `build_state=unchanged`；artifact SHA256、62 个 ID 的顺序、62 个
+content hash 的顺序和文件 mtime 均不变。derived artifact 不包含当前构建时间，继续
+继承 Day 8 的 upstream retrieval timestamp。
 
 ## 本地运行
 
@@ -281,11 +329,23 @@ Day 8 没有修改 FastAPI、readiness、SQLite、Qdrant、Dockerfile 或 Compos
 构建 chunk、embedding 或 index。因此 `/health/live` 仍为 HTTP 200；SQLite/Qdrant
 健康时 `/health/ready` 仍因 `document_index=not_built` 返回 HTTP 503。
 
+### Day 9 验证边界
+
+2026-08-12 使用真实 Day 8 本地 snapshot 完成离线 chunk build、第二次 unchanged
+构建、artifact round-trip、ordered ID/content-hash 比较、source span coverage 和真实
+fenced-code 完整性审计。Synthetic 单测使用 `tmp_path` manifest/Markdown fixture，
+不访问网络、不启动 Docker、不修改正式 Day 8 source；真实构建证据与 synthetic
+fixture 证据分开记录。
+
+Day 9 没有修改 runtime、SQLite、Qdrant、Dockerfile 或 Compose，也没有 embedding、
+upsert 或 search。完整测试、Ruff 和静态 Compose 的精确最终结果见 `TASKS.md` 和
+`LEARNING_LOG.md`。
+
 ## 下一开发日
 
-MigrationLens Day 9 仍为 `planned`，尚未开始；其明确输入是 Day 8 已冻结的 raw
-snapshot，主要目标是按 Markdown H2/H3 构建保持代码块完整的稳定 chunk。真实 e5
-adapter、向量入库和 dense retrieval 按计划属于 Day 10，当前均未实现。
+MigrationLens Day 10 仍为 `planned`，尚未开始；其明确输入是 Day 9 固定的 structured
+chunks，主要目标是实际 `passage:` embedding、384 维 Qdrant upsert 和 `query:` dense
+search。真实 e5 adapter、模型下载、document points 和 dense retrieval 当前均未实现。
 
 ## 项目文档
 
@@ -303,7 +363,7 @@ adapter、向量入库和 dense retrieval 按计划属于 Day 10，当前均未�
 
 ## 证据边界
 
-Day 8 已生成并验证一份官方文档 hash，但 locked 评测、完整失败记录、CI、模型元数据、
+Day 9 已生成并验证可复现 chunks，但 locked 评测、完整失败记录、CI、模型元数据、
 样本量和负载测试等发布证据仍未完成，因此 MigrationLens 尚未达到可写入简历的发布
-门槛。不得将当前 snapshot、FakeLLM 骨架、目标阈值、计划数量或未运行命令描述为
+门槛。不得将当前 snapshot/chunks、FakeLLM 骨架、目标阈值、计划数量或未运行命令描述为
 检索质量、真实模型或生产环境结果。

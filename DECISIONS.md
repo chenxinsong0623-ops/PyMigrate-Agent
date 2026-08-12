@@ -143,3 +143,35 @@
 - 影响范围：`Dockerfile`、`compose.yaml`、`ApplicationDependencies`、FastAPI
   lifespan、readiness、部署说明与 Day 7 测试。`qdrant-client==1.18.0` 与 Qdrant
   Server image tag 是彼此独立的客户端和服务端版本，不要求数字相同。
+
+## D-012 — Day 9 稳定 chunk artifact 与身份契约
+
+- 日期：2026-08-12
+- 状态：已接受
+- 决策：
+  - 正式 derived artifact 使用 UTF-8、排序 key、缩进 2 空格并以换行结尾的单一
+    JSON schema v1，路径为 `data/chunks/pydantic-v2-migration.json`；输出顺序保持
+    原文顺序，重复构建 bytes 相同时不重写文件；
+  - H2/H3 是 semantic boundary；`heading_path` 不包含 H1，preamble 使用空路径。
+    chunk text 始终是 Day 8 source 的精确字符切片，原 heading 只在其原始位置出现，
+    不给 continuation 人工重复或改写 heading；
+  - 目标长度固定为 500–1200 个 Python 字符；同一 section 的可安全 continuation
+    固定 overlap=120 字符。短 section 允许小于 500；若 120 字符起点落入 fenced
+    code，则结构完整性优先并使用 0 overlap；单个不可拆 code block 可超过 1200；
+  - `content_sha256` 等于最终 `chunk.text` UTF-8 bytes 的 SHA256；`chunk_id` 则使用
+    canonical JSON：identity schema、`source_id`、`source_path`、`heading_path` 和精确
+    `text`，再加入同一 canonical identity 内的 `identity_occurrence`，计算 SHA256 并
+    使用 `sha256:<hex>`。它不使用 UUID4、时间、Python `hash()`、全局 chunk ordinal、
+    文件 mtime、绝对路径、source offset、git ref 或 snapshot hash；
+  - 每个 chunk 仍完整继承 Day 8 的 URL、ref、resolved commit 和 snapshot hash，并
+    记录 source character span。provenance 校验与 chunk identity 分离：上游版本变化
+    但 heading/text 未变化时 ID 可保持稳定，引用仍通过 snapshot metadata 区分版本；
+  - artifact 通过同目录 temporary file、flush、fsync 与 `os.replace` 单文件原子发布，
+    构建或发布失败不破坏已有有效 artifact。
+- 原因：Day 10 passage embedding/Qdrant payload、Day 11 检索结果以及后续 Citation
+  Guard 和报告引用都会依赖稳定 ID、字段、顺序和序列化。SPEC 已冻结总体范围，但没有
+  冻结 exact overlap、canonical ID bytes、heading 是否重复进 continuation、artifact
+  格式或 source span，因此需要一个追加式长期决策消除实现漂移。
+- 替代方案：未采用 JSONL（当前单一小型官方来源无需流式复杂度）、UUID4、全局数组
+  序号、Python `hash()`、固定字符无结构硬切、跨 H2/H3 overlap，或把 Day 8 snapshot
+  hash 直接作为 chunk ID 的一部分。

@@ -224,6 +224,41 @@ migration 与 LICENSE 全部获取和验证前不会覆盖已有正式 artifact�
 fake clock/sleeper 和临时目录，不访问 GitHub。Day 8 没有 chunk、embedding、Qdrant
 upsert/search，也没有修改 `document_index_status=not_built`；Day 9 仍为 `planned`。
 
+### 2.8 MigrationLens Day 9
+
+状态：`completed`
+实际开发日期：2026-08-12
+
+Day 9 只读取并验证 Day 8 的正式 manifest 与 raw snapshot，在零网络条件下构建
+`data/chunks/pydantic-v2-migration.json`。输入仍为 50,035 bytes、SHA256
+`3a33c005259e6ede170df1904a168a4a64e8d8efc5b7fed360b65e5c000c05b7`、ref
+`v2.13.4` 和 resolved commit
+`cf67d4b3193c3fe43ede18612ed62785eee11382`；未读取 `var/cache`、未调用 Day 8
+downloader，也未修改 snapshot、manifest、LICENSE 或 notices。
+
+`app/ingestion/markdown_chunker.py` 使用标准库状态机跟踪 H2/H3、backtick/tilde 与
+列表缩进 fence。H2 清除旧 H3，H3 继承最近 H2，preamble 使用空 path；chunk text
+始终是原文精确 character slice。长度以 Python `len(text)` 计，目标 500–1200，
+同 section continuation 的安全 overlap 固定为 120；短结构和 code-protection 例外
+不会跨 heading 合并、填充或截断代码。
+
+artifact 采用 deterministic JSON schema v1。每个 chunk 保存 stable SHA256 ID、
+text SHA256、heading path、URL/ref/resolved commit、source snapshot hash、character
+span 和 continuation metadata。ID 的 canonical input 不包含全局数组序号、绝对路径、
+mtime 或 Python `hash()`。单文件发布使用 temporary sibling、flush、fsync 与
+`os.replace`；相同 bytes 不重写。
+
+真实构建为 62 chunks，artifact SHA256
+`36ab67593a997edb81cf0385d74213471b95bf5c915e551e92461e88192b1773`；长度 106–1200，
+目标范围 54、short structural 8、oversized 0、continuation 35、实际 overlap 27。
+独立审计得到 62 个唯一 ID、0 collision、62 个唯一且匹配的 content hash、
+188/188 source blocks、50,005/50,005 source characters、27/27 fenced blocks 和
+0 coverage gap。第二次构建为 `unchanged`，artifact hash、有序 ID/content hash 与
+mtime 均不变。
+
+Day 9 没有 embedding、模型下载、Qdrant upsert/search、BM25/RRF 或 runtime wiring；
+`document_index_status` 仍为 `not_built`，Day 10 仍为 `planned`。
+
 ## 3. P0、P1 和不做范围
 
 ### 3.1 P0 必须完成
@@ -325,9 +360,9 @@ flowchart LR
 
 建议代码边界包括 `security/`、`scanner/`、`ingestion/`、`retrieval/`、`agent/`、
 `reporting/` 和 `storage/`。当前真实代码包含基础 `app/api`、`app/core`、
-`app/storage/sqlite.py`、Qdrant lifecycle 所在的 `app/retrieval`，以及 Day 8 最小
-`app/ingestion/pydantic_snapshot.py`；尚无 scanner、chunker、agent 或 reporting
-业务实现。
+`app/storage/sqlite.py`、Qdrant lifecycle 所在的 `app/retrieval`，以及
+`app/ingestion/pydantic_snapshot.py` 与 Day 9 离线 Markdown chunker；尚无 scanner、
+真实 embedding/index/search、agent 或 reporting 业务实现。
 
 ## 6. 数据与文档快照
 
@@ -403,13 +438,21 @@ gold 标到稳定的 `heading_path`，不依赖 chunk 数组序号。
 
 ### 7.1 Markdown 切分
 
-- 按 H2/H3 标题；
-- 保持代码块完整；
-- 目标 500–1200 字符；
-- 超长章节按段落切分；
-- 必要时 overlap 100–150 字符；
-- 基于内容生成稳定 `chunk_id`；
-- 保存 heading path、URL、git ref 和内容 SHA256。
+Day 9 已实现并真实验证：
+
+- 按 H2/H3 标题建立 semantic section，preamble 使用 root path；
+- 保持 backtick、tilde 和列表缩进 fenced code 完整；
+- 目标 500–1200 Python 字符，超长 prose 优先按 paragraph、line、sentence、
+  whitespace 后才 hard split；
+- 同 section 安全 continuation 固定 overlap=120；不跨 H2/H3 overlap；
+- 基于 canonical source identity、heading path、exact text 和同身份 occurrence 生成
+  stable `chunk_id`；
+- 保存 source character span、heading path、URL/ref/resolved commit、snapshot hash 和
+  chunk content SHA256；
+- deterministic JSON schema v1 输出为
+  `data/chunks/pydantic-v2-migration.json`，62 chunks，重复 build bytes/ID/mtime 稳定。
+
+这仍只是 derived chunks，不是 embedding、Qdrant points 或可查询索引。
 
 ### 7.2 Embedding
 
@@ -692,7 +735,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 6 | 2026-08-10 | `completed` | Qdrant 最小基础设施 | 可注入 client、384 维 Cosine collection、ping/init/close、受控错误 | Fake client 专项测试和共同门禁通过；真实 Qdrant 未验证 | 向量后端生命周期 | Docker、写文档、RRF |
 | MigrationLens Day 7 | 2026-08-11 | `completed` | Docker Compose 基线 | 非 root API 镜像、API+Qdrant、healthcheck、`.dockerignore`、Qdrant runtime wiring | 指定集 122 passed、完整集 159 passed；compose config/build/up/health/down 通过；live=200、ready=503、真实 collection=384/Cosine、API UID/GID=10001/10001 | 容器边界、反向清理与 live/ready 分离 | CI、扫描器、P1 |
 | MigrationLens Day 8 | 2026-08-12 | `completed` | 官方文档快照 | 已验证 v2.13.4 与 commit；raw migration、同 commit LICENSE、manifest、hash、notices、cache、原子发布 | 真实首次 download 与第二次 cache hit；50,035/1,129 bytes；两份 SHA256 round-trip 匹配；离线专项与共同门禁 | 可复现来源与许可证 | chunk、索引、upsert/search |
-| MigrationLens Day 9 | 2026-08-13 | `planned` | Markdown chunker | H2/H3、代码块、长度/overlap、稳定 ID、完整元数据 | 重复构建稳定、代码块和超长段落；共同门禁 | 内容寻址与结构切分 | BM25、dense、评测 |
+| MigrationLens Day 9 | 2026-08-12 | `completed` | Markdown chunker | H2/H3、27/27 fenced blocks、500–1200/120 overlap、稳定 ID、JSON v1 artifact；62 chunks | 专项 32 passed；完整 219 passed；真实 artifact/coverage/repeated-build 与共同门禁通过 | 内容寻址与结构切分 | embedding、Qdrant upsert/search、BM25、dense、评测 |
 | MigrationLens Day 10 | 2026-08-14 | `planned` | e5 稠密索引与检索 | 真实 adapter、passage 入库、query 检索、payload、top-8 | prefix、384 维、批量、empty index、故障；共同门禁 | e5 语义检索 | BM25、RRF、locked |
 | MigrationLens Day 11 | 2026-08-15 | `planned` | BM25 + RRF 服务 | BM25 top-8、dense top-8、融合去重、top-3 和完整排名元数据 | 三路可独立调用、排序/空查询/单路失败；共同门禁 | lexical/dense 互补 | reranker、Agent、locked 调参 |
 | MigrationLens Day 12 | 2026-08-17 | `planned` | dev 检索集与评分 | 32 题 schema、12 dev、20 locked 候选隔离、Recall/MRR evaluator | 三路 dev 报告、heading gold、无污染；共同门禁 | 评测分割与消融 | 查看 locked 成绩 |

@@ -1044,3 +1044,221 @@ AST scanner、八类规则、Agent、分析 API、报告、CI、Locust、P1 或 
 26. 真实下载与本地 round-trip 各补充了什么证据？
 27. 为什么 snapshot 已完成但 readiness 仍必须是 503？
 28. Day 9 能消费哪些固定输入，又有哪些事情仍不能宣称完成？
+
+## 2026-08-12：MigrationLens Day 9 —— Markdown Chunker 与稳定数据契约
+
+状态：`completed`
+
+### 为什么 RAG 需要结构化 chunk
+
+整篇 migration 文档有 50,005 个 Python 字符。把全文作为一个 embedding passage 会把
+多个无关迁移主题压进同一个向量，检索也无法返回精确 heading、内容 hash 和引用单元。
+固定字符 hard split 虽简单，却可能把 H2/H3 语义、列表和代码示例从中间切断。
+
+Day 9 因此使用 structural chunking：先按 fenced-code-aware H2/H3 划分 semantic
+section，再在同一 section 内选择 paragraph、line、sentence、whitespace 边界，最后才
+使用 deterministic hard split。H2 建立新根并清除旧 H3；H3 继承最近 H2；H1 不加入
+`heading_path`。heading path 让后续检索和引用知道 chunk 属于哪个迁移主题，而不是只
+依赖可能随切分变化的数组下标。
+
+第一个 H2 前的 front matter/intro 使用空 heading path，不能静默丢弃。原 heading line
+保留在它实际出现的 source slice 中；continuation 不人工重复标题。出现 heading 后立即
+出现下一个 heading 时，前一个 heading 本身仍是非空官方内容，因此保留为 heading-only
+short structural chunk，绝不生成 `text=""`。
+
+### Fenced-code state machine 与结构优先级
+
+状态机记录 opening fence 的字符和长度，只有相同字符且长度不短于 opening 的 closing
+fence 才结束代码块。它支持 backtick、tilde、language info、四个以上 fence 字符和
+列表容器内缩进 fence。处于 fence 中时完全不解析 `##`/`###`，所以 Python 注释或示例
+文本不会错误改变 heading path。
+
+任何 chunk 的 source start/end 都不能落在 fenced block 内；如果 1200 字符边界落入
+代码块，先在 opening fence 前结束当前 prose chunk，再把完整 code block 放入单一
+chunk。单个 code block 本身超过 1200 时允许 oversized structural chunk。真实
+Pydantic snapshot 最终没有 oversized code block，但 synthetic test 用大于 1200 的
+代码块验证了该路径。
+
+优先级为 provenance、H2/H3、code fence、内容无丢失、deterministic，最后才是长度。
+因此 500–1200 是目标范围，不是破坏结构的硬限制：真实结果有 8 个小于 500 的 short
+structural chunks；不跨无关 heading 合并、不填充空白。真实结果没有大于 1200 的
+chunk，不能由此声称实现不允许 oversized；synthetic test 才证明 oversized code
+exception。
+
+### Overlap、前进保证与 source span
+
+同一超长 section 的 continuation 固定使用 120 字符 overlap，处于 SPEC 的 100–150
+范围内。不同 H2/H3 section 之间不 overlap。每轮 cursor 正常至少前进
+`max_chars-overlap_chars=1080`；构造阶段还验证 overlap 小于 max，避免无限循环。
+
+如果 `end-120` 落入 fenced code，或下一不可拆代码必须从 opening fence 干净开始，
+结构完整性优先并使用 0 overlap。artifact 因此分别记录 `continuation_index` 和每个
+chunk 的实际 `overlap_chars`。真实 35 个 continuation 中 27 个带 120 字符 overlap，
+其余 8 个是结构保护边界；没有把“continuation 数”错误写成“实际 overlap 数”。
+
+每个 chunk 还记录 Python character offset 的 `[source_start_char, source_end_char)`。
+`chunk.text` 必须精确等于该 source slice。这不是绝对 Windows 路径，也不参与 ID；它
+让覆盖审计可以对 overlap 区间求并集，证明所有 source 字符和 source blocks 都被覆盖，
+而不是错误地拼接 chunks 后因 overlap 重复而比较失败。
+
+### Stable ID、content hash 与 snapshot hash
+
+UUID4、当前时间、mtime、全局 chunk index 和 Python `hash()` 都不能生成稳定 ID；
+内置 hash 默认还会跨进程随机化。Day 9 对以下明确 canonical JSON 使用 UTF-8、排序
+key 和紧凑分隔符：
+
+```text
+identity schema
++ source_id
++ source_path
++ heading_path
++ exact chunk text
++ same-identity occurrence
+-> SHA256
+-> sha256:<64 lowercase hex>
+```
+
+同身份 occurrence 只区分完全相同 source/path/heading/text 的重复位置，不使用全局
+ordinal。不相关 section 插入不会改变其他 heading/text 的 ID；测试已验证。ID 不直接
+包含 git ref、snapshot hash 或 source offset，因此上游新版本中语义位置与文本未变的
+chunk 可以保留身份；具体版本仍由每个 chunk 继承的 ref、resolved commit 和 snapshot
+hash 严格区分。
+
+`content_sha256` 只计算最终 `chunk.text.encode("utf-8")`；它证明文本 bytes，不能替代
+含 heading/source identity 的 chunk ID。Day 8 `source_snapshot_sha256` 又证明整份
+raw source，不能替代任何单个 chunk hash。三个字段职责分离。
+
+不同 heading 下相同正文不能用 `set(text)` 去重，因为 heading path 是语义位置的一部分。
+输出严格保持 document order，也不按 hash 或标题排序。这样 deterministic output 对 Git
+diff、Day 10 upsert 和后续 citation allowlist 都可审计。
+
+### Derived artifact、schema 与安全发布
+
+Day 8 snapshot 是 source of truth，Day 9 JSON 是 derived artifact。builder 先读取
+`data/manifests/pydantic-v2-migration.json`，验证 immutable source URL、snapshot
+SHA256 和 byte length，再解码 UTF-8；任何不一致都在写 output 前失败，不修改
+manifest、不接受新 hash、不联网修复。
+
+输出固定为 `data/chunks/pydantic-v2-migration.json`，schema version=1；UTF-8、key
+排序、2 空格缩进、末尾换行。每个 chunk 包含 heading、source provenance、content
+hash、stable ID、source span 和 continuation metadata。相同 bytes 时不重写，因此
+mtime 稳定；不同 bytes 使用同目录 temporary sibling、flush、fsync、`os.replace`。
+写入失败时删除 temp，已有 artifact 保持不变。
+
+该 contract 会被 Day 10、检索结果和 Citation Guard 长期消费，因此向
+`DECISIONS.md` 追加 D-012；没有修改冻结 SPEC，也没有新增 dependency。标准库状态机
+足以满足当前范围，不引入 LangChain、LlamaIndex、unstructured、markdown-it、mistune、
+tiktoken、transformers 或 sentence-transformers。
+
+### Synthetic unit-test evidence
+
+32 个 Day 9 测试全部使用 `tmp_path`、synthetic Markdown 和 synthetic Day 8 manifest，
+不访问 GitHub/Pydantic、不下载模型、不启动 Docker/Qdrant，也不修改正式 snapshot。
+它们覆盖：
+
+- source hash/byte length/immutable URL 失败；
+- H2/H3 path、H2 清 H3、preamble、heading-only section、Unicode 与 document order；
+- backtick、tilde、longer fence、language info、列表缩进 fence 和代码内 heading；
+- short structural、长 prose、120 overlap、cursor 前进和 oversized code；
+- provenance/source span、stable ID、文本/heading 变化、无关插入稳定性和 content hash；
+- duplicate text 不去重、schema frozen/extra forbid、round-trip 和 deterministic bytes；
+- invalid rebuild 与 injected atomic replace failure 保留已有 artifact；
+- constructor/build 离线、Day 8 source hash 不变、full character/block coverage 和 CLI。
+
+这些 fixture 能证明算法边界和失败路径；不能代替真实 Pydantic snapshot 的 chunk 数、
+长度分布、真实 fenced block 数或真实 coverage。
+
+### Real Day-8-snapshot chunk-build evidence
+
+真实命令：
+
+```powershell
+D:\conda_envs\pymigrate-agent\python.exe -m app.ingestion.markdown_chunker
+```
+
+最终正式 build 结果：
+
+- input：50,035 bytes、50,005 Python characters，SHA256
+  `3a33c005259e6ede170df1904a168a4a64e8d8efc5b7fed360b65e5c000c05b7`；
+- ref：`v2.13.4`；resolved commit：
+  `cf67d4b3193c3fe43ede18612ed62785eee11382`；
+- output：62 chunks；artifact SHA256
+  `36ab67593a997edb81cf0385d74213471b95bf5c915e551e92461e88192b1773`；
+- char length min/max：106/1200；target range 54；short structural 8；
+  oversized 0；oversized-code 0；
+- continuation 35；实际 120-char overlap chunks 27；
+- unique IDs 62；collision 0；unique content hashes 62；duplicate hash 0；
+- source characters 50,005/50,005；source blocks 188/188；coverage gap 0；
+- fenced code blocks 27/27 完整位于单一 chunk。
+
+除 builder 自身 round-trip 外，又使用独立的标准库只读脚本重新解析 JSON、重算每个
+text hash、验证 source slice、URL/ref/commit、有序 offsets、区间并集、source blocks
+和 fences，得到相同结果。不能只相信 CLI 的 success 文本。
+
+第二次相同命令返回 `build_state=unchanged`。run1/run2 artifact SHA256 均为
+`36ab67593a997edb81cf0385d74213471b95bf5c915e551e92461e88192b1773`；chunk count 均为
+62；全部 ID 顺序和 content hash 顺序完全相同；mtime 未变化。
+
+### 实际失败、诊断与修复
+
+1. 红测第一次在收集阶段按预期失败：
+   `ModuleNotFoundError: app.ingestion.markdown_chunker`。随后才实现生产模块。
+2. 初版专项为 `30 passed, 1 failed`。失败是测试把不等长的 `chunks` 与
+   `chunks[1:]` 传给 `zip(..., strict=True)`；只改成两个等长相邻切片，生产 overlap
+   逻辑未改变，专项变为 31 passed。
+3. 首次 Ruff 报一个未使用 import、长行和机械格式；formatter 加最小补丁后通过。
+4. 首次真实构建报告 23/23 fenced blocks，但输入粗审还有 8 行四空格缩进 fence。
+   核对发现它们是列表内 4 个真实 fenced blocks，初版状态机漏计。先增加缩进 fence
+   红测，实际失败为 source_fenced_block_count 0；再让 fence state 接受列表容器缩进。
+   专项变为 32 passed，真实审计变为 27/27。初版 artifact hash 不再作为最终证据。
+
+### 当前质量门禁与 Day 10 边界
+
+- 开发前：`pip check` 无 broken requirements；完整 pytest
+  `187 passed, 1 warning in 2.18s`；Ruff、diff check 和 Compose config 通过；
+- Day 9 专项最终：`32 passed in 0.51s`；
+- 完整回归最终：`219 passed, 2 warnings in 2.68s`；
+- Ruff check：`All checks passed!`；format check：`42 files already formatted`；
+- `git diff --check` 和 `docker compose config --quiet` 均退出码 0。
+
+两条完整回归 warning 分别来自既有 Starlette TestClient deprecation 和 Qdrant
+client server-version compatibility 探测；Day 9 专项为零 warning、零网络。
+
+Day 9 不联网，因为正式输入已经在 Day 8 冻结；也不做 embedding，因为 chunks 仍是
+文本结构。当前没有真实 e5、passage vectors、Qdrant document points 或 dense search，
+所以 `document_index_status` 仍为 `not_built`，ready 仍是 HTTP 503。Day 10 的明确输入
+是本日 schema v1 structured chunks，才负责 `passage:` embedding、384 维 upsert 和
+`query:` dense retrieval。
+
+### Day 9 后需要能够解释的 30 个问题
+
+1. 为什么不能把整篇 migration.md 作为一个 chunk？
+2. structural chunking 与固定字符 hard split 有什么区别？
+3. 为什么选择 H2/H3 作为语义边界？
+4. heading_path 有什么作用？
+5. 为什么代码块不能被切断？
+6. 为什么 fenced code 里的 `##` 不能当标题？
+7. 为什么 500–1200 是 target 而不是绝对限制？
+8. 什么是 short structural chunk？
+9. 什么是 oversized structural chunk？
+10. overlap 为什么存在？
+11. 为什么 overlap 不应该跨不同 H2/H3 section？
+12. 当前 exact overlap 是多少？
+13. stable chunk ID 为什么重要？
+14. 为什么不能使用 UUID4？
+15. 为什么不能使用 Python `hash()`？
+16. content-addressed ID 是什么？
+17. chunk_id 与 content_sha256 有什么区别？
+18. source snapshot SHA256 与 chunk SHA256 有什么区别？
+19. 为什么 provenance 要继承 Day 8 manifest？
+20. 为什么不能自动去重不同 heading 下的相同文本？
+21. repeated build 为什么必须稳定？
+22. deterministic output 对 Git 有什么价值？
+23. Fake Markdown fixture 测试能证明什么？
+24. real Day 8 snapshot build 又能证明什么？
+25. 为什么 Day 9 不需要联网？
+26. 为什么 Day 9 不能进行 embedding？
+27. 为什么 Day 9 不能 Qdrant upsert？
+28. 为什么 chunk 已存在但 document index 仍 not_built？
+29. Day 9 的 output 是什么？
+30. Day 10 的 input 是什么？
