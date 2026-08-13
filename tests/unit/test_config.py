@@ -18,6 +18,9 @@ def test_settings_have_offline_defaults() -> None:
     assert str(settings.qdrant_url) == "http://127.0.0.1:6333/"
     assert settings.qdrant_collection_name == "migrationlens-documents"
     assert settings.qdrant_timeout_seconds == 2
+    assert settings.embedding_cache_path == Path("var/cache/huggingface")
+    assert settings.embedding_batch_size == 16
+    assert settings.embedding_timeout_seconds == 120.0
 
 
 def test_settings_read_prefixed_environment_variables(
@@ -32,6 +35,9 @@ def test_settings_read_prefixed_environment_variables(
     monkeypatch.setenv("MIGRATIONLENS_QDRANT_URL", "http://qdrant.test:6333")
     monkeypatch.setenv("MIGRATIONLENS_QDRANT_COLLECTION_NAME", "migrationlens-test")
     monkeypatch.setenv("MIGRATIONLENS_QDRANT_TIMEOUT_SECONDS", "4")
+    monkeypatch.setenv("MIGRATIONLENS_EMBEDDING_CACHE_PATH", "var/test/hf-cache")
+    monkeypatch.setenv("MIGRATIONLENS_EMBEDDING_BATCH_SIZE", "8")
+    monkeypatch.setenv("MIGRATIONLENS_EMBEDDING_TIMEOUT_SECONDS", "180")
 
     settings = Settings(_env_file=None)
 
@@ -44,6 +50,9 @@ def test_settings_read_prefixed_environment_variables(
     assert str(settings.qdrant_url) == "http://qdrant.test:6333/"
     assert settings.qdrant_collection_name == "migrationlens-test"
     assert settings.qdrant_timeout_seconds == 4
+    assert settings.embedding_cache_path == Path("var/test/hf-cache")
+    assert settings.embedding_batch_size == 8
+    assert settings.embedding_timeout_seconds == 180.0
 
 
 @pytest.mark.parametrize(
@@ -129,3 +138,25 @@ def test_settings_reject_invalid_qdrant_collection_name(
 def test_settings_reject_invalid_qdrant_url(invalid_url: str) -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, qdrant_url=invalid_url)
+
+
+@pytest.mark.parametrize("invalid_batch_size", [0, -1, 129, 1.5, True])
+def test_settings_reject_invalid_embedding_batch_size(
+    invalid_batch_size: object,
+) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, embedding_batch_size=invalid_batch_size)
+
+
+@pytest.mark.parametrize(
+    "invalid_timeout",
+    [0, -1, 600.1, float("nan"), float("inf"), float("-inf")],
+)
+def test_settings_reject_invalid_embedding_timeout(invalid_timeout: float) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, embedding_timeout_seconds=invalid_timeout)
+
+
+def test_settings_reject_blank_embedding_cache_path() -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, embedding_cache_path="   ")

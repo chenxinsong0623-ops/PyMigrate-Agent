@@ -35,6 +35,9 @@ class Settings(BaseSettings):
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$",
     )
     qdrant_timeout_seconds: int = Field(default=2, gt=0, le=30)
+    embedding_cache_path: Path = Path("var/cache/huggingface")
+    embedding_batch_size: int = Field(default=16, gt=0, le=128)
+    embedding_timeout_seconds: float = Field(default=120.0, gt=0, le=600)
 
     @field_validator("sqlite_path", mode="before")
     @classmethod
@@ -42,4 +45,20 @@ class Settings(BaseSettings):
         """拒绝空白的 SQLite 数据库路径。"""
         if isinstance(value, str) and not value.strip():
             raise ValueError("SQLite 数据库路径不能为空")
+        return value
+
+    @field_validator("embedding_cache_path", mode="before")
+    @classmethod
+    def reject_empty_embedding_cache_path(cls, value: object) -> object:
+        """拒绝空白模型 cache 路径。"""
+        if isinstance(value, str) and not value.strip():
+            raise ValueError("Embedding cache 路径不能为空")
+        return value
+
+    @field_validator("embedding_batch_size", mode="before")
+    @classmethod
+    def reject_boolean_embedding_batch_size(cls, value: object) -> object:
+        """允许环境变量数字文本，但拒绝 bool 被当作整数 1。"""
+        if isinstance(value, bool):
+            raise ValueError("Embedding batch size 必须是整数")
         return value

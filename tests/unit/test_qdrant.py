@@ -21,6 +21,8 @@ from app.retrieval.qdrant import (
     QdrantCollectionConfigurationError,
     QdrantDistance,
     QdrantInfrastructureError,
+    QdrantPoint,
+    QdrantScoredPoint,
 )
 
 
@@ -79,6 +81,31 @@ class FakeQdrantClient:
         if self.ping_error is not None:
             raise self.ping_error
         return self.ping_result
+
+    async def upsert_points(
+        self,
+        collection_name: str,
+        points: tuple[QdrantPoint, ...],
+    ) -> None:
+        return None
+
+    async def query_points(
+        self,
+        collection_name: str,
+        vector: tuple[float, ...],
+        limit: int,
+    ) -> tuple[QdrantScoredPoint, ...]:
+        return ()
+
+    async def count_points(self, collection_name: str, source_id: str) -> int:
+        return 0
+
+    async def source_point_ids(
+        self,
+        collection_name: str,
+        source_id: str,
+    ) -> frozenset[str]:
+        return frozenset()
 
     async def close(self) -> None:
         self.close_calls += 1

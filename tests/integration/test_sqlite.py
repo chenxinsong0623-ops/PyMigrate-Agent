@@ -265,3 +265,48 @@ async def test_initialize_does_not_swallow_unexpected_failures(
     assert database.initialization_state is SQLiteInitializationState.NEW
     assert database.initialization_error_type is None
     await database.close()
+
+
+@pytest.mark.asyncio
+async def test_document_index_status_write_commits_and_survives_restart(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "index-status.sqlite3"
+    database = SQLiteDatabase(database_path, timeout_seconds=2.0)
+    assert await database.initialize() is True
+
+    await database.write_document_index_status("ready")
+
+    assert await database.read_metadata("document_index_status") == "ready"
+    await database.close()
+
+    reopened = SQLiteDatabase(database_path, timeout_seconds=2.0)
+    assert await reopened.initialize() is True
+    assert await reopened.read_metadata("document_index_status") == "ready"
+    await reopened.close()
+
+
+@pytest.mark.asyncio
+async def test_document_index_status_write_requires_initialized_database(
+    tmp_path: Path,
+) -> None:
+    database = SQLiteDatabase(tmp_path / "unused.sqlite3", timeout_seconds=2.0)
+
+    with pytest.raises(SQLiteNotInitializedError):
+        await database.write_document_index_status("ready")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["", "building", "READY", "ready'; DROP TABLE x"])
+async def test_document_index_status_write_rejects_unknown_values(
+    tmp_path: Path,
+    status: str,
+) -> None:
+    database = SQLiteDatabase(tmp_path / "status.sqlite3", timeout_seconds=2.0)
+    assert await database.initialize() is True
+
+    with pytest.raises(ValueError):
+        await database.write_document_index_status(status)  # type: ignore[arg-type]
+
+    assert await database.read_metadata("document_index_status") == "not_built"
+    await database.close()

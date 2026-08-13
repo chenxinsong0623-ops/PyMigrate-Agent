@@ -1,4 +1,4 @@
-"""Qdrant 集合生命周期边界，不包含写入或检索行为。"""
+"""Qdrant 集合生命周期、文档 point 写入和 dense query 边界。"""
 
 from __future__ import annotations
 
@@ -8,8 +8,10 @@ import math
 from collections.abc import Awaitable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol, TypeVar, runtime_checkable
+from typing import Any, Literal, Protocol, TypeVar, runtime_checkable
+from uuid import UUID
 
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from qdrant_client import AsyncQdrantClient, models
 from qdrant_client.http.exceptions import ApiException
 
@@ -47,6 +49,93 @@ class QdrantCollectionConfigurationError(Exception):
     """已有集合不满足 MigrationLens 固定向量契约。"""
 
 
+class QdrantPayloadError(Exception):
+    """Qdrant 返回的 point 或 payload 不满足项目内严格契约。"""
+
+
+class _QdrantBoundaryModel(BaseModel):
+    """Qdrant 业务边界使用的严格不可变模型。"""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+class QdrantPointPayload(_QdrantBoundaryModel):
+    """从 Day 9 chunk 完整映射的文档 point payload。"""
+
+    chunk_id: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    heading_path: tuple[str, ...]
+    text: str = Field(min_length=1)
+    content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_id: Literal["pydantic-v2-migration"]
+    source_url: str = Field(min_length=1)
+    git_ref: str = Field(min_length=1)
+    resolved_commit_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
+    source_path: Literal["docs/migration.md"]
+    source_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_start_char: int = Field(ge=0)
+    source_end_char: int = Field(gt=0)
+    continuation_index: int = Field(ge=0)
+    overlap_chars: int = Field(ge=0, le=150)
+    identity_occurrence: int = Field(ge=0)
+    embedding_model: Literal["intfloat/multilingual-e5-small"]
+    embedding_revision: str = Field(pattern=r"^[0-9a-f]{40}$")
+
+
+class QdrantPoint(_QdrantBoundaryModel):
+    """与官方 client 类型隔离的单个 Qdrant 写入 point。"""
+
+    point_id: str
+    vector: tuple[float, ...]
+    payload: QdrantPointPayload
+
+    @field_validator("point_id")
+    @classmethod
+    def validate_point_id(cls, point_id: str) -> str:
+        """P0 固定使用规范化 UUID 字符串，不允许任意 chunk ID。"""
+        try:
+            normalized = str(UUID(point_id))
+        except (ValueError, AttributeError, TypeError):
+            raise ValueError("Qdrant point_id 必须是 UUID") from None
+        if normalized != point_id:
+            raise ValueError("Qdrant point_id 必须是规范化 UUID")
+        return point_id
+
+    @field_validator("vector")
+    @classmethod
+    def validate_vector(cls, vector: tuple[float, ...]) -> tuple[float, ...]:
+        if len(vector) != EMBEDDING_DIMENSION:
+            raise ValueError("Qdrant point vector 必须为 384 维")
+        if any(not math.isfinite(value) for value in vector):
+            raise ValueError("Qdrant point vector 只能包含有限 float")
+        return vector
+
+
+class QdrantScoredPoint(_QdrantBoundaryModel):
+    """Qdrant dense query 返回的严格 point。"""
+
+    point_id: str
+    score: float
+    payload: QdrantPointPayload
+
+    @field_validator("point_id")
+    @classmethod
+    def validate_point_id(cls, point_id: str) -> str:
+        try:
+            normalized = str(UUID(point_id))
+        except (ValueError, AttributeError, TypeError):
+            raise ValueError("Qdrant scored point_id 必须是 UUID") from None
+        if normalized != point_id:
+            raise ValueError("Qdrant scored point_id 必须是规范化 UUID")
+        return point_id
+
+    @field_validator("score")
+    @classmethod
+    def validate_score(cls, score: float) -> float:
+        if not math.isfinite(score):
+            raise ValueError("Qdrant score 必须是有限数值")
+        return score
+
+
 @runtime_checkable
 class QdrantClientProtocol(Protocol):
     """QdrantBackend 所依赖的最小异步客户端能力。"""
@@ -68,6 +157,35 @@ class QdrantClientProtocol(Protocol):
         config: QdrantCollectionConfig,
     ) -> None:
         """创建一个不存在的集合。"""
+        ...
+
+    async def upsert_points(
+        self,
+        collection_name: str,
+        points: tuple[QdrantPoint, ...],
+    ) -> None:
+        """等待一批文档 points 完成写入。"""
+        ...
+
+    async def query_points(
+        self,
+        collection_name: str,
+        vector: tuple[float, ...],
+        limit: int,
+    ) -> tuple[QdrantScoredPoint, ...]:
+        """执行 dense query 并返回 payload。"""
+        ...
+
+    async def count_points(self, collection_name: str, source_id: str) -> int:
+        """精确统计一个 source 的文档 points。"""
+        ...
+
+    async def source_point_ids(
+        self,
+        collection_name: str,
+        source_id: str,
+    ) -> frozenset[str]:
+        """读取一个 source 当前全部 point IDs。"""
         ...
 
     async def ping(self) -> bool:
@@ -139,6 +257,113 @@ class QdrantClientAdapter:
             raise QdrantInfrastructureError("Qdrant collection create failed") from None
         if not created:
             raise QdrantInfrastructureError("Qdrant collection was not created")
+
+    async def upsert_points(
+        self,
+        collection_name: str,
+        points: tuple[QdrantPoint, ...],
+    ) -> None:
+        """使用公开 upsert API，并等待 Server 报告完成。"""
+        raw_points = [
+            models.PointStruct(
+                id=point.point_id,
+                vector=list(point.vector),
+                payload=point.payload.model_dump(mode="json"),
+            )
+            for point in points
+        ]
+        try:
+            result = await self._client.upsert(
+                collection_name=collection_name,
+                points=raw_points,
+                wait=True,
+            )
+        except ApiException:
+            raise QdrantInfrastructureError("Qdrant point upsert failed") from None
+        if result.status is not models.UpdateStatus.COMPLETED:
+            raise QdrantInfrastructureError("Qdrant point upsert was not completed")
+
+    async def query_points(
+        self,
+        collection_name: str,
+        vector: tuple[float, ...],
+        limit: int,
+    ) -> tuple[QdrantScoredPoint, ...]:
+        """使用公开 query_points API 返回不含 vectors 的 typed points。"""
+        try:
+            response = await self._client.query_points(
+                collection_name=collection_name,
+                query=list(vector),
+                limit=limit,
+                with_payload=True,
+                with_vectors=False,
+            )
+        except ApiException:
+            raise QdrantInfrastructureError("Qdrant dense query failed") from None
+
+        results: list[QdrantScoredPoint] = []
+        try:
+            for point in response.points:
+                if point.payload is None:
+                    raise ValueError("missing payload")
+                results.append(
+                    QdrantScoredPoint(
+                        point_id=str(point.id),
+                        score=float(point.score),
+                        payload=QdrantPointPayload.model_validate(point.payload),
+                    )
+                )
+        except (AttributeError, TypeError, ValueError, ValidationError):
+            raise QdrantPayloadError(
+                "Qdrant dense query returned malformed payload"
+            ) from None
+        return tuple(results)
+
+    async def count_points(self, collection_name: str, source_id: str) -> int:
+        """使用精确 filter count 验证当前 source point 数量。"""
+        try:
+            result = await self._client.count(
+                collection_name=collection_name,
+                count_filter=_source_filter(source_id),
+                exact=True,
+            )
+        except ApiException:
+            raise QdrantInfrastructureError("Qdrant point count failed") from None
+        if isinstance(result.count, bool) or result.count < 0:
+            raise QdrantPayloadError("Qdrant point count is malformed")
+        return result.count
+
+    async def source_point_ids(
+        self,
+        collection_name: str,
+        source_id: str,
+    ) -> frozenset[str]:
+        """分页 scroll 当前 source 的规范化 UUID point IDs。"""
+        ids: set[str] = set()
+        offset: Any = None
+        while True:
+            try:
+                records, next_offset = await self._client.scroll(
+                    collection_name=collection_name,
+                    scroll_filter=_source_filter(source_id),
+                    limit=256,
+                    offset=offset,
+                    with_payload=False,
+                    with_vectors=False,
+                )
+            except ApiException:
+                raise QdrantInfrastructureError("Qdrant point scroll failed") from None
+            try:
+                for record in records:
+                    point_id = str(UUID(str(record.id)))
+                    ids.add(point_id)
+            except (AttributeError, TypeError, ValueError):
+                raise QdrantPayloadError("Qdrant point ID is malformed") from None
+            if next_offset is None:
+                return frozenset(ids)
+            if next_offset == offset:
+                raise QdrantPayloadError("Qdrant scroll did not advance")
+            offset = next_offset
 
     async def ping(self) -> bool:
         """通过公开集合列表 API 检查服务可访问性。"""
@@ -264,6 +489,47 @@ class QdrantBackend:
             self._log_expected_failure("ping", type(error).__name__)
             return False
 
+    async def upsert_points(self, points: tuple[QdrantPoint, ...]) -> None:
+        """向已初始化 collection 幂等写入稳定 IDs。"""
+        if not points:
+            raise ValueError("Qdrant upsert points 不能为空")
+        await self._dense_operation(
+            "upsert",
+            self._client.upsert_points(self._collection_name, points),
+        )
+
+    async def query_points(
+        self,
+        vector: tuple[float, ...],
+        limit: int,
+    ) -> tuple[QdrantScoredPoint, ...]:
+        """执行一次 dense query；正常 0 命中返回空 tuple。"""
+        _validate_query_vector(vector)
+        if isinstance(limit, bool) or not isinstance(limit, int):
+            raise TypeError("Qdrant query limit 必须是整数")
+        if limit <= 0:
+            raise ValueError("Qdrant query limit 必须大于 0")
+        return await self._dense_operation(
+            "query",
+            self._client.query_points(self._collection_name, vector, limit),
+        )
+
+    async def count_points(self, source_id: str) -> int:
+        """统计当前 collection 中指定 source points。"""
+        _validate_source_id(source_id)
+        return await self._dense_operation(
+            "count",
+            self._client.count_points(self._collection_name, source_id),
+        )
+
+    async def source_point_ids(self, source_id: str) -> frozenset[str]:
+        """返回当前 collection 中指定 source 的全部稳定 IDs。"""
+        _validate_source_id(source_id)
+        return await self._dense_operation(
+            "scroll",
+            self._client.source_point_ids(self._collection_name, source_id),
+        )
+
     async def close(self) -> None:
         """最多关闭底层客户端一次，并使 backend 永久进入 closed。"""
         async with self._lifecycle_lock:
@@ -276,6 +542,23 @@ class QdrantBackend:
         """为每次可能阻塞的外部调用施加独立超时。"""
         async with asyncio.timeout(self._timeout_seconds):
             return await operation
+
+    async def _dense_operation(
+        self,
+        operation_name: str,
+        operation: Awaitable[_ResultT],
+    ) -> _ResultT:
+        if self._state is not QdrantBackendState.INITIALIZED:
+            operation_iterator = getattr(operation, "close", None)
+            if callable(operation_iterator):
+                operation_iterator()
+            raise QdrantInfrastructureError("Qdrant backend is not initialized")
+        try:
+            return await self._with_timeout(operation)
+        except TimeoutError:
+            raise QdrantInfrastructureError(
+                f"Qdrant {operation_name} timed out"
+            ) from None
 
     async def _cleanup_after_failed_initialize(self) -> None:
         """初始化失败后回收已拥有的客户端。"""
@@ -318,3 +601,27 @@ def build_qdrant_backend(settings: Settings) -> QdrantBackend:
         collection_name=settings.qdrant_collection_name,
         timeout_seconds=settings.qdrant_timeout_seconds,
     )
+
+
+def _source_filter(source_id: str) -> models.Filter:
+    _validate_source_id(source_id)
+    return models.Filter(
+        must=[
+            models.FieldCondition(
+                key="source_id",
+                match=models.MatchValue(value=source_id),
+            )
+        ]
+    )
+
+
+def _validate_source_id(source_id: str) -> None:
+    if not isinstance(source_id, str) or not source_id.strip():
+        raise ValueError("source_id 不能为空")
+
+
+def _validate_query_vector(vector: tuple[float, ...]) -> None:
+    if len(vector) != EMBEDDING_DIMENSION:
+        raise ValueError("Qdrant query vector 必须为 384 维")
+    if any(not math.isfinite(value) for value in vector):
+        raise ValueError("Qdrant query vector 只能包含有限 float")

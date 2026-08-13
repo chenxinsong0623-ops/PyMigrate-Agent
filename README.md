@@ -16,11 +16,12 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 7 | `completed` | 非 root API 镜像、API + Qdrant Compose、named volumes、healthcheck，以及 Qdrant 对 `ApplicationDependencies`、lifespan 和 readiness 的正式接线；真实容器 runtime 已验证 |
 | MigrationLens Day 8 | `completed` | 固定 Pydantic `v2.13.4` 官方 migration 原始快照、同 commit LICENSE、manifest、SHA256、第三方归属、有界下载、cache 与原子发布 |
 | MigrationLens Day 9 | `completed` | 离线 H2/H3 Markdown chunker、fenced code 保护、500–1200 字符目标、120 字符 overlap、稳定 ID、来源元数据、内容 hash、JSON schema v1 artifact 与重复构建审计 |
+| MigrationLens Day 10 | `completed` | 固定 revision 的真实 multilingual-e5-small、384 维 normalized embedding、稳定 UUIDv5 Qdrant points、显式 passage index build、top-8 dense query、post-write verification 与 index-ready transition |
 
 当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite 仍只包含最小
-`system_metadata`，不能描述为已经运行的报告存储；Qdrant startup 只创建或校验
-384 维 Cosine collection，不写入 passage，也不提供 search。文档索引仍是
-`not_built`。
+`system_metadata`，不能描述为已经运行的报告存储；Qdrant startup 仍只创建或校验
+384 维 Cosine collection，不在启动期下载模型或自动建库。Day 10 新增显式 index
+命令和独立 dense query 边界；同一环境完成构建后，文档索引可以成为 `ready`。
 
 Day 5 的 `FakeEmbedding` 只验证接口、prefix、维度、batch、输入校验、timeout 参数
 和确定性，不代表真实语义相似度、检索质量、模型速度或 GPU 性能。Day 6 的
@@ -28,17 +29,16 @@ FakeQdrantClient 单元测试只验证 wrapper 工程契约；没有运行真实
 Day 7 离线测试验证 runtime wiring，`docker compose config` 验证 Compose 结构；随后
 实际 build/up/health/HTTP/Qdrant/down 已完成，真实 container 证据与离线证据分开记录。
 Day 8 已真实固定官方 raw source，但没有建立 chunk 或 document index；因此 snapshot
-available 不等于 retrieval available，`document_index_status` 仍是 `not_built`。
-Day 9 已从该本地 snapshot 构建 structured chunks，但仍没有 embedding 或 Qdrant
-document points；因此 chunks available 仍不等于 document index ready。
+available 不等于 retrieval available。Day 9 已从该本地 snapshot 构建 structured
+chunks；Day 10 才用真实 e5 将 62 个 chunks 写为 Qdrant points，并在 read-back
+verification 后把 `document_index_status` 写为 `ready`。Synthetic fake、真实模型和
+真实 Qdrant 的证据分别记录，三者不可互换。
 
 尚未实现：
 
-- 真实 `intfloat/multilingual-e5-small` adapter、模型下载和 dense search/upsert；
 - GitHub Actions；
-- 真实 document embedding、Qdrant passage points 和索引状态切换；
 - ZIP Guard、AST scanner、八类规则和一跳 import；
-- BM25/dense/RRF；
+- BM25、RRF、hybrid retrieval 和 reranker；
 - LangGraph Agent、五个只读工具和 Citation Guard；
 - 分析 API、报告存储、benchmark、评测和负载测试；
 - 真实 LLM；
@@ -72,6 +72,9 @@ startup 现在把 SQLite 与 Qdrant 视为 required dependency，本机直接运
 | `MIGRATIONLENS_QDRANT_URL` | HTTP(S) URL | 主机默认 `http://127.0.0.1:6333`；Compose 覆盖为 `http://qdrant:6333` |
 | `MIGRATIONLENS_QDRANT_COLLECTION_NAME` | 字母或数字开头，后续可含 `._-`，最长 255 | 文档向量 collection 名称 |
 | `MIGRATIONLENS_QDRANT_TIMEOUT_SECONDS` | 正整数，`>0` 且 `<=30` | client 与每次 async backend 调用的 timeout |
+| `MIGRATIONLENS_EMBEDDING_CACHE_PATH` | 非空本地路径 | 固定模型 cache，默认 `var/cache/huggingface` |
+| `MIGRATIONLENS_EMBEDDING_BATCH_SIZE` | 整数 `1..128` | passage/query encode batch，默认 16 |
+| `MIGRATIONLENS_EMBEDDING_TIMEOUT_SECONDS` | `>0` 且 `<=600` | 模型加载和每次 inference 的 timeout，默认 120 秒 |
 
 Day 6 声明并验证直接依赖 `qdrant-client==1.18.0`，用于官方异步 API adapter；
 该包许可证为 Apache-2.0。直接使用 HTTPX 会重复维护 Qdrant API schema，FastEmbed
@@ -79,6 +82,9 @@ Day 6 声明并验证直接依赖 `qdrant-client==1.18.0`，用于官方异步 A
 Day 7 已把该 backend 接入 FastAPI。配置 URL 仍不等于服务可用；lifespan 会真实创建
 或校验 collection。`qdrant-client==1.18.0` 是 Python 客户端版本，Compose 的
 `qdrant/qdrant:v1.18.3-unprivileged` 是独立的 Server image tag，两者不要求同版本号。
+Day 10 新增直接依赖 `sentence-transformers==5.6.1`；`transformers`、`torch` 和
+`huggingface-hub` 是该包的传递依赖，没有机械改成直接依赖。模型仓库声明 MIT，
+包声明 Apache-2.0，归属记录在 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
 
 ## Pydantic 官方文档快照
 
@@ -162,6 +168,59 @@ source characters 无缺口覆盖，27/27 fenced code blocks 完整位于单一 
 content hash 的顺序和文件 mtime 均不变。derived artifact 不包含当前构建时间，继续
 继承 Day 8 的 upstream retrieval timestamp。
 
+## 真实 E5 dense index
+
+Day 10 固定模型 `intfloat/multilingual-e5-small` 与 immutable revision
+`614241f622f53c4eeff9890bdc4f31cfecc418b3`。`EmbeddingRequest` 只接受未加前缀的
+原始文本，边界按角色唯一生成 `query: ` 或 `passage: `；真实 adapter 使用
+`normalize_embeddings=True` 并拒绝非 384 维、非 finite 或非单位范数输出。同步模型
+加载和 `encode` 都通过 `asyncio.to_thread` 离开 event loop，并施加显式 timeout。
+
+模型不会在 import、FastAPI startup、readiness 或普通 pytest 中下载。首次显式命令
+需要联网下载到 Git 已忽略的 `var/cache/huggingface`；cache 不存在且网络不可用时，
+以下真实 index/query 命令不能运行。下载完成后可设置
+`HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1` 使用本地 fixed-revision cache。
+
+先启动 Qdrant，再显式构建索引：
+
+```powershell
+$Py = 'D:\conda_envs\pymigrate-agent\python.exe'
+docker compose up -d qdrant
+& $Py -m app.ingestion.dense_index
+```
+
+构建器严格重读 Day 9 artifact，按默认 16 个 passage 分 4 batches。每个
+`sha256:<hex>` chunk ID 通过固定 namespace UUIDv5 映射为 Qdrant 支持的 UUID point
+ID；同一 chunk 永远得到同一 ID，重复 upsert 覆盖原 point，不使用 UUID4，也不会产生
+2N points。payload 保存 `chunk_id`、heading、text、content hash、source URL/ref/
+resolved commit/snapshot hash/path/span、continuation metadata 和 embedding
+model/revision。全部 `wait=True` upsert 后，构建器再精确核对 source point count 与完整
+ID 集合；只有两项都匹配才把 SQLite `document_index_status` 写为 `ready`。partial
+failure 或 stale point 会保持 `not_built`，且不会自动删除或 recreate collection。
+
+当前真实 Day 10 构建得到 62 个 384 维 Cosine points；第二次构建仍为 62 个唯一 point
+IDs 和 62 个唯一 chunk IDs。独立 scroll 证明所有 payload chunk IDs 都来自固定 Day 9
+artifact，模型与 revision 字段一致。真实 tokenizer audit 同时发现 62 个 passage 中
+6 个超过模型 512-token 上限，最大 572；Day 9 artifact 按要求不重切，因此这些输入会
+遵循模型的 truncation 行为，不能声称所有 chunk 全文都进入 transformer。
+
+最小 dense smoke：
+
+```powershell
+& $Py -m app.retrieval.dense `
+  'BaseModel.dict() migration' `
+  'validator migration' `
+  'BaseSettings migration' `
+  --top-k 8
+```
+
+每个 query 只加载一次固定模型，生成 normalized query vector，通过 Qdrant 返回最多
+8 个 `DenseSearchResult`。结果包含连续 `rank`、finite `score`、chunk text、heading 和
+upstream provenance；空索引正常返回空 results。上述三条真实 smoke 的 rank 1 分别为
+`Changes to pydantic.BaseModel`（score 0.9015027）、`Changes to validators`
+（0.859621）和 ``BaseSettings has moved to pydantic-settings``（0.86973494）。这些
+人工可读结果只证明真实调用链可运行，不是 locked dataset 上的 Recall、MRR 或质量门槛。
+
 ## 本地运行
 
 先确保 Qdrant 可通过 `http://127.0.0.1:6333` 访问，或用
@@ -214,8 +273,8 @@ docker compose down
 
 `/health/live` 只表示 API 进程可响应，不访问 readiness、SQLite 或 retriever。
 `/health/ready` 检查当前应用自己的 SQLite、`document_index_status` 和同一个
-Qdrant lifecycle backend。SQLite 与 Qdrant 都健康但索引尚未构建时，会诚实返回
-HTTP 503：
+Qdrant lifecycle backend。新的环境或构建失败后，SQLite 与 Qdrant 即使健康，只要
+索引状态为 `not_built` 就会诚实返回 HTTP 503：
 
 ```json
 {
@@ -229,9 +288,22 @@ HTTP 503：
 ```
 
 这不是容器死亡：live=200 说明 API 进程存活，Qdrant=`ok` 说明实际配置的 backend
-可以响应，而整体 ready=503 只因为 `document_index_status=not_built`。运行期间若
-Qdrant ping 失败，retriever check 会变为 `error` 或 `timeout`，仍不会伪装成 ready。
-真实 Embedding、passage upsert 和 dense retrieval 仍未实现。
+可以响应。显式 dense index 完成并通过 post-write verification 后，同一 SQLite 和
+Qdrant 环境会返回 HTTP 200：
+
+```json
+{
+  "status": "ready",
+  "checks": {
+    "sqlite": {"status": "ok"},
+    "document_index": {"status": "ready"},
+    "retriever_backend": {"status": "ok", "backend": "qdrant"}
+  }
+}
+```
+
+Day 10 已用真实 Uvicorn 请求验证该 200 语义。运行期间若 Qdrant ping 失败，retriever
+check 会变为 `error` 或 `timeout`；partial index 也不会伪装成 ready。
 
 ## 验证
 
@@ -341,11 +413,32 @@ Day 9 没有修改 runtime、SQLite、Qdrant、Dockerfile 或 Compose，也没�
 upsert 或 search。完整测试、Ruff 和静态 Compose 的精确最终结果见 `TASKS.md` 和
 `LEARNING_LOG.md`。
 
+### Day 10 验证边界
+
+2026-08-12 使用项目解释器真实下载并验证 fixed-revision e5，随后在 offline cache
+模式连续两次构建真实 62-point Qdrant index，并运行三条 top-8 dense smoke。独立
+Qdrant read-back、token length audit、同环境 Uvicorn ready=200、模型/cache/Git 污染
+审计均已实际运行。Synthetic tests 只证明注入边界；真实模型、真实 Qdrant 和人工
+smoke 的证据分别记录。
+
+Day 10 专项测试为 `138 passed in 0.94s`；最终完整回归为
+`285 passed, 2 warnings in 3.39s`。`pip check`、Ruff check、Ruff format check、
+`git diff --check` 和 `docker compose config --quiet` 均通过；两条 pytest warning 和
+Compose 的既有 Docker config warning 均未过滤，精确内容见 `TASKS.md`。
+
+生产 API image build 实际尝试两次，分别在 604 秒和 1,204 秒超时，未取得完整 image
+成功证据；因此 Docker build 明确为“未验证成功”。这不改变已独立通过的本机真实模型、
+真实 Qdrant 和静态 Compose 证据，也不能被描述为 Docker build 通过。长 build 后
+Docker engine API 返回 500，精确隔离 project 的 `down -v --rmi local` 清理也被同一
+错误拦住；没有重启 Docker Desktop 或操作现有 Dify 项目，隔离资源清理待 engine
+恢复后复核。
+
 ## 下一开发日
 
-MigrationLens Day 10 仍为 `planned`，尚未开始；其明确输入是 Day 9 固定的 structured
-chunks，主要目标是实际 `passage:` embedding、384 维 Qdrant upsert 和 `query:` dense
-search。真实 e5 adapter、模型下载、document points 和 dense retrieval 当前均未实现。
+MigrationLens Day 11 保持 `planned`，尚未开始。它的输入是 Day 9 固定 structured
+chunks 与 Day 10 已验证的 dense top-8 capability；Day 11 才加入 BM25 top-8、dense
+top-8 的 RRF 融合和融合结果去重。Day 10 没有提前实现 BM25、RRF、locked retrieval
+evaluation 或 reranker。
 
 ## 项目文档
 
@@ -363,7 +456,8 @@ search。真实 e5 adapter、模型下载、document points 和 dense retrieval 
 
 ## 证据边界
 
-Day 9 已生成并验证可复现 chunks，但 locked 评测、完整失败记录、CI、模型元数据、
-样本量和负载测试等发布证据仍未完成，因此 MigrationLens 尚未达到可写入简历的发布
-门槛。不得将当前 snapshot/chunks、FakeLLM 骨架、目标阈值、计划数量或未运行命令描述为
-检索质量、真实模型或生产环境结果。
+Day 10 已验证固定 revision 的真实模型、真实 62-point Qdrant index、三条 dense smoke
+query 和同环境 readiness，但 locked 评测、CI、样本量和负载测试等发布证据仍未完成，
+因此 MigrationLens 尚未达到可写入简历的发布门槛。不得把 FakeEmbedding 结果、三条
+人工 smoke、目标阈值、计划数量或未运行命令描述为 Recall/MRR、生产检索质量、GPU
+性能或发布证据。

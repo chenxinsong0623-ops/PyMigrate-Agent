@@ -259,6 +259,49 @@ mtime 均不变。
 Day 9 没有 embedding、模型下载、Qdrant upsert/search、BM25/RRF 或 runtime wiring；
 `document_index_status` 仍为 `not_built`，Day 10 仍为 `planned`。
 
+### 2.9 MigrationLens Day 10
+
+状态：`completed`
+计划日期：2026-08-14
+实际开发日期：2026-08-12
+
+Day 10 以 Day 9 的 62-chunk JSON schema v1 artifact 为唯一 passage 输入，新增固定
+revision 的真实 `intfloat/multilingual-e5-small` adapter。模型 revision 为
+`614241f622f53c4eeff9890bdc4f31cfecc418b3`，直接依赖固定为
+`sentence-transformers==5.6.1`；调用边界统一添加 `query: ` / `passage: `，输出固定
+384 维、finite、L2-normalized。同步加载和 inference 通过 `asyncio.to_thread` 离开
+event loop，加载、推理和 Qdrant 操作各自有 timeout；普通 pytest、import、startup 和
+readiness 都不加载模型。
+
+Day 9 chunk ID 通过固定 namespace UUIDv5 映射为 Qdrant point ID。payload 保留 chunk
+text/heading/content hash、完整 URL/ref/resolved commit/snapshot/path/span provenance、
+continuation metadata 和模型 ID/revision。显式 index builder 按 16 passages 分成 4
+batches，使用 `wait=True` upsert；重复运行覆盖相同 IDs。只有精确 source count 与完整
+ID 集合都通过 post-write verification，SQLite `document_index_status` 才从
+`not_built` 变为 `ready`；partial failure、stale points 或验证失败不删除数据，也不
+发布 ready。
+
+真实首次模型运行下载 fixed revision 到 Git 已忽略的 `var/cache/huggingface`，设备为
+CPU；query shape 为 1×384，passage shape 为 2×384，实测范数约为 1.00000001–
+1.00000002。后续索引在 `HF_HUB_OFFLINE=1` 和 `TRANSFORMERS_OFFLINE=1` 下 cache hit。
+真实 tokenizer audit 显示 62 chunks 中 6 个超过 512-token 上限，最大 572；按任务边界
+不重切 Day 9 artifact，文档诚实记录 truncation。
+
+隔离 Qdrant server 实际启动后，索引连续运行两次都得到 62 points、4 batches；独立
+collection/scroll audit 为 green、384/Cosine、62 points、62 unique point IDs、62
+unique chunk IDs，所有 payload chunk IDs 都属于 Day 9 artifact，模型身份一致。三条
+真实 top-8 smoke 的 rank 1 分别命中 BaseModel 方法迁移、validator 迁移和
+BaseSettings 移包；它们不构成 Recall/MRR 指标。同一 SQLite/Qdrant 环境下真实
+Uvicorn `/health/ready` 返回 HTTP 200，三项检查分别为 SQLite `ok`、document index
+`ready`、Qdrant `ok`。
+
+Day 10 专项测试为 `138 passed in 0.94s`；完成文档前的完整回归为
+`285 passed, 1 warning in 4.68s`，最终完整回归为
+`285 passed, 2 warnings in 3.39s`。最终 warnings 是既有 Starlette TestClient 上游
+弃用提示，以及 qdrant-client 在 Docker/Qdrant version probe 不可用时的 compatibility
+提示；均没有过滤隐藏。Day 10 没有实现 BM25、RRF、hybrid、reranker 或 locked
+retrieval evaluation；Day 11 保持 `planned`。
+
 ## 3. P0、P1 和不做范围
 
 ### 3.1 P0 必须完成
@@ -736,7 +779,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 7 | 2026-08-11 | `completed` | Docker Compose 基线 | 非 root API 镜像、API+Qdrant、healthcheck、`.dockerignore`、Qdrant runtime wiring | 指定集 122 passed、完整集 159 passed；compose config/build/up/health/down 通过；live=200、ready=503、真实 collection=384/Cosine、API UID/GID=10001/10001 | 容器边界、反向清理与 live/ready 分离 | CI、扫描器、P1 |
 | MigrationLens Day 8 | 2026-08-12 | `completed` | 官方文档快照 | 已验证 v2.13.4 与 commit；raw migration、同 commit LICENSE、manifest、hash、notices、cache、原子发布 | 真实首次 download 与第二次 cache hit；50,035/1,129 bytes；两份 SHA256 round-trip 匹配；离线专项与共同门禁 | 可复现来源与许可证 | chunk、索引、upsert/search |
 | MigrationLens Day 9 | 2026-08-12 | `completed` | Markdown chunker | H2/H3、27/27 fenced blocks、500–1200/120 overlap、稳定 ID、JSON v1 artifact；62 chunks | 专项 32 passed；完整 219 passed；真实 artifact/coverage/repeated-build 与共同门禁通过 | 内容寻址与结构切分 | embedding、Qdrant upsert/search、BM25、dense、评测 |
-| MigrationLens Day 10 | 2026-08-14 | `planned` | e5 稠密索引与检索 | 真实 adapter、passage 入库、query 检索、payload、top-8 | prefix、384 维、批量、empty index、故障；共同门禁 | e5 语义检索 | BM25、RRF、locked |
+| MigrationLens Day 10 | 计划 2026-08-14；实际 2026-08-12 | `completed` | e5 稠密索引与检索 | fixed-revision real adapter、62 passage points、provenance payload、top-8、ready transition | 专项 138 passed；完整 285 passed；真实 CPU model、Qdrant 62/62 IDs、重复索引、三查询、ready=200 | e5 语义检索与索引完整性 | BM25、RRF、hybrid、locked |
 | MigrationLens Day 11 | 2026-08-15 | `planned` | BM25 + RRF 服务 | BM25 top-8、dense top-8、融合去重、top-3 和完整排名元数据 | 三路可独立调用、排序/空查询/单路失败；共同门禁 | lexical/dense 互补 | reranker、Agent、locked 调参 |
 | MigrationLens Day 12 | 2026-08-17 | `planned` | dev 检索集与评分 | 32 题 schema、12 dev、20 locked 候选隔离、Recall/MRR evaluator | 三路 dev 报告、heading gold、无污染；共同门禁 | 评测分割与消融 | 查看 locked 成绩 |
 | MigrationLens Day 13 | 2026-08-18 | `planned` | ZIP Guard | 全部资源/路径/成员规则、安全非 Python 忽略、清理 | 正常、穿越、绝对路径、链接、bomb、超限、编码；共同门禁 | 压缩包信任边界 | import/执行/修改代码、AST |

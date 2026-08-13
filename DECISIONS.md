@@ -175,3 +175,35 @@
 - 替代方案：未采用 JSONL（当前单一小型官方来源无需流式复杂度）、UUID4、全局数组
   序号、Python `hash()`、固定字符无结构硬切、跨 H2/H3 overlap，或把 Day 8 snapshot
   hash 直接作为 chunk ID 的一部分。
+
+## D-013 — Day 10 真实 E5 与 Qdrant dense index 契约
+
+- 日期：2026-08-12
+- 状态：已接受
+- 决策：
+  - 真实 embedding 固定使用 `intfloat/multilingual-e5-small`，revision 固定为
+    `614241f622f53c4eeff9890bdc4f31cfecc418b3`；依赖固定为
+    `sentence-transformers==5.6.1`，模型 cache 位于 Git 已忽略的
+    `var/cache/huggingface`；
+  - 调用方只能提交未加前缀的原始文本，`EmbeddingRequest` 边界统一生成
+    `query: ` 或 `passage: `；真实 adapter 要求 384 维、finite float 和 L2
+    normalization，并用 `asyncio.to_thread` 隔离同步加载与推理；
+  - Day 9 `sha256:<hex>` chunk ID 通过固定 namespace
+    `9202dd18-24a1-5d8e-9bf1-626c51c77d1d` 的 UUIDv5 映射为 Qdrant point ID，
+    不使用 UUID4；payload 保存 chunk 文本、heading、完整 upstream provenance、
+    content hash、source span 和 embedding model/revision；
+  - 索引只能由显式 `python -m app.ingestion.dense_index` 命令构建，不在 import、
+    FastAPI startup、readiness 或普通 pytest 中自动下载模型或重建数据；
+  - 构建开始先将 `document_index_status` 设为 `not_built`。只有所有 batch 使用
+    `wait=True` upsert 完成，且 source 的精确 point count 和稳定 ID 集合均与 Day 9
+    artifact 一致，才能写为 `ready`；partial failure、stale point 或校验失败保持
+    `not_built`，且不自动删除或 recreate collection。
+- 原因：固定模型身份、输入格式和归一化才能让已有 384 维 Cosine collection 具有
+  可复现语义；稳定 point ID 让重复构建成为覆盖式 upsert；完整 provenance 和
+  post-write verification 让 readiness 表示可查询的完整索引，而不是“写过一些点”。
+- 替代方案：未采用浮动 model revision、用户 Home 全局 cache、调用方自行拼前缀、
+  UUID4、startup auto-build、删除后重建 collection、部分成功即 ready，或在 Day 10
+  提前加入 BM25/RRF/reranker。
+- 影响：Day 10 的真实 embedding adapter、Qdrant point adapter、dense index CLI、
+  dense query CLI、SQLite metadata transition、部署依赖、测试与文档必须遵守此契约；
+  Day 11 可以消费 dense top-8，但不得改变已经发布的 Day 9 artifact。

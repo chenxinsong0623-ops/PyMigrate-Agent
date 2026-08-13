@@ -45,7 +45,12 @@ def clear_application_environment(
         "MIGRATIONLENS_QDRANT_URL",
         "MIGRATIONLENS_QDRANT_COLLECTION_NAME",
         "MIGRATIONLENS_QDRANT_TIMEOUT_SECONDS",
+        "MIGRATIONLENS_EMBEDDING_CACHE_PATH",
+        "MIGRATIONLENS_EMBEDDING_BATCH_SIZE",
+        "MIGRATIONLENS_EMBEDDING_TIMEOUT_SECONDS",
         "OPENAI_API_KEY",
+        "HF_TOKEN",
+        "HUGGING_FACE_HUB_TOKEN",
     ):
         monkeypatch.delenv(variable, raising=False)
 

@@ -1,10 +1,12 @@
-"""类型化 Embedding 边界与完全离线的确定性模拟实现。"""
+"""类型化 Embedding 边界、离线 fake 与固定 revision 的真实 E5 adapter。"""
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import math
-from typing import Literal, Protocol, runtime_checkable
+from pathlib import Path
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import (
     BaseModel,
@@ -16,6 +18,10 @@ from pydantic import (
 
 EMBEDDING_DIMENSION = 384
 FAKE_EMBEDDING_MODEL = "fake-embedding"
+E5_MODEL_ID = "intfloat/multilingual-e5-small"
+E5_MODEL_REVISION = "614241f622f53c4eeff9890bdc4f31cfecc418b3"
+E5_MODEL_LICENSE = "MIT"
+E5_MAX_SEQUENCE_LENGTH = 512
 
 EmbeddingInputType = Literal["query", "passage"]
 EmbeddingVector = tuple[float, ...]
@@ -81,6 +87,49 @@ class EmbeddingResponse(_EmbeddingBoundaryModel):
             if any(not math.isfinite(value) for value in vector):
                 raise ValueError("Embedding vector 只能包含有限 float")
         return self
+
+
+class E5ModelMetadata(_EmbeddingBoundaryModel):
+    """已实际加载的 E5 runtime 元数据。"""
+
+    model_id: Literal["intfloat/multilingual-e5-small"] = E5_MODEL_ID
+    revision: str
+    dimension: Literal[384] = EMBEDDING_DIMENSION
+    max_sequence_length: Literal[512] = E5_MAX_SEQUENCE_LENGTH
+    device: str
+
+
+class EmbeddingInfrastructureError(RuntimeError):
+    """真实模型加载或推理无法可靠完成。"""
+
+
+class SentenceTransformerModel(Protocol):
+    """真实 adapter 使用的最小同步模型接口。"""
+
+    max_seq_length: int
+    device: object
+
+    def get_embedding_dimension(self) -> int | None:
+        """返回模型的 sentence embedding 维度。"""
+        ...
+
+    def encode(self, inputs: list[str], **kwargs: Any) -> object:
+        """同步生成一批 sentence embeddings。"""
+        ...
+
+
+class SentenceTransformerLoader(Protocol):
+    """可注入且仅在显式加载时调用的模型工厂。"""
+
+    def __call__(
+        self,
+        model_id: str,
+        *,
+        revision: str,
+        cache_folder: str,
+    ) -> SentenceTransformerModel:
+        """从固定身份加载模型。"""
+        ...
 
 
 @runtime_checkable
@@ -159,3 +208,180 @@ class FakeEmbedding:
         )
         self.calls.append((request, validated_timeout))
         return response
+
+
+def _load_sentence_transformer(
+    model_id: str,
+    *,
+    revision: str,
+    cache_folder: str,
+) -> SentenceTransformerModel:
+    """延迟导入生产依赖，避免模块 import 或应用构造触发模型加载。"""
+    from sentence_transformers import SentenceTransformer
+
+    return SentenceTransformer(
+        model_id,
+        revision=revision,
+        cache_folder=cache_folder,
+        trust_remote_code=False,
+    )
+
+
+class E5Embedding:
+    """固定 multilingual-e5-small 身份的真实异步 Embedding adapter。"""
+
+    def __init__(
+        self,
+        *,
+        cache_folder: Path,
+        batch_size: int = 16,
+        model_loader: SentenceTransformerLoader | None = None,
+    ) -> None:
+        if isinstance(batch_size, bool) or not isinstance(batch_size, int):
+            raise TypeError("batch_size 必须是整数")
+        if batch_size <= 0:
+            raise ValueError("batch_size 必须大于 0")
+        self._cache_folder = cache_folder
+        self._batch_size = batch_size
+        self._model_loader = model_loader or _load_sentence_transformer
+        self._model: SentenceTransformerModel | None = None
+        self._metadata: E5ModelMetadata | None = None
+        self._load_task: asyncio.Task[E5ModelMetadata] | None = None
+        self._load_lock = asyncio.Lock()
+
+    @property
+    def is_loaded(self) -> bool:
+        """返回固定模型是否已成功加载并通过契约校验。"""
+        return self._model is not None
+
+    async def load(self, timeout_seconds: float) -> E5ModelMetadata:
+        """并发安全地加载一次模型；timeout 不启动第二个后台加载。"""
+        validated_timeout = _validate_timeout(timeout_seconds)
+        async with self._load_lock:
+            if self._metadata is not None:
+                return self._metadata
+            if self._load_task is None:
+                self._load_task = asyncio.create_task(self._load_once())
+            load_task = self._load_task
+
+        try:
+            async with asyncio.timeout(validated_timeout):
+                return await asyncio.shield(load_task)
+        except TimeoutError:
+            raise EmbeddingInfrastructureError(
+                "Embedding model load timed out"
+            ) from None
+        except OSError:
+            await self._forget_failed_task(load_task)
+            raise EmbeddingInfrastructureError("Embedding model load failed") from None
+        except BaseException:
+            await self._forget_failed_task(load_task)
+            raise
+
+    async def embed(
+        self,
+        request: EmbeddingRequest,
+        timeout_seconds: float,
+    ) -> EmbeddingResponse:
+        """在线程桥接与短 timeout 内生成 normalized 384 维向量。"""
+        validated_timeout = _validate_timeout(timeout_seconds)
+        await self.load(validated_timeout)
+        model = self._model
+        if model is None:
+            raise EmbeddingInfrastructureError("Embedding model is unavailable")
+
+        try:
+            async with asyncio.timeout(validated_timeout):
+                raw_vectors = await asyncio.to_thread(
+                    model.encode,
+                    list(request.model_inputs),
+                    batch_size=self._batch_size,
+                    show_progress_bar=False,
+                    convert_to_numpy=True,
+                    normalize_embeddings=True,
+                )
+        except TimeoutError:
+            raise EmbeddingInfrastructureError(
+                "Embedding inference timed out"
+            ) from None
+        except OSError:
+            raise EmbeddingInfrastructureError("Embedding inference failed") from None
+
+        try:
+            vectors = _coerce_normalized_vectors(raw_vectors, len(request.texts))
+            return EmbeddingResponse(
+                model=f"{E5_MODEL_ID}@{E5_MODEL_REVISION}",
+                dimension=EMBEDDING_DIMENSION,
+                vectors=vectors,
+                input_count=len(request.texts),
+            )
+        except (TypeError, ValueError) as error:
+            raise EmbeddingInfrastructureError(
+                "Embedding model returned malformed vectors"
+            ) from error
+
+    async def _load_once(self) -> E5ModelMetadata:
+        model = await asyncio.to_thread(
+            self._model_loader,
+            E5_MODEL_ID,
+            revision=E5_MODEL_REVISION,
+            cache_folder=str(self._cache_folder),
+        )
+        dimension = model.get_embedding_dimension()
+        if dimension != EMBEDDING_DIMENSION:
+            raise EmbeddingInfrastructureError(
+                "Embedding model dimension does not match contract"
+            )
+        if model.max_seq_length != E5_MAX_SEQUENCE_LENGTH:
+            raise EmbeddingInfrastructureError(
+                "Embedding model sequence length does not match contract"
+            )
+        device = str(model.device)
+        if not device.strip():
+            raise EmbeddingInfrastructureError("Embedding model device is unavailable")
+        metadata = E5ModelMetadata(
+            revision=E5_MODEL_REVISION,
+            device=device,
+        )
+        async with self._load_lock:
+            self._model = model
+            self._metadata = metadata
+            self._load_task = None
+        return metadata
+
+    async def _forget_failed_task(
+        self,
+        task: asyncio.Task[E5ModelMetadata],
+    ) -> None:
+        async with self._load_lock:
+            if self._load_task is task and task.done():
+                self._load_task = None
+
+
+def _coerce_normalized_vectors(
+    raw_vectors: object,
+    expected_count: int,
+) -> tuple[EmbeddingVector, ...]:
+    """把 numpy/sequence 输出收敛为严格、单位范数的 Python float tuple。"""
+    serializable = (
+        raw_vectors.tolist() if hasattr(raw_vectors, "tolist") else raw_vectors
+    )
+    if not isinstance(serializable, (list, tuple)):
+        raise TypeError("Embedding output must be a sequence")
+    if len(serializable) != expected_count:
+        raise ValueError("Embedding output count does not match input")
+
+    vectors: list[EmbeddingVector] = []
+    for raw_vector in serializable:
+        if not isinstance(raw_vector, (list, tuple)):
+            raise TypeError("Embedding vector must be a sequence")
+        vector = tuple(float(value) for value in raw_vector)
+        if len(vector) != EMBEDDING_DIMENSION:
+            raise ValueError("Embedding vector dimension does not match contract")
+        if any(not math.isfinite(value) for value in vector):
+            raise ValueError("Embedding vector contains non-finite values")
+        norm = math.sqrt(sum(value * value for value in vector))
+        if not math.isclose(norm, 1.0, rel_tol=1e-5, abs_tol=1e-5):
+            raise ValueError("Embedding vector is not normalized")
+        vectors.append(vector)
+    return tuple(vectors)

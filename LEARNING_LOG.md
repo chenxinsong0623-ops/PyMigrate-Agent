@@ -1262,3 +1262,145 @@ Day 9 不联网，因为正式输入已经在 Day 8 冻结；也不做 embedding
 28. 为什么 chunk 已存在但 document index 仍 not_built？
 29. Day 9 的 output 是什么？
 30. Day 10 的 input 是什么？
+
+## 2026-08-12：MigrationLens Day 10 —— 真实 E5 稠密索引与 Qdrant 检索
+
+### FakeEmbedding 与 Real Embedding 的证据边界
+
+Day 5 的 `FakeEmbedding` 用标准库 hash 生成稳定 384 维测试向量。它适合证明 Protocol、
+request validation、query/passage prefix、batch 顺序、维度、确定性和 timeout 参数，
+但向量没有语义含义，不能证明相似度、召回率、模型速度或真实资源占用。Day 10 的
+`E5Embedding` 才实际加载 `intfloat/multilingual-e5-small`，调用真实 tokenizer、
+transformer 和 pooling/normalization 路径。
+
+Day 5 先冻结 `EmbeddingClient` Protocol 的价值是让上层 index/retriever 依赖稳定的
+结构化输入输出，而不是依赖 Sentence Transformers 的具体对象。普通 pytest 可以注入
+fake model/loader；生产 adapter 可以延迟加载真实模型；未来如果替换底层实现，上层
+`EmbeddingRequest` 和 `EmbeddingResponse` 不必随第三方 SDK 漂移。
+
+### Prefix、维度、normalization 与 cosine
+
+multilingual-e5-small 的 retrieval 用法要求 query 和 passage 使用不同角色前缀。调用方
+只能提交原始文本，`EmbeddingRequest.model_inputs` 在唯一边界生成 `query: ...` 或
+`passage: ...`，并拒绝调用方预拼前缀。这样避免 double prefix，也避免不同调用点各自
+实现后产生训练分布之外的输入。
+
+模型与 Day 6 collection 契约都固定为 384 维。真实 adapter 使用
+`normalize_embeddings=True`，随后独立验证每个值 finite、长度为 384、L2 norm 约等于
+1。Qdrant 使用 Cosine；单位向量让点积与 cosine 排序等价，但 normalization 不是
+“提升一切质量”的魔法，它只是本模型/索引的固定数学契约。
+
+### 同步 inference、async bridge、加载生命周期与 cache
+
+`SentenceTransformer` 构造和 `encode` 是同步且可能长时间占用 CPU、磁盘或网络，若
+直接在 coroutine 中调用会阻塞 event loop。真实 adapter 用 `asyncio.to_thread` 把加载
+和推理移到工作线程，再用 `asyncio.timeout` 限制等待时间。timeout 只能停止 coroutine
+等待，不能强制终止已经在线程中执行的底层计算，因此它是服务响应边界，不是底层取消
+保证。
+
+adapter 构造不导入模型库、不访问网络。首次显式 `load` 创建受 lock 保护的共享 task；
+并发调用复用同一加载，不重复构造模型。加载成功后保存已验证 metadata；预期
+OSError/timeout 转换为脱敏 `EmbeddingInfrastructureError`，意外 TypeError 等程序错误
+继续传播。
+
+模型身份固定为 `intfloat/multilingual-e5-small` 和 revision
+`614241f622f53c4eeff9890bdc4f31cfecc418b3`，cache 默认位于
+`var/cache/huggingface`。首次真实运行是 download；索引和 query 验收在
+`HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1` 下证明 cache hit。普通 import、pytest、
+FastAPI startup 和 readiness 不加载模型。
+
+### Character length、token length、truncation 与 batch
+
+Day 9 的 500–1200 是 Python characters，不是 tokenizer tokens。真实 tokenizer audit
+对全部 `passage: ` 输入关闭 truncation 计数：62 个输入最短 24 tokens、最长 572，
+6 个超过模型 512-token 上限，0 个恰好 512。Day 10 按任务边界不重切 Day 9 artifact，
+因此真实 encode 会截断这 6 个 passage；不能声称所有 chunk 全文进入 transformer。
+
+index 默认 batch size=16，62 个 chunks 分 4 batches。batch 减少 Python/模型调用开销，
+但过大可能提高内存峰值；它不是检索质量指标。配置限制为 1..128，且拒绝 bool。
+
+### Qdrant point、vector、payload 与 stable ID
+
+Qdrant point 由 point ID、vector 和 payload 组成。vector 是用于相似度搜索的 384 维
+数值；payload 是过滤、展示和引用需要的结构化 metadata。payload 保存 Day 9
+`chunk_id`、heading、text、content hash、URL/ref/resolved commit/snapshot hash/path/
+source span、continuation/overlap/occurrence，以及 embedding model/revision。
+
+Day 9 `chunk_id` 是 `sha256:<hex>`，而 Qdrant point ID 只接受 uint64 或 UUID，不能
+假定任意字符串可直接作为 point ID。Day 10 用固定 namespace
+`9202dd18-24a1-5d8e-9bf1-626c51c77d1d` 对完整 chunk ID 做 UUIDv5。相同 chunk ID 永远
+映射到相同 point ID；不同样本未发现 collision。UUID4 会让每次构建得到新 ID，使
+repeated indexing 膨胀为 2N points，不能采用。
+
+### Upsert、幂等、partial build 与 ready transition
+
+upsert 表示“ID 已存在就更新，不存在就插入”。固定 UUIDv5 让重复构建覆盖相同 points。
+官方 adapter 使用 `wait=True`，并要求 server 返回 completed；之后 builder 还会精确
+count 当前 source 并 scroll 全部 IDs，只有 count 和 ID set 都与 Day 9 artifact 相等才
+完成。
+
+构建开始先把 SQLite `document_index_status` 写为 `not_built`。任何 embedding、upsert、
+timeout、count 或 ID verification failure 都不会写 ready。已有同 source 的 stale ID
+会安全失败，不自动删除 collection 或未知数据；已经写入的正确 partial points 可在下次
+相同构建中由 upsert 恢复。`ready` 因此表示完整、可查询且经过 read-back verification，
+不只是“某批请求返回过成功”。
+
+### Dense search、top-k、score 与 empty index
+
+`DenseRetriever` 校验原始 query 和 top_k 1..8，通过同一模型生成 normalized
+`query:` vector，再请求 Qdrant dense top-k。`DenseSearchResult` 是严格、冻结的
+typed schema，包含连续 rank、finite score、chunk/heading/text 和 provenance，不提前
+加入 BM25 rank、RRF score 或 hybrid rank。empty index 是正常的 0-hit，返回空 tuple，
+不是伪造结果或异常。
+
+Cosine score 只表示当前 query vector 与 indexed passage vector 的相似度，用于本次
+排序。它不是概率，也不能单独解释为“答案正确”。top-8 是 Day 10/Day 11 的接口边界，
+让 Day 11 以后可以与 BM25 top-8 做融合；Day 10 不实现 BM25、RRF 或 top-3 final
+selection。
+
+### Synthetic、真实模型与真实 Qdrant 三层证据
+
+Synthetic tests 注入 fake loader/model/Qdrant/SQLite，证明无网络条件下的边界、调用
+参数、失败状态和 deterministic mapping。真实模型验证证明 fixed revision 在 CPU 上
+能加载，query shape=1×384、passage shape=2×384，norm 约为 1。真实 Qdrant 验证证明
+server collection 为 green、384/Cosine，真实 upsert/search/scroll/count 可用。
+三层证据互相补充，不能互相冒充。
+
+真实索引连续运行两次都报告 62 points、4 batches、ready。独立 scroll 得到 62 unique
+point IDs、62 unique chunk IDs，所有 chunk IDs 来自 Day 9 artifact，payload model 与
+revision 一致。三条 smoke query 的 rank 1 分别命中 BaseModel 方法迁移、validator
+迁移和 BaseSettings 移包。它们没有 locked gold，因此不能称为 Recall@3、MRR 或正式
+retrieval metric。
+
+### 第一次失败、诊断与实际修复
+
+1. 第一轮红测在 collection 阶段因缺少 `E5_MAX_SEQUENCE_LENGTH` ImportError 失败；
+   这证明测试先于实现。补齐真实 adapter、配置、Qdrant point 和 builder/retriever 后，
+   第一轮实现为 `1 failed, 134 passed`：Pydantic 把 bool 当成 int。增加 before validator
+   后又错误拒绝合法 env 数字字符串；最终只拒绝 bool、允许字符串由 Pydantic 解析。
+2. Ruff formatter 首次发现 6 个文件格式变化，Ruff check 又发现 2 个 import/order
+   问题；均按工具输出机械修复，没有放宽规则。
+3. 第一次真实模型加载和推理没有失败；它成功下载模型，但暴露旧
+   `get_sentence_embedding_dimension` 的 FutureWarning。adapter 改用当前公开
+   `get_embedding_dimension`，随后真实 offline-cache index 运行不再出现该 warning。
+4. 真实 Qdrant index/search 第一次即成功。第一次独立 REST 审计使用了错误集合名
+   `migrationlens_chunks`，server 正确返回 collection not found；从 `Settings` 读取实际
+   `migrationlens-documents` 后，审计得到 62/62 的完整证据。这是验证脚本输入错误，不是
+   索引数据失败。
+5. Uvicorn readiness 验证第一次被 Windows `Start-Process` 的 `Path`/`PATH` 环境字典
+   冲突拦住；改用无窗口 `System.Diagnostics.Process` 并保留精确 PID。第二次服务已 live，
+   但旧 PowerShell `Invoke-WebRequest` 缺少 IE engine；加 `-UseBasicParsing` 后真实
+   `/health/ready` 返回 HTTP 200，并只清理该 PID。
+
+### 当前质量门禁与 Day 11 输入
+
+Day 10 专项测试为 `138 passed in 0.94s`；完成文档前完整回归为
+`285 passed, 1 warning in 4.68s`。最终完整回归为
+`285 passed, 2 warnings in 3.39s`：既有 Starlette TestClient 上游弃用提示，以及
+qdrant-client 在长 Docker build 后 server-version probe 不可用时的 compatibility
+warning；均未过滤。真实模型、真实 Qdrant 与 synthetic 结果分别记录。
+
+Day 10 output 是可查询、可重复构建、带完整 provenance 的 dense index 与 dense
+top-8 capability。Day 11 input 是该 dense top-8 加 Day 9 structured chunks；Day 11
+才新增 BM25 top-8 和 RRF。locked evaluation、reranker、Agent、ZIP/AST 和业务 API
+仍未实现。

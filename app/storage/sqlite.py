@@ -8,6 +8,7 @@ import sqlite3
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 import aiosqlite
 
@@ -24,6 +25,13 @@ _INSERT_SYSTEM_METADATA = """
 INSERT OR IGNORE INTO system_metadata (key, value, updated_at_utc)
 VALUES (?, ?, ?)
 """
+_UPDATE_SYSTEM_METADATA = """
+UPDATE system_metadata
+SET value = ?, updated_at_utc = ?
+WHERE key = ?
+"""
+
+DocumentIndexStatus = Literal["not_built", "ready"]
 
 
 class SQLiteInitializationState(StrEnum):
@@ -159,6 +167,38 @@ class SQLiteDatabase:
             ) as cursor:
                 row = await cursor.fetchone()
             return None if row is None else str(row[0])
+
+    async def write_document_index_status(
+        self,
+        status: DocumentIndexStatus,
+    ) -> None:
+        """参数化更新文档索引状态，并在返回前提交。"""
+        if status not in {"not_built", "ready"}:
+            raise ValueError("document_index_status 不受支持")
+        async with self._lifecycle_lock:
+            connection = self._connection
+            if (
+                self._initialization_state is not SQLiteInitializationState.INITIALIZED
+                or connection is None
+            ):
+                raise SQLiteNotInitializedError("SQLite 尚未初始化")
+
+            cursor = await connection.execute(
+                _UPDATE_SYSTEM_METADATA,
+                (
+                    status,
+                    datetime.now(tz=UTC).isoformat(),
+                    "document_index_status",
+                ),
+            )
+            try:
+                if cursor.rowcount != 1:
+                    raise sqlite3.IntegrityError(
+                        "document_index_status metadata row is missing"
+                    )
+            finally:
+                await cursor.close()
+            await connection.commit()
 
     async def close(self) -> None:
         """关闭连接；在任意生命周期状态下都可安全重复调用。"""
