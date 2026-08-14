@@ -300,7 +300,40 @@ Day 10 专项测试为 `138 passed in 0.94s`；完成文档前的完整回归为
 `285 passed, 2 warnings in 3.39s`。最终 warnings 是既有 Starlette TestClient 上游
 弃用提示，以及 qdrant-client 在 Docker/Qdrant version probe 不可用时的 compatibility
 提示；均没有过滤隐藏。Day 10 没有实现 BM25、RRF、hybrid、reranker 或 locked
-retrieval evaluation；Day 11 保持 `planned`。
+retrieval evaluation；这些边界由下述 Day 11 独立实现。
+
+### 2.10 MigrationLens Day 11
+
+状态：`completed`
+计划日期：2026-08-15
+实际开发日期：2026-08-13
+
+Day 11 以 Day 9 的 62-chunk JSON schema v1 artifact 和 Day 10 已验证的
+`DenseRetriever` 为唯一输入。新增项目内、零新依赖的只读 BM25：Unicode-aware
+casefold，保留 dotted/underscore/hyphen 复合 API token 并发出组件，baseline 固定
+`k1=1.5`、`b=0.75` 和正平滑 IDF。BM25 只访问本地 artifact，top-k 固定上限 8；
+合法 query 无正分 lexical hit 返回空 tuple，空/纯空白/纯标点和预加 embedding prefix
+在 boundary 被拒绝。
+
+HybridRetriever 原样调用 BM25 top-8 与 Day 10 Dense top-8，再按 `chunk_id` 去重并
+计算 `sum(1/(rrf_k+rank_i))`。默认 `rrf_k=60` 是 Day 11 implementation choice，可由
+`MIGRATIONLENS_RRF_K` 配置为 1..1000 正整数；raw BM25/cosine score 仅保留为证据，
+不相加。完整融合 ranking 最多 16 个唯一候选，final view 固定 top-3；结果保存 final
+rank、两路 optional rank/raw score、RRF score 和 Day 8–10 provenance。tie-break 依次
+使用 RRF score、最佳 component rank、缺失按 9 计的 component rank 总和和 stable
+chunk ID。provenance mismatch、duplicate ID 或非连续 rank 显式失败；当前没有
+degraded mode，Dense/Qdrant failure 不伪装为空或 BM25-only hybrid。
+
+Day 11 新增测试用例为 BM25 19、RRF 17、Hybrid orchestration 4、Settings 5，共 45
+个；完整回归为 `330 passed, 2 warnings in 3.19s`。正式 artifact 执行 6 条 BM25
+smoke；在强制 offline cache 下以 fixed-revision E5 和仓库固定 Qdrant image 重建并
+验证 62 points/4 batches，再执行 4 条 Dense-only 与 Hybrid smoke。真实 top-3 保存
+component ranks/RRF scores，重复 chunk 去重。smoke 不含 gold，不能描述为 Recall/MRR。
+
+Day 11 没有修改 Day 9 artifact、Day 10 dense semantics、`pyproject.toml`、
+`THIRD_PARTY_NOTICES.md`、`SPEC.md` 或 `AGENTS.md`，也没有实现 evaluator、locked data、
+reranker、Agent、ZIP/AST 或 API。Day 12 保持 `planned`，明确消费三路独立接口与完整
+ranking metadata。
 
 ## 3. P0、P1 和不做范围
 
@@ -518,7 +551,8 @@ FakeEmbedding 只验证应用边界，不能作为真实检索质量证据。
 查询由 `rule_id + old_api + AST context + user question` 组成。P0 不加入
 cross-encoder reranker。结果必须包含 chunk ID、heading、文本、URL/ref、内容
 hash、BM25/dense 排名和 RRF 分数。Qdrant 不可用时返回显式错误或经正式决策的
-degraded 状态，不能伪装为空结果。
+degraded 状态，不能伪装为空结果。D-014 已选择 Day 11 显式失败策略，当前不支持
+degraded mode。
 
 ## 8. Agent 设计
 
@@ -780,7 +814,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 8 | 2026-08-12 | `completed` | 官方文档快照 | 已验证 v2.13.4 与 commit；raw migration、同 commit LICENSE、manifest、hash、notices、cache、原子发布 | 真实首次 download 与第二次 cache hit；50,035/1,129 bytes；两份 SHA256 round-trip 匹配；离线专项与共同门禁 | 可复现来源与许可证 | chunk、索引、upsert/search |
 | MigrationLens Day 9 | 2026-08-12 | `completed` | Markdown chunker | H2/H3、27/27 fenced blocks、500–1200/120 overlap、稳定 ID、JSON v1 artifact；62 chunks | 专项 32 passed；完整 219 passed；真实 artifact/coverage/repeated-build 与共同门禁通过 | 内容寻址与结构切分 | embedding、Qdrant upsert/search、BM25、dense、评测 |
 | MigrationLens Day 10 | 计划 2026-08-14；实际 2026-08-12 | `completed` | e5 稠密索引与检索 | fixed-revision real adapter、62 passage points、provenance payload、top-8、ready transition | 专项 138 passed；完整 285 passed；真实 CPU model、Qdrant 62/62 IDs、重复索引、三查询、ready=200 | e5 语义检索与索引完整性 | BM25、RRF、hybrid、locked |
-| MigrationLens Day 11 | 2026-08-15 | `planned` | BM25 + RRF 服务 | BM25 top-8、dense top-8、融合去重、top-3 和完整排名元数据 | 三路可独立调用、排序/空查询/单路失败；共同门禁 | lexical/dense 互补 | reranker、Agent、locked 调参 |
+| MigrationLens Day 11 | 计划 2026-08-15；实际 2026-08-13 | `completed` | BM25 + RRF 服务 | 项目内 BM25 top-8、复用 dense top-8、RRF 去重、完整 ranking 和 top-3 | 新增 45 cases；完整 330 passed；真实 6 BM25 + 4 Dense/Hybrid smoke；共同门禁 | lexical/dense 互补 | reranker、Agent、locked 调参 |
 | MigrationLens Day 12 | 2026-08-17 | `planned` | dev 检索集与评分 | 32 题 schema、12 dev、20 locked 候选隔离、Recall/MRR evaluator | 三路 dev 报告、heading gold、无污染；共同门禁 | 评测分割与消融 | 查看 locked 成绩 |
 | MigrationLens Day 13 | 2026-08-18 | `planned` | ZIP Guard | 全部资源/路径/成员规则、安全非 Python 忽略、清理 | 正常、穿越、绝对路径、链接、bomb、超限、编码；共同门禁 | 压缩包信任边界 | import/执行/修改代码、AST |
 | MigrationLens Day 14 | 2026-08-19 | `planned` | AST 基础与符号表 | inventory、编码/语法、alias、BaseModel、类型线索、模块映射、registry | 空/BOM/语法/alias/稳定顺序；共同门禁 | AST 与确定性 schema | 八类规则、一跳 import、LLM |

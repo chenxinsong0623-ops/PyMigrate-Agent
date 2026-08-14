@@ -5,245 +5,218 @@
 
 ## 1. 当前开发日与状态
 
-MigrationLens Day 10 — 真实 multilingual-e5-small 稠密索引与 Qdrant Dense Retrieval
+MigrationLens Day 11 — BM25 + Dense + RRF Hybrid Retrieval
 
 状态：`completed`
 
-实际开发日期：2026-08-12。计划日期原为 2026-08-14，计划与实际日期均保留。
-Day 9 已完成并提交为
-`cbeff36 feat:Day9 complete markdown chunking pipeline`。Day 11 保持 `planned`。
+代码、测试、真实 smoke 与受影响 Markdown 文档已完成。
 
-## 2. 开发前事实
+计划日期：2026-08-15；实际开发日期：2026-08-13。Day 10 已完成并提交为
+`18c131e feat: complete Day10 dense retrieval pipeline`。开发前 branch 为 `main`，
+`git status --short` 无输出；Day 12 保持 `planned`。
 
-- branch：`main`；
-- `git status --short`：无输出，工作区干净；
+## 2. 开发前事实与基线
+
+- 指定解释器：`D:\conda_envs\pymigrate-agent\python.exe`；
 - `pip check`：`No broken requirements found.`；
-- 完整 pytest：`219 passed, 2 warnings in 3.32s`；
+- 完整 pytest：`285 passed, 2 warnings in 3.47s`；
+- warnings：既有 Starlette TestClient deprecation，以及 qdrant-client 无法取得 server
+  version 的 compatibility warning；均未过滤；
 - Ruff check：`All checks passed!`；
-- Ruff format check：`42 files already formatted`；
+- Ruff format check：`48 files already formatted`；
 - `git diff --check`：退出码 0；
 - `docker compose config --quiet`：退出码 0，保留两条既有 Docker
   `config.json` Access denied warning。
 
-Day 10 输入是
-`data/chunks/pydantic-v2-migration.json`：schema v1、62 chunks，开发前与开发后
-SHA256 均为
+正式 Day 9 输入为 `data/chunks/pydantic-v2-migration.json`：schema v1、62 chunks；
+开发前 SHA256 为
 `36ab67593a997edb81cf0385d74213471b95bf5c915e551e92461e88192b1773`。
-Day 8 snapshot 和 manifest hash 也保持为
-`3a33c005259e6ede170df1904a168a4a64e8d8efc5b7fed360b65e5c000c05b7`、
-`22f954dc65b5f691e2e9d015079e530adc0a45623e482cc0fa910f5ed59f9c1e`。
+Day 10 output 是固定 revision E5 + 62-point Qdrant index 和独立 typed dense top-8。
 
 ## 3. 单一目标与明确不做
 
-Day 10 只建立真实 dense retrieval baseline：复用 Day 5 Embedding boundary，把 Day 9
-chunks 以 `passage:` 批量编码成 normalized 384-d vectors，通过稳定 point IDs 写入
-384/Cosine Qdrant collection，再以 `query:` 提供 typed top-8 dense search。
+Day 11 只建立 Hybrid Retrieval infrastructure：
 
-本日没有实现 BM25、RRF、hybrid retrieval、reranker、locked retrieval evaluation、
-Recall/MRR 正式指标、ZIP Guard、AST、八类规则、import graph、Agent、Citation Guard、
-业务分析 API、报告表、CI、Locust、P1、WDI 或 Day 11 以后功能。
+1. formal Day 9 artifact 上的离线 BM25 top-8；
+2. 原样复用 Day 10 `DenseRetriever` top-8；
+3. 按稳定 `chunk_id` 去重的 RRF；
+4. 完整融合 ranking 与 final top-3；
+5. 完整 component ranks/raw scores/RRF score/provenance；
+6. BM25、Dense、Hybrid 三路可独立调用；
+7. deterministic tie-break、显式空结果与失败语义；
+8. 可配置且进入 response metadata 的 RRF `k`。
 
-## 4. Dependency、模型与 cache
+本日没有创建 dev/locked retrieval data、gold、evaluator、Recall/MRR、效果调参、
+cross-encoder/reranker、Agent、ZIP Guard、AST、八类规则、业务 API、CI、Locust、P1、
+WDI 或 Day 12 以后功能。
 
-- 新增直接依赖：`sentence-transformers==5.6.1`；
-- Python：项目明确使用 Python 3.11；该包要求 Python >=3.10；
-- package license：Apache-2.0；
-- model ID：`intfloat/multilingual-e5-small`；
-- immutable revision：`614241f622f53c4eeff9890bdc4f31cfecc418b3`；
-- model repository license：MIT；
-- 真实 runtime：sentence-transformers 5.6.1、transformers 5.14.1、torch 2.13.0；
-- 真实 device：CPU；dimension=384；max sequence length=512；
-- cache：Git ignored `var/cache/huggingface`，真实审计 18 files、493,293,023 bytes、
-  1 个 `.safetensors`；
-- 首次真实模型命令是 download，后续 index/query 在 `HF_HUB_OFFLINE=1` 和
-  `TRANSFORMERS_OFFLINE=1` 下 cache hit；
-- 普通 import、pytest、FastAPI startup 和 readiness 不导入/加载/下载模型；
-- `transformers`、`torch`、`huggingface-hub` 保持传递依赖，没有机械列为直接依赖。
+## 4. 离线 BM25
 
-真实模型最小验证：query shape=1×384，passage shape=2×384；query norm
-1.00000002，passage norms 1.00000001、1.00000002。第一次真实模型加载和 inference
-没有失败；下载时出现未认证 HF rate-limit 提醒和 Windows symlink 降级提醒，不影响
-本次加载。旧 dimension getter 的 FutureWarning 促使实现改用当前公开
-`get_embedding_dimension`，后续 offline-cache 运行没有该 warning。
+新增 `app/retrieval/bm25.py`。它只通过现有 strict loader 读取 Day 9 artifact，在内存中
+建立 corpus，不访问网络、Hugging Face cache 或 Qdrant，也不修改 artifact/index。
 
-真实 tokenizer audit 对 62 个 `passage:` 输入关闭 truncation 计数：最短 24 tokens、
-最长 572、6 个超过 512、0 个恰好 512。Day 9 artifact 按要求不重切，因此这 6 个输入
-遵循模型 truncation；不声称所有 chunk 全文进入 transformer。
+- 项目内实现，无新 dependency；baseline `k1=1.5`、`b=0.75`；
+- IDF：`log(1 + (N-df+0.5)/(df+0.5))`；
+- tokenizer：Unicode-aware casefold；保留 dotted/underscore/hyphen 复合 API token，
+  并发出非空组件；query 重复 token 只贡献一次；
+- 示例：`BaseModel.dict()` → `basemodel.dict`, `basemodel`, `dict`；
+  `model_dump` → `model_dump`, `model`, `dump`；
+  `pydantic-settings` → `pydantic-settings`, `pydantic`, `settings`；
+- 默认/最大 top-k=8；拒绝 bool、0、9 和非整数；
+- 空、纯空白、纯标点、预加 `query:`/`passage:` 的输入被拒绝；
+- 合法 query 的 0 个正分 lexical hit 返回空 tuple，不伪造零分候选；
+- score 降序；同分按 artifact document order，再按 stable chunk ID；rank 从 1 连续；
+- `BM25SearchResult` 严格、冻结、`extra=forbid`，保留 finite positive score 和完整引用
+  provenance。
 
-## 5. Real Embedding Adapter
+## 5. RRF 与 HybridRetriever
 
-`app/core/embedding.py` 保留 `FakeEmbedding`，并新增：
+新增 `app/retrieval/hybrid.py`。`HybridRetriever` 注入 BM25 与 Dense 接口，先固定调用
+两路 top-8，再调用纯函数 `reciprocal_rank_fusion`：
 
-- 固定 model ID/revision/license/max sequence 常量；
-- 严格 `E5ModelMetadata` 和脱敏 `EmbeddingInfrastructureError`；
-- 可注入 `SentenceTransformerLoader` / model Protocol；
-- 构造期零 I/O、延迟 import、受 lock 保护的共享 load task；
-- `asyncio.to_thread` 隔离同步模型加载与 encode；
-- `asyncio.timeout` 保护加载与每次 inference；
-- 正确复用 `EmbeddingRequest.model_inputs`，调用方不能 double prefix；
-- passage/query batch `encode(..., normalize_embeddings=True)`；
-- output count、384 dimensions、finite float、L2 norm 与固定 model identity 校验；
-- 预期 OSError/timeout 安全转换，程序 TypeError 不被误吞。
+```text
+rrf_score(chunk) = sum(1 / (rrf_k + component_rank))
+```
 
-默认 batch size=16，可配置范围 1..128；62 个 passages 实际分 4 batches。
+- 融合只使用 rank，不直接相加或归一化 BM25 raw score 与 dense cosine score；
+- 按完整稳定 `chunk_id` 去重；同 chunk 两路出现时保存两组 rank/raw score；
+- `MIGRATIONLENS_RRF_K` 默认 60，范围 1..1000，拒绝 bool；CLI `--rrf-k` 可覆盖；
+- 完整 union 最多 16 个唯一候选，`results` 保存连续 final rank，`top_results` 是其前
+  3 项；
+- tie-break：RRF score 降序、最佳 component rank、缺失 rank 按 9 计的 component
+  rank 总和、stable chunk ID；
+- response 保存 query、两路 candidate limit、final limit 与实际 `rrf_k`；每项保存
+  final rank、两路 optional ranks/raw scores、RRF score、chunk 内容和完整 provenance；
+- schema 不含 reranker/cross-encoder/LLM score、Recall、MRR、citation 或 Agent 字段。
 
-## 6. Qdrant point、adapter 与稳定身份
+三个程序接口均可独立消费：`BM25Retriever.search`、`DenseRetriever.search`、
+`HybridRetriever.search`。BM25 和 Hybrid 同时提供显式 module CLI；Dense CLI 继续复用
+Day 10 实现。
 
-`app/retrieval/qdrant.py` 在不破坏 Day 6 lifecycle 的前提下新增严格冻结边界：
+## 6. 空结果、错误与 degraded 边界
 
-- `QdrantPointPayload`、`QdrantPoint`、`QdrantScoredPoint`；
-- upsert、query、exact count、paged source-ID scroll Protocol；
-- 官方 `AsyncQdrantClient.upsert(wait=True)` 与 completed check；
-- `query_points(..., with_payload=True, with_vectors=False)`；
-- source filter count 和 paged scroll；
-- 每次操作独立 timeout，SDK infrastructure failure 脱敏，malformed payload 安全失败。
+- BM25 no-hit：正常 `()`；
+- Dense empty：正常 `()`；
+- empty + empty：正常 empty complete/final rankings；
+- 一路正常为空、另一路有结果：按存在的一路计算 RRF；
+- BM25 artifact/implementation failure：显式异常；
+- E5/Qdrant/Dense infrastructure failure：显式异常；
+- component duplicate ID、rank 非连续或跨路 provenance mismatch：
+  `HybridFusionContractError`；
+- 当前不支持 degraded mode，不把 Dense failure 伪装为空，也不把 BM25-only 结果冒充
+  正常双路 hybrid。
 
-Qdrant point ID 使用 namespace
-`9202dd18-24a1-5d8e-9bf1-626c51c77d1d` 对完整 Day 9 chunk ID 做 UUIDv5。
-样例 `sha256:` + 64 个 `1` 固定映射为
-`a0bffe98-d780-55c9-b7a2-cb6d3698bab4`。不使用 UUID4，因此重复构建覆盖同一 point，
-不会产生 2N points。
+长期决策已 append 为 D-014；没有修改旧 decision。
 
-payload 保存：chunk ID、heading path、text、content SHA256、source ID/URL/ref/resolved
-commit/path/snapshot SHA256、source span、continuation index、overlap、identity occurrence、
-embedding model 和 revision。绝对私有路径、token、secret 不写入 payload 或结果。
+## 7. 测试先行、失败与修复
 
-## 7. Dense Index Builder 与索引状态
+第一条红测实际运行新增 BM25/RRF/Hybrid/配置测试，collection 阶段产生 3 个
+`ModuleNotFoundError`，因为 `app.retrieval.bm25` 尚不存在。实现后首轮定向结果为
+`80 passed in 0.47s`。Ruff 首次发现 6 个 line-length、import source/order 与 format
+问题，机械修复后没有放宽规则。
 
-新增显式 CLI `python -m app.ingestion.dense_index`。它：
+新增 45 个 Day 11 cases：
 
-1. 严格加载 Day 9 artifact；
-2. 计算完整 expected UUIDv5 set，并拒绝 collision；
-3. 在远程修改前把 SQLite `document_index_status` 写为 `not_built`；
-4. 检测同 source stale IDs，发现时不删除数据并安全失败；
-5. 以 `EmbeddingRequest(input_type="passage")` 分批生成 vectors；
-6. 一一映射 chunk/vector 并等待 Qdrant upsert；
-7. 用 exact source count 与完整 source-ID set 做 post-write verification；
-8. 只有两项均与 artifact 相等才写 `ready`。
+- `tests/unit/test_bm25.py`：19 passed，覆盖 strict artifact、tokenizer、normalization、
+  API token、corpus/ranking/top-k/bool、empty/no-hit、finite score、连续 rank、
+  provenance 与 repeated deterministic；
+- `tests/unit/test_rrf.py`：17 passed，覆盖两路 only/common、去重、公式、配置 k、tie、
+  empty 组合、mismatch、duplicate、非法 rank、non-finite score、final top-3 和 Day 12
+  字段排除；
+- `tests/unit/test_hybrid_retriever.py`：4 passed，覆盖固定两路 top-8、top-3、boundary
+  拒绝和两路异常传播；
+- `tests/unit/test_config.py`：新增 5 个 `rrf_k` 参数 cases；`tests/conftest.py` 清理
+  对应环境变量。
 
-partial failure 不标记 ready；已写的合法 subset 可由下一次相同 upsert 恢复。startup
-不自动建库，不删除或 recreate collection，不触碰其他 source/collection。
+真实 smoke 的第一次直接脚本启动因 `var` 成为首个 import path 而
+`ModuleNotFoundError: app`；改用 module 启动保留仓库根后成功，临时脚本已删除。这是
+验收脚本启动方式错误，不是检索结果失败。
 
-## 8. Dense Retriever
+## 8. 真实 BM25、Dense 与 Hybrid smoke
 
-新增 `app/retrieval/dense.py`：原始 query 经现有 boundary 生成唯一 `query:` 输入，使用
-同一固定 model/revision 生成 normalized vector，再查询 Qdrant。`top_k` 只允许 1..8，
-默认 8；empty index 返回空 tuple。
+正式 artifact 上实际执行 6 条 BM25 top-8 query：
 
-严格冻结的 `DenseSearchResult` 保存连续 rank、finite score、chunk ID、heading、text、
-content hash 与 upstream provenance。schema 没有 `bm25_rank`、`rrf_score` 或
-`hybrid_rank`。CLI 可以一次加载模型后运行多条 smoke queries。
+- `BaseModel.dict migration`：rank 1 `Changes to pydantic.BaseModel`，6.566670；
+- `model_dump migration`：rank 1 同段，12.263684；
+- `root_validator migration`：rank 1 `Changes to validators`，10.700711；
+- `BaseSettings moved`：rank 1 `BaseSettings has moved to pydantic-settings`，10.282341；
+- `allow_population_by_field_name`：rank 1 `Changes to config`，17.454352；
+- `pydantic-settings package`：rank 1 `BaseSettings has moved...`，15.796878。
 
-## 9. 真实 Qdrant、重复索引与 smoke
+最初 Qdrant REST 不可达，Docker pipe 在默认权限下被拒绝；获准后启动仓库固定
+`qdrant:v1.18.3-unprivileged`。新命名 volume 是空的，collection 404，因此没有假装
+已有 Day 10 index；在 `HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1` 下显式复用
+Day 10 builder，实际得到 fixed model/revision、CPU、384 dimensions、62 points、4
+batches、`document_index_status=ready`。
 
-真实 Docker Server 29.4.2 可访问。使用隔离 project
-`migrationlens-day10-verify` 启动 `qdrant/qdrant:v1.18.3-unprivileged`，healthz 通过；
-没有启动、重建或停止用户既有 Dify containers。
+随后实际运行 4 条 Dense-only 与 Hybrid query。代表性 hybrid top-3：
 
-真实 offline-cache index 连续执行两次：两次均为 model fixed revision、CPU、384、
-max sequence 512、source `pydantic-v2-migration`、62 points、4 batches、status ready。
-独立 REST read-back：collection green、384/Cosine、points_count=62、scroll=62、
-unique point IDs=62、unique chunk IDs=62、required payload missing=0、所有 chunk IDs
-均来自 Day 9 artifact、model/revision 全部一致，当前样本 collision=0。
+- `BaseModel.dict migration`：(bm25,dense) ranks (1,1)、(4,4)、(2,None)；RRF
+  0.032786885、0.03125、0.016129032；
+- `root_validator migration`：(1,1)、(2,2)、(3,4)；RRF 0.032786885、
+  0.032258065、0.031498016；
+- `BaseSettings moved`：(1,1)、(2,2)、(3,None)；
+- `allow_population_by_field_name`：(1,1)、(3,3)、(5,5)。
 
-实际运行三条 top-8 smoke：
+这只证明真实 artifact/E5/Qdrant/RRF/typed response 调用链和可读 heading；没有 gold，
+不是 Recall/MRR 或质量阈值证据。smoke 后已执行 `docker compose down`，停止并删除本轮
+container/network，保留命名数据卷；没有 `down -v`。
 
-- `BaseModel.dict() migration`：rank 1 `Changes to pydantic.BaseModel`，
-  score 0.9015027；
-- `validator migration`：rank 1 `Changes to validators`，score 0.859621；
-- `BaseSettings migration`：rank 1 `BaseSettings has moved to pydantic-settings`，
-  score 0.86973494。
+## 9. 当前完整门禁
 
-三条 smoke 只证明真实 model → Qdrant → typed result 调用链可运行；没有 locked gold，
-不是 Recall、MRR 或生产质量指标。
-
-同一 SQLite/Qdrant 环境真实启动 Uvicorn 后，`/health/live` 为 ok，
-`/health/ready` 返回 HTTP 200：SQLite `ok`、document index `ready`、retriever backend
-`qdrant/ok`。新环境或 partial build 仍会以 `not_built` 诚实返回 503。
-
-## 10. Red → Green、真实失败与修复
-
-- 第一条红测：测试 collection 因不能 import `E5_MAX_SEQUENCE_LENGTH` 失败，
-  `1 error in 0.30s`；
-- 第一轮实现：`1 failed, 134 passed in 1.42s`，原因是 bool 被 Pydantic 当成 int；
-- 第一次修复又错误拒绝合法 env 数字字符串：`1 failed, 134 passed in 1.19s`；最终
-  before validator 只拒绝 bool，字符串交给 Pydantic 正常解析；
-- Ruff formatter 首次发现 6 files，Ruff check 首次发现 2 个 import/order 问题，均
-  按工具输出修复；
-- 第一次真实模型运行没有失败；只暴露 deprecated dimension getter warning，随后改用
-  当前 API；
-- 真实 Qdrant index/search 第一次即成功；第一次独立 REST audit 把集合名误写为
-  `migrationlens_chunks`，server 返回 not found。改为配置中的
-  `migrationlens-documents` 后审计通过；
-- Uvicorn 验收先后遇到 PowerShell `Start-Process` 的 `Path`/`PATH` 冲突和旧
-  `Invoke-WebRequest` IE engine 限制；改用无窗口、精确 PID 的
-  `System.Diagnostics.Process`，并加 `-UseBasicParsing` 后 ready=200；
-- Docker API image build 真实尝试两次，分别在 604 秒和 1,204 秒超时，均未产出可确认
-  的完整 image；长 build 期间 Docker daemon 的并行 `docker ps` 返回 500。Docker
-  build 明确为“未验证成功”，不能写成通过，也不等同于代码/模型/Qdrant 失败；
-- 长 build 后 6333 health 不可达，Docker engine API 持续返回 500。对精确隔离项目执行
-  `docker compose -p migrationlens-day10-verify down -v --rmi local --remove-orphans`
-  也被同一 500 拦住，因此隔离 container/network/volume 的最终清理状态无法确认。
-  没有重启 Docker Desktop，也没有操作现有 Dify 项目；Docker engine 恢复后应优先
-  重跑同一精确清理命令并核对 project label。
-
-## 11. 测试与最终门禁
-
-实现阶段曾达到 `282 passed, 2 warnings in 3.29s`；后续补充失败边界和更新方法后：
-
-- Day 10 专项：`138 passed in 0.94s`；
-- 文档前完整 pytest：`285 passed, 1 warning in 4.68s`；
-- 最终完整 pytest：`285 passed, 2 warnings in 3.39s`；
-- 最终 warnings：既有 Starlette TestClient 上游弃用提示，以及 qdrant-client 在
-  Docker daemon/Qdrant 版本探针不可用时无法检查 server compatibility 的 warning；
-  两者都没有过滤；
-- `pip install sentence-transformers==5.6.1`：已满足、未升级其他包；
-- 最终 `pip check`：`No broken requirements found.`；
-- 最终 Ruff check：`All checks passed!`；
-- 最终 Ruff format check：`48 files already formatted`；
-- 最终 `git diff --check`：退出码 0；
-- 最终 `docker compose config --quiet`：退出码 0，仍有两条既有 Docker
+- 完整 pytest：`330 passed, 2 warnings in 3.19s`；
+- warnings：既有 Starlette TestClient deprecation，以及 qdrant-client server-version
+  compatibility warning；均未过滤；
+- BM25 专项：`19 passed in 0.10s`；
+- RRF 专项：`17 passed in 0.06s`；
+- Hybrid 专项：`4 passed in 0.05s`；
+- `pip check`：`No broken requirements found.`；
+- Ruff check：`All checks passed!`；
+- Ruff format check：`53 files already formatted`；
+- `git diff --check`：退出码 0；
+- `docker compose config --quiet`：退出码 0，保留两条既有 Docker
   `config.json` Access denied warning。
 
-上述结果均来自实际运行；Docker image build 与静态 Compose 验证继续分开记录。
+## 10. 文件、dependency 与文档
 
-## 12. 文件、文档、安全与 Git 边界
+新增实现：
 
-新增代码：
-
-- `app/ingestion/dense_index.py`；
-- `app/retrieval/dense.py`。
+- `app/retrieval/bm25.py`；
+- `app/retrieval/hybrid.py`。
 
 新增测试：
 
-- `tests/unit/test_e5_embedding.py`；
-- `tests/unit/test_qdrant_dense.py`；
-- `tests/unit/test_dense_index.py`；
-- `tests/unit/test_dense_retriever.py`。
+- `tests/unit/test_bm25.py`；
+- `tests/unit/test_rrf.py`；
+- `tests/unit/test_hybrid_retriever.py`。
 
-修改代码/配置/测试：
+修改代码/测试配置：`app/core/config.py`、`tests/conftest.py`、
+`tests/unit/test_config.py`、`.env.example`。
 
-- `app/core/embedding.py`、`app/core/config.py`、`app/retrieval/qdrant.py`、
-  `app/storage/sqlite.py`；
-- `pyproject.toml`、`.env.example`；
-- `tests/conftest.py`、`tests/integration/test_sqlite.py`、
-  `tests/unit/test_config.py`、`tests/unit/test_qdrant.py`。
+同步文档：`TASKS.md`、`LEARNING_LOG.md`、`README.md`、
+`notes/MigrationLens_项目说明与每日开发计划.md`，以及 append-only `DECISIONS.md`
+D-014。`SPEC.md` 与 `AGENTS.md` 经审计无需修改；没有新 dependency，`pyproject.toml`
+和 `THIRD_PARTY_NOTICES.md` 保持不变。
 
-同步文档：`README.md`、`TASKS.md`、`LEARNING_LOG.md`、
-`notes/MigrationLens_项目说明与每日开发计划.md`、append-only `DECISIONS.md` D-013、
-`THIRD_PARTY_NOTICES.md`。`.gitignore` 和 `.dockerignore` 已覆盖 `var/`、cache、模型目录、
-`.env` 等，无需机械修改；`SPEC.md` 与 `AGENTS.md` 没有范围变化，保持不变。
+## 11. Artifact、安全与 Git 边界
 
-安全审计：`.env` 不存在；常见 HF token 环境变量设置数=0；tracked `var` files=0；
-tracked `.safetensors/.pt/.pth/.bin`=0。Qdrant 数据在隔离 Docker volume；SQLite、model
-cache 和 runtime logs 在 ignored `var/`。没有执行用户上传代码，没有新增 secret。
+Day 9 artifact 开发后 SHA256 仍为
+`36ab67593a997edb81cf0385d74213471b95bf5c915e551e92461e88192b1773`，与开发前一致；
+Day 11 没有修改 Day 10 DenseRetriever semantics 或 Qdrant payload/index schema。
 
-本轮没有执行 `git add`、`git commit`、`git push` 或 `git tag`；全部 Day 10 改动保持
-unstaged。Day 10 output 是可查询 dense index；Day 11 的明确 input 是 dense top-8
-capability + Day 9 structured chunks，Day 11 再加入 BM25 top-8 与 RRF。
+`.env` 不存在；tracked `var` files=0；tracked model weight files=0；ignored cache 外可见
+model weight files=0；可见 `.tmp/.bak/.partial`=0。cache、SQLite 与 Qdrant volume 没有
+进入 Git。
 
-最终 Git 审计：staged=0；tracked unstaged=16；untracked=6。`git diff --stat` 对已跟踪
-文件报告 16 files changed、1,305 insertions、247 deletions；6 个 untracked 文件正是
-两个 Day 10 实现模块和四个 Day 10 测试文件。可见工作区中 `.tmp`、`.bak`、
-`.partial`、`.env`、模型权重扩展名文件数量均为 0；当前状态描述的过时全文搜索命中
-数为 0。
+没有执行 `git add`、`git commit`、`git push` 或 `git tag`；staged file count=0。
+
+## 12. Day 12 明确输入与剩余风险
+
+Day 11 output 是三个独立 retrieval 接口、固定 top-8/top-3、完整 component/final
+ranks、raw scores、RRF `k` 和 provenance。Day 12 可以直接消费该 typed response，
+建立 dev/locked question schema、隔离 split 与 evaluator metadata。
+
+仍未实现：任何 retrieval gold、Recall@1/3、MRR@5、locked run、reranker、Agent、
+ZIP/AST、业务 API。当前主要风险是 62-passage E5 中 6 个输入沿用 Day 10 已记录的
+512-token truncation；BM25 tokenizer/参数和 RRF k 只是未调优 baseline。不得依据本日
+smoke 宣称正式检索质量。

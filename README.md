@@ -17,6 +17,7 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 8 | `completed` | 固定 Pydantic `v2.13.4` 官方 migration 原始快照、同 commit LICENSE、manifest、SHA256、第三方归属、有界下载、cache 与原子发布 |
 | MigrationLens Day 9 | `completed` | 离线 H2/H3 Markdown chunker、fenced code 保护、500–1200 字符目标、120 字符 overlap、稳定 ID、来源元数据、内容 hash、JSON schema v1 artifact 与重复构建审计 |
 | MigrationLens Day 10 | `completed` | 固定 revision 的真实 multilingual-e5-small、384 维 normalized embedding、稳定 UUIDv5 Qdrant points、显式 passage index build、top-8 dense query、post-write verification 与 index-ready transition |
+| MigrationLens Day 11 | `completed` | 只读离线 BM25 top-8、复用 DenseRetriever top-8、按 chunk ID 去重的可配置 RRF、完整融合排名与 final top-3 |
 
 当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite 仍只包含最小
 `system_metadata`，不能描述为已经运行的报告存储；Qdrant startup 仍只创建或校验
@@ -34,11 +35,16 @@ chunks；Day 10 才用真实 e5 将 62 个 chunks 写为 Qdrant points，并在 
 verification 后把 `document_index_status` 写为 `ready`。Synthetic fake、真实模型和
 真实 Qdrant 的证据分别记录，三者不可互换。
 
+Day 11 的 BM25 直接读取同一 62-chunk artifact，不访问网络、模型 cache 或 Qdrant；
+HybridRetriever 组合该 BM25 与 Day 10 `DenseRetriever`，两路各取 top-8 后仅按 rank
+执行 RRF，并同时保留完整融合排名与 final top-3。当前已能检索，但尚未完成正式检索
+评测。
+
 尚未实现：
 
 - GitHub Actions；
 - ZIP Guard、AST scanner、八类规则和一跳 import；
-- BM25、RRF、hybrid retrieval 和 reranker；
+- reranker 与 locked retrieval evaluation；
 - LangGraph Agent、五个只读工具和 Citation Guard；
 - 分析 API、报告存储、benchmark、评测和负载测试；
 - 真实 LLM；
@@ -75,6 +81,7 @@ startup 现在把 SQLite 与 Qdrant 视为 required dependency，本机直接运
 | `MIGRATIONLENS_EMBEDDING_CACHE_PATH` | 非空本地路径 | 固定模型 cache，默认 `var/cache/huggingface` |
 | `MIGRATIONLENS_EMBEDDING_BATCH_SIZE` | 整数 `1..128` | passage/query encode batch，默认 16 |
 | `MIGRATIONLENS_EMBEDDING_TIMEOUT_SECONDS` | `>0` 且 `<=600` | 模型加载和每次 inference 的 timeout，默认 120 秒 |
+| `MIGRATIONLENS_RRF_K` | 正整数 `1..1000`，拒绝 bool | RRF rank smoothing 常量，Day 11 baseline 默认 60 |
 
 Day 6 声明并验证直接依赖 `qdrant-client==1.18.0`，用于官方异步 API adapter；
 该包许可证为 Apache-2.0。直接使用 HTTPX 会重复维护 Qdrant API schema，FastEmbed
@@ -220,6 +227,65 @@ upstream provenance；空索引正常返回空 results。上述三条真实 smok
 `Changes to pydantic.BaseModel`（score 0.9015027）、`Changes to validators`
 （0.859621）和 ``BaseSettings has moved to pydantic-settings``（0.86973494）。这些
 人工可读结果只证明真实调用链可运行，不是 locked dataset 上的 Recall、MRR 或质量门槛。
+
+## Hybrid Retrieval
+
+Day 11 新增两个可独立调用的边界，同时原样复用 Day 10 dense service：
+
+```text
+BM25Retriever.search(raw_query, top_k<=8)
+DenseRetriever.search(raw_query, top_k<=8)
+HybridRetriever.search(raw_query)
+```
+
+`BM25Retriever` 只从
+[`data/chunks/pydantic-v2-migration.json`](data/chunks/pydantic-v2-migration.json)
+构建只读内存 corpus。项目内 baseline 使用 `k1=1.5`、`b=0.75` 和正平滑 IDF；
+tokenizer 先 casefold，保留 `BaseModel.dict`、`model_dump`、`pydantic-settings` 这类
+复合 API token，同时发出 `basemodel`/`dict` 等组件。Markdown 标点是分隔符；纯空白、
+纯标点和手工添加 `query:`/`passage:` 的输入在边界被拒绝。合法 query 没有任何正分
+lexical hit 时返回 `()`，不伪造零分候选。
+
+BM25-only 离线 smoke：
+
+```powershell
+$Py = 'D:\conda_envs\pymigrate-agent\python.exe'
+& $Py -m app.retrieval.bm25 `
+  'BaseModel.dict migration' `
+  'root_validator migration' `
+  'BaseSettings moved' `
+  --top-k 8
+```
+
+RRF 对每个稳定 `chunk_id` 计算：
+
+```text
+rrf_score(chunk) = sum(1 / (rrf_k + component_rank))
+```
+
+默认 `rrf_k=60` 是 Day 11 的可复现 baseline，可由 `MIGRATIONLENS_RRF_K` 或 hybrid
+CLI 的 `--rrf-k` 覆盖；它不是本项目效果最优声明。BM25 raw score 与 dense cosine
+score 量纲不同，仅随结果保存，绝不直接相加。相同 chunk 的两路 provenance 必须完全
+一致；duplicate ID、非连续 component rank 或 provenance mismatch 都显式失败。
+最终排序依次使用 RRF score 降序、最佳 component rank、缺失 rank 按 9 计的 rank
+总和和 stable chunk ID，所以不依赖 dict/set 插入来源或随机数。
+
+真实 hybrid 需要已构建的 Day 10 Qdrant index 与 fixed-revision E5 cache：
+
+```powershell
+$env:HF_HUB_OFFLINE = '1'
+$env:TRANSFORMERS_OFFLINE = '1'
+& $Py -m app.retrieval.hybrid `
+  'BaseModel.dict migration' `
+  'root_validator migration' `
+  'BaseSettings moved'
+```
+
+响应保存最多 16 个去重后的完整融合候选 `results`，并提供同一排序的 `top_results`
+前三项。每项包括 final rank、BM25/Dense optional rank、两路 optional raw score、finite
+RRF score、chunk text/heading/content hash 与 URL/ref/resolved commit/snapshot
+provenance。Dense/Qdrant failure 会显式传播；当前没有 degraded mode，不会把失败伪装
+为 empty dense 或正常 BM25-only hybrid。
 
 ## 本地运行
 
@@ -433,12 +499,26 @@ Docker engine API 返回 500，精确隔离 project 的 `down -v --rmi local` �
 错误拦住；没有重启 Docker Desktop 或操作现有 Dify 项目，隔离资源清理待 engine
 恢复后复核。
 
+### Day 11 验证边界
+
+2026-08-13 对正式 62-chunk artifact 执行 6 条 BM25-only smoke；BaseModel、validator、
+BaseSettings、config rename 等查询的首位 heading 与词法内容一致。随后在强制
+Hugging Face offline cache 模式下，以仓库固定 Qdrant image 新建 collection，并复用
+Day 10 builder 写入 62 points；真实 Dense-only 与 Hybrid 各运行 4 条 query。Hybrid
+top-3 保存了 component ranks 和 RRF scores，且 common chunk 只出现一次。
+
+新增 45 个 Day 11 测试用例：BM25 19、RRF 17、Hybrid orchestration 4、Settings
+`rrf_k` 5。最终完整回归为 `330 passed, 2 warnings in 3.19s`；warning 仍是既有
+Starlette TestClient deprecation 与 qdrant-client version probe 提示。`pip check`、
+Ruff check 和 Ruff format check 已通过；最终静态门禁和 Git/哈希审计以 `TASKS.md`
+记录为准。真实 smoke 只是通路证据，不是 Recall/MRR；Day 11 没有创建 gold、运行
+locked evaluation、计算指标或调参。
+
 ## 下一开发日
 
-MigrationLens Day 11 保持 `planned`，尚未开始。它的输入是 Day 9 固定 structured
-chunks 与 Day 10 已验证的 dense top-8 capability；Day 11 才加入 BM25 top-8、dense
-top-8 的 RRF 融合和融合结果去重。Day 10 没有提前实现 BM25、RRF、locked retrieval
-evaluation 或 reranker。
+MigrationLens Day 12 保持 `planned`，尚未开始。它将消费 Day 11 三路独立接口与完整
+排名 metadata，建立严格隔离的 dev/locked 检索题 schema 和 evaluator。当前能
+“检索”，但尚未完成“正式检索评测”；reranker、Agent、ZIP/AST 与 locked 运行均未实现。
 
 ## 项目文档
 
@@ -456,8 +536,8 @@ evaluation 或 reranker。
 
 ## 证据边界
 
-Day 10 已验证固定 revision 的真实模型、真实 62-point Qdrant index、三条 dense smoke
-query 和同环境 readiness，但 locked 评测、CI、样本量和负载测试等发布证据仍未完成，
-因此 MigrationLens 尚未达到可写入简历的发布门槛。不得把 FakeEmbedding 结果、三条
-人工 smoke、目标阈值、计划数量或未运行命令描述为 Recall/MRR、生产检索质量、GPU
-性能或发布证据。
+Day 10 已验证固定 revision 的真实模型与 62-point Qdrant index；Day 11 已验证正式
+artifact 上的 BM25，以及真实 Dense + RRF hybrid 调用链。但 locked 评测、CI、样本量
+和负载测试等发布证据仍未完成，因此 MigrationLens 尚未达到可写入简历的发布门槛。
+不得把 FakeEmbedding、BM25/Hybrid 人工 smoke、目标阈值、计划数量或未运行命令描述为
+Recall/MRR、生产检索质量、GPU 性能或发布证据。

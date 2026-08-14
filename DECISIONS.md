@@ -207,3 +207,40 @@
 - 影响：Day 10 的真实 embedding adapter、Qdrant point adapter、dense index CLI、
   dense query CLI、SQLite metadata transition、部署依赖、测试与文档必须遵守此契约；
   Day 11 可以消费 dense top-8，但不得改变已经发布的 Day 9 artifact。
+
+## D-014 — Day 11 BM25 与 RRF 可复现融合契约
+
+- 日期：2026-08-13
+- 状态：已接受
+- 决策：
+  - BM25 使用项目内只读内存实现，不新增运行时依赖。corpus 只来自严格验证的 Day 9
+    JSON schema v1 artifact；baseline 固定 `k1=1.5`、`b=0.75`，Day 11 不根据 smoke
+    query 或未来 locked data 调参；
+  - tokenizer 进行 Unicode-aware casefold，保留 dotted、underscore、hyphen 复合 API
+    token，并额外发出其非空组件；查询重复 token 只贡献一次。BM25 使用平滑正 IDF
+    `log(1 + (N-df+0.5)/(df+0.5))`，0 个正分词法命中返回空 tuple；
+  - BM25 与既有 `DenseRetriever` 各固定取 top-8。融合只使用 component rank，按稳定
+    `chunk_id` 去重，公式为 `sum(1 / (k + rank_i))`；原始 component score 只作为证据
+    保存，不相加、不归一化；
+  - `MIGRATIONLENS_RRF_K` 默认 60，可配置范围 1..1000 且拒绝 bool。60 是 Day 11
+    implementation choice，依据原始 RRF 工作中的固定 baseline；Day 12 必须在评测
+    metadata 中记录实际值，不得把默认值描述为本项目效果最优；
+  - 完整融合排序最多保留 16 个唯一候选，最终 consumer view 固定为 top-3。排序依次
+    使用 RRF score 降序、最佳 component rank、缺失 rank 按 9 计的 component rank
+    总和、stable chunk ID；不依赖输入迭代顺序或随机值；
+  - 同一 chunk 的两路 provenance 不一致、组件内 duplicate ID 或 rank 不连续都安全
+    失败。空 BM25 命中与 Dense 空 tuple 是正常结果；任一路实现/基础设施异常显式传播。
+    当前不支持 degraded mode，也不把 Qdrant failure 伪装为空或 BM25-only hybrid。
+- 原因：Day 12 会分别评测 BM25、dense 和 hybrid，并需要完整 component/final ranks、
+  raw scores、RRF 参数和 provenance。固定参数、tokenization、tie-break 与失败语义才能
+  让相同 artifact/query 产生可复查结果，同时避免不可比较的 raw score 相加。
+- 替代方案：未采用第三方 BM25 package、LangChain/LlamaIndex、server-backed lexical
+  search、LLM tokenizer、raw-score normalization/addition、UUID4 tie-break、静默单路
+  降级、cross-encoder reranker 或 Day 11 locked evaluation。
+- 影响：`app/retrieval/bm25.py`、`app/retrieval/hybrid.py`、Settings、`.env.example`、
+  Day 11 测试与文档必须遵守该契约；Day 9 artifact 与 Day 10 dense semantics 保持不变。
+- 依据：Cormack、Clarke 与 Büttcher 的 RRF 原始论文给出
+  `sum 1/(k+r(d))`，并在 pilot 后固定 `k=60`：
+  <https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf>；BM25 公式背景见
+  Robertson 与 Zaragoza, *The Probabilistic Relevance Framework: BM25 and Beyond*：
+  <https://doi.org/10.1561/1500000019>。

@@ -1404,3 +1404,180 @@ Day 10 output 是可查询、可重复构建、带完整 provenance 的 dense in
 top-8 capability。Day 11 input 是该 dense top-8 加 Day 9 structured chunks；Day 11
 才新增 BM25 top-8 和 RRF。locked evaluation、reranker、Agent、ZIP/AST 和业务 API
 仍未实现。
+
+## 2026-08-13：MigrationLens Day 11 —— BM25 + Dense + RRF Hybrid Retrieval
+
+### 1. BM25 是什么
+
+BM25 是 lexical ranking function：它根据 query token 在每个文档中的出现频率、该
+token 在 corpus 中的稀有程度和文档长度，给候选文档打相对排序分。Day 11 只在固定
+62-chunk corpus 上使用项目内实现，不引入搜索 server 或新的第三方 package。
+
+### 2. Lexical retrieval 与 dense retrieval 的区别
+
+Lexical retrieval 依赖可观察 token 重合，擅长 `model_dump`、
+`allow_population_by_field_name` 等精确 API；dense retrieval 把 query/passage 编码为
+向量，通过 cosine similarity 找语义相近内容，即使表面词不完全相同也可能命中。
+
+### 3. 为什么两者互补
+
+API 名称、配置键和包名是 lexical 的强信号；自然语言改写、同义表达和迁移意图则是
+dense 的强项。Hybrid 不要求某一路永远更好，而是把两份独立排名作为候选证据。
+
+### 4. Tokenizer 为什么影响 BM25
+
+BM25 看到的不是原字符串，而是 token 序列。如果把 `BaseModel.dict`、`model_dump`
+或 `pydantic-settings` 无意义破坏，精确 API 信号就会消失；如果完全不拆，又会丢失
+部分匹配。因此 Day 11 同时保留复合 token 和它的组件。
+
+### 5. Term frequency（TF）
+
+TF 是 token 在当前 chunk 中出现的次数。Day 11 的饱和项让第二次、第三次出现仍会
+增加分数，但不会按线性倍数无限放大。
+
+### 6. Document frequency（DF）
+
+DF 是包含某 token 的 chunk 数，不是 token 在整个 corpus 的总次数。它用于判断一个
+token 是普遍词还是稀有词。
+
+### 7. IDF
+
+Day 11 使用 `log(1 + (N-df+0.5)/(df+0.5))`。越少 chunk 包含某 token，IDF 越高；
+`log1p` 形式保持正值，避免合法 lexical hit 因负 IDF 被误当成 0-hit。
+
+### 8. Document length normalization
+
+长 chunk 自然包含更多 token，若不校正会更容易偶然命中。`b=0.75` 让文档长度相对
+corpus 平均长度进入 denominator；`k1=1.5` 控制 TF saturation。两者是 Day 11
+baseline，不是通过效果调参得到的最优值。
+
+### 9. BM25 score 是什么
+
+BM25 score 是当前 query、当前 tokenizer、当前 corpus 和固定参数下的相对排序值。
+它用于同一路结果排序，返回 schema 还要求该值 finite 且大于 0。
+
+### 10. 为什么 BM25 score 不是概率
+
+BM25 没有把分数校准为 0–1 的正确率，也没有 gold label。不同 query 的分数范围可以
+不同，不能把 12.2 解释成比 6.1 “正确两倍”。
+
+### 11. 为什么不能直接和 cosine score 相加
+
+BM25 raw score 与 dense cosine score 的量纲、范围和分布不同。直接相加会让数值尺度
+更大的 component 获得任意优势。Day 11 保存两路 raw score 供审计，但融合只消费 rank。
+
+### 12. Dense top-8 的职责
+
+Day 11 原样复用 Day 10 `DenseRetriever.search(raw_query, top_k=8)`；Hybrid 不直接调用
+SentenceTransformer、不重新生成 `query:` prefix，也不重复 Qdrant payload 解析。
+
+### 13. RRF 是什么
+
+Reciprocal Rank Fusion 对每个 candidate 计算
+`sum(1 / (rrf_k + component_rank))`。当前 components 只有 BM25 和 Dense；某一路没有
+该 chunk 时，不贡献该项。
+
+### 14. RRF 为什么只使用 rank
+
+Rank 把每路内部的相对次序变成共同尺度，避免假设 BM25 与 cosine raw scores 可比。
+它仍保留“高排名更重要”的信息，同时让两路共同出现的 chunk 得到两项贡献。
+
+### 15. RRF `k` 的含义
+
+`k` 是 reciprocal denominator 的平滑常量。较大的值会减小头部 rank 之间的差异；
+较小的值更强调 rank 1 与 rank 2 的差距。Day 11 默认 60，并没有用 smoke query 调参。
+
+### 16. 为什么 `k` 要配置化
+
+检索行为和后续 evaluation 可复现性都依赖它。`MIGRATIONLENS_RRF_K` 接受 1..1000
+正整数、拒绝 bool；response 记录实际值，Day 12 可以直接写入 evaluation metadata。
+
+### 17. 同 chunk 两路出现时如何去重
+
+融合以 Day 9 稳定 `chunk_id` 为唯一 identity。同一 ID 只建立一个 final candidate，
+同时保存 `bm25_rank/score` 与 `dense_rank/score`，RRF score 累加两项。
+
+### 18. Component rank
+
+`bm25_rank` 与 `dense_rank` 都是各自 top-8 内从 1 连续的排名；未出现时为 `None`。
+组件内 duplicate ID 或 rank 不连续说明上游契约损坏，融合显式失败。
+
+### 19. Final hybrid rank
+
+`rank` 是 RRF 后完整 union 的最终次序，与 component rank 不同。它从 1 连续，最多
+覆盖 16 个唯一候选；`top_results` 是同一排序的前三项，而不是重新计算的另一份排名。
+
+### 20. Top-8 candidate 与 top-3 final
+
+每路 top-8 提供融合候选；去重后的完整 ranking 为 Day 12 evaluator 保留所有 metadata；
+final top-3 是未来 Agent-facing view。Day 11 没有为了只返回三项而丢弃其余候选证据。
+
+### 21. Deterministic tie-break
+
+排序依次使用 RRF score 降序、最佳 component rank、缺失 rank 按 9 计的 component
+rank 总和和 stable chunk ID。重复输入顺序变化的测试得到相同 response，不依赖 set、
+dict 插入来源、Python hash、UUID4 或网络返回的偶然 tie 顺序。
+
+### 22. Provenance round-trip
+
+BM25、Dense 和 Hybrid 都保留 chunk ID、heading、text、content hash、source ID、官方
+URL、tag、resolved commit、source path 与 snapshot SHA256。相同 ID 的两路字段若任一
+不一致，不能静默选择其中一个，必须抛出 `HybridFusionContractError`。
+
+### 23. 空 lexical match
+
+合法 query 若没有正分 lexical hit，BM25 返回 `()`；这不是异常。空字符串、纯空白、
+纯标点和手工加 `query:`/`passage:` 则在 boundary 被拒绝，不进入两个 components。
+
+### 24. Dense infrastructure failure
+
+Dense 返回 `()` 表示一次正常查询没有 point；Qdrant 连接/timeout、模型加载或 payload
+契约错误是基础设施/实现 failure。两者必须保持不同的类型和控制流。
+
+### 25. 为什么单路失败不能伪装为空
+
+若把 Qdrant failure 改写为 empty dense，再返回 BM25-only，会让 response 看似正常双路
+hybrid，并污染 Day 12 对比。当前没有已接受 degraded-mode 设计，因此异常显式传播。
+
+### 26. Smoke test 与 retrieval evaluation
+
+Smoke query 证明 artifact → tokenizer/BM25，或 E5 → Qdrant → Dense → RRF → typed
+result 调用链实际可运行，并可人工检查 heading。它没有 locked gold，不能产生 Recall、
+MRR 或“达到目标”的结论。
+
+### 27. Day 11 与 Day 12 的边界
+
+Day 11 output 是三路独立接口、固定 schema、完整 ranks/scores/provenance 与配置值。
+Day 12 才创建 dev/locked question schema 和 evaluator，并在允许的 dev 边界报告指标；
+本日没有创建 gold、运行 locked、看 locked failure 或据此调 tokenizer/参数。
+
+### 28. 第一次失败
+
+测试先行的第一次运行在 collection 阶段产生 3 个 `ModuleNotFoundError`，因为
+`app.retrieval.bm25` 尚不存在。首轮实现后 80 个定向测试通过；静态检查再发现 6 个
+行宽、import source/order 与 format 问题。真实 smoke 第一次直接执行 ignored
+`var/day11_real_smoke.py` 时因脚本目录成为首个 import path 而找不到 `app`。
+
+### 29. 实际修复
+
+实现项目内 BM25、严格结果 schema、纯 RRF function 和可注入 HybridRetriever；按
+Ruff 输出修正格式/导入，没有放宽规则。真实 smoke 改用
+`python -m var.day11_real_smoke` 保留仓库根 import path 后成功；临时脚本随后删除。
+Docker 首次检查因 daemon pipe 权限失败，获准后启动固定 Qdrant image；新 volume 是
+空 collection，因此明确用现有 Day 10 builder 在 offline cache 模式写入并验证 62
+points，而没有假装复用了既有 index。
+
+### 30. 最终命令和证据
+
+开发前完整基线是 `285 passed, 2 warnings in 3.47s`。Day 11 新增用例分组为：BM25
+19 passed、RRF 17 passed、Hybrid orchestration 4 passed、Settings `rrf_k` 5 passed，
+共 45 个；最终完整回归为 `330 passed, 2 warnings in 3.19s`。`pip check` 为
+`No broken requirements found.`，Ruff check 通过，53 files format check 通过。
+
+正式 artifact 上 6 条 BM25 smoke 均执行；例如 `BaseSettings moved` 的 rank 1 是
+``BaseSettings has moved to pydantic-settings``，score 10.282341。真实 offline-cache
+E5/Qdrant 以固定 revision、384 维重建 62 points/4 batches，并执行 4 条 Dense-only 与
+Hybrid query。`root_validator migration` 的 Hybrid top-3 component ranks 分别为
+(1,1)、(2,2)、(3,4)，RRF scores 为 0.032786885、0.032258065、0.031498016。
+Qdrant container/network 已 `docker compose down`，命名数据卷保留。上述是 smoke 和
+工程门禁，不是正式检索效果证据。

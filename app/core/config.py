@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     embedding_cache_path: Path = Path("var/cache/huggingface")
     embedding_batch_size: int = Field(default=16, gt=0, le=128)
     embedding_timeout_seconds: float = Field(default=120.0, gt=0, le=600)
+    rrf_k: int = Field(default=60, gt=0, le=1000)
 
     @field_validator("sqlite_path", mode="before")
     @classmethod
@@ -55,10 +56,10 @@ class Settings(BaseSettings):
             raise ValueError("Embedding cache 路径不能为空")
         return value
 
-    @field_validator("embedding_batch_size", mode="before")
+    @field_validator("embedding_batch_size", "rrf_k", mode="before")
     @classmethod
-    def reject_boolean_embedding_batch_size(cls, value: object) -> object:
+    def reject_boolean_integer_settings(cls, value: object) -> object:
         """允许环境变量数字文本，但拒绝 bool 被当作整数 1。"""
         if isinstance(value, bool):
-            raise ValueError("Embedding batch size 必须是整数")
+            raise ValueError("整数配置不得使用 bool")
         return value

@@ -21,6 +21,7 @@ def test_settings_have_offline_defaults() -> None:
     assert settings.embedding_cache_path == Path("var/cache/huggingface")
     assert settings.embedding_batch_size == 16
     assert settings.embedding_timeout_seconds == 120.0
+    assert settings.rrf_k == 60
 
 
 def test_settings_read_prefixed_environment_variables(
@@ -38,6 +39,7 @@ def test_settings_read_prefixed_environment_variables(
     monkeypatch.setenv("MIGRATIONLENS_EMBEDDING_CACHE_PATH", "var/test/hf-cache")
     monkeypatch.setenv("MIGRATIONLENS_EMBEDDING_BATCH_SIZE", "8")
     monkeypatch.setenv("MIGRATIONLENS_EMBEDDING_TIMEOUT_SECONDS", "180")
+    monkeypatch.setenv("MIGRATIONLENS_RRF_K", "40")
 
     settings = Settings(_env_file=None)
 
@@ -53,6 +55,7 @@ def test_settings_read_prefixed_environment_variables(
     assert settings.embedding_cache_path == Path("var/test/hf-cache")
     assert settings.embedding_batch_size == 8
     assert settings.embedding_timeout_seconds == 180.0
+    assert settings.rrf_k == 40
 
 
 @pytest.mark.parametrize(
@@ -160,3 +163,9 @@ def test_settings_reject_invalid_embedding_timeout(invalid_timeout: float) -> No
 def test_settings_reject_blank_embedding_cache_path() -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, embedding_cache_path="   ")
+
+
+@pytest.mark.parametrize("invalid_rrf_k", [0, -1, 1001, 1.5, True])
+def test_settings_reject_invalid_rrf_k(invalid_rrf_k: object) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, rrf_k=invalid_rrf_k)
