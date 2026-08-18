@@ -19,6 +19,7 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 10 | `completed` | 固定 revision 的真实 multilingual-e5-small、384 维 normalized embedding、稳定 UUIDv5 Qdrant points、显式 passage index build、top-8 dense query、post-write verification 与 index-ready transition |
 | MigrationLens Day 11 | `completed` | 只读离线 BM25 top-8、复用 DenseRetriever top-8、按 chunk ID 去重的可配置 RRF、完整融合排名与 final top-3 |
 | MigrationLens Day 12 | `completed` | 32 题严格 schema、12 dev/20 locked candidates 隔离、确定性 raw query、BM25/Dense/Hybrid 三路 Recall@1/Recall@3/MRR@5 evaluator 与真实 dev artifacts |
+| MigrationLens Day 13 | `completed` | 全成员 ZIP 路径/类型/资源预验证、有界实际读取、UTF-8/LOC、只提取 selected Python、随机任务目录与可靠 cleanup |
 
 当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite 仍只包含最小
 `system_metadata`，不能描述为已经运行的报告存储；Qdrant startup 仍只创建或校验
@@ -40,12 +41,14 @@ Day 11 的 BM25 直接读取同一 62-chunk artifact，不访问网络、模型 
 HybridRetriever 组合该 BM25 与 Day 10 `DenseRetriever`，两路各取 top-8 后仅按 rank
 执行 RRF，并同时保留完整融合排名与 final top-3。Day 12 已用预先独立建立的 heading
 gold 在 12 条 dev questions 上完成三路评分；20 条 locked candidates 只做静态隔离校验，
-没有执行最终 locked benchmark。
+没有执行最终 locked benchmark。Day 13 已在独立 `app/security` 边界完成 ZIP Guard：
+先验证并实际流式读取所有成员，再只受控写出可交给 Day 14 的普通 Python 文件；安全
+非 Python 和 ignored-directory 内容不会进入分析集合，但不会绕过安全检查。
 
 尚未实现：
 
 - GitHub Actions；
-- ZIP Guard、AST scanner、八类规则和一跳 import；
+- AST scanner、八类规则和一跳 import；
 - final locked retrieval evaluation；
 - LangGraph Agent、五个只读工具和 Citation Guard；
 - 分析 API、报告存储、benchmark、评测和负载测试；
@@ -70,6 +73,9 @@ startup 现在把 SQLite 与 Qdrant 视为 required dependency，本机直接运
 ## 配置
 
 如需本地覆盖配置，将 `.env.example` 复制为 `.env`；`.env` 按设计不提交。
+
+ZIP Guard 的 2 MiB/200/1 MiB/10 MiB/100/200/50,000 七项上限不是普通运行时配置，
+不能通过 `.env` 调大。代码内严格 limits 对象只允许收紧阈值，不能突破冻结 SPEC。
 
 | 变量 | 当前允许值或格式 | 默认用途 |
 |---|---|---|
@@ -348,6 +354,47 @@ tokenizer 或参数。RRF k=60 是记录的 baseline，不是最优声明。固�
 accuracy 或发布门槛。locked evaluation = **NOT RUN**；必须等待人工复核、artifact hash、
 frozen commit 和计划中的单次 locked run。
 
+## ZIP Guard
+
+Day 13 提供 `untrusted ZIP -> validated Python files` 的安全信任边界。它不调用
+`ZipFile.extract()`/`extractall()`，也不 import、compile、执行或解析上传代码：
+
+```python
+from pathlib import Path
+
+from app.security import ZipGuard
+
+with ZipGuard(Path("project.zip")) as validated:
+    for python_file in validated.python_files:
+        source_path = validated.task_root / python_file.relative_path
+        # Day 14 Scanner 必须在这个 context 生命周期内只读 source_path。
+```
+
+冻结限制：compressed upload `<=2 MiB`、members `<=200`、每个普通文件解压后
+`<=1 MiB`、总解压 `<=10 MiB`、单成员 ratio `<=100`、selected Python `<=200`、
+Python LOC `<=50,000`。ZIP bytes 先以 `max+1` 有界读取固定在内存；全部 metadata
+通过后，每个普通文件仍以 64 KiB 有界流读到 EOF，复核实际 bytes、累计量和 CRC。
+
+路径边界同时处理 `/`、`\` 和 mixed separators，拒绝 absolute、drive/UNC、精确
+`..` 组件、NUL、Windows ADS/保留名。NFKC + casefold destination identity 拒绝
+规范化、大小写或 Unicode duplicate；祖先文件与子路径、file/directory collision
+也在写盘前失败。Unix/DOS metadata 只允许可确认的普通文件和正常目录；symlink、FIFO、
+device、socket、volume label、加密/未知 compression 和冲突目录 metadata 均 fail closed。
+
+`.venv`、`venv`、`site-packages`、`node_modules`、`.git` 按路径组件排除分析，但其中
+成员仍完整验证和读取。安全 README/JSON/image/binary 同样验证后忽略；只有 selected
+`.py`/`.PY` 进行严格 `utf-8-sig` 与 LOC 校验。开头 UTF-8 BOM 可接受且原始 bytes
+保持不变；非法 UTF-8 Python 使整个 ZIP 失败。LOC 使用 `splitlines()`：空文件 0 行，
+末尾单个换行不额外计一行。
+
+只有所有成员、编码和 LOC 都通过后才创建随机 `migrationlens-zip-*` 目录，并以
+exclusive create 只写 selected Python。`ZipGuardResult` 返回稳定排序的相对路径、
+size、LOC、SHA256 和不含源码的 inventory。退出 context、consumer 异常或提取失败都
+只清理该精确目录；cleanup 幂等且拒绝跟随 symlink/reparse point，瞬时失败保留所有权
+以便安全重试。错误只公开固定 `error_type`，日志不含成员名、宿主路径、源码或原始异常。
+
+Day 13 的 output 是 Day 14 的受控输入，不是 AST 或迁移 finding；Day 14 尚未开始。
+
 ## 本地运行
 
 先确保 Qdrant 可通过 `http://127.0.0.1:6333` 访问，或用
@@ -593,12 +640,29 @@ candidate 引用模型并新增测试后成功。没有改变 Day 9–11 frozen 
 20 条 locked candidates 没有进入 Retriever，也没有据其调参。完成后 Qdrant 容器恢复
 stopped，volume 保留。
 
+### Day 13 验证边界
+
+2026-08-18 新增 89 个 Day 13 pytest case，覆盖 normal/nested/empty/BOM、POSIX 与
+Windows/mixed traversal、absolute/drive/UNC、symlink 与多类 special member、duplicate、
+file/directory conflict、2 MiB/200/1 MiB/10 MiB/ratio 100/200 Python/50,000 LOC 的
+exact 与 over-limit、非 UTF-8、ignored directory、bounded read/CRC、pre-write failure、
+consumer/write/cleanup failure、随机目录、错误脱敏和禁止执行上传代码。
+
+实现与文档同步前的定向测试为 `89 passed in 1.61s`，完整回归为
+`469 passed, 2 warnings in 5.15s`。真实临时 ZIP smoke 返回 `pkg/model.py`，忽略安全
+README；含写 sentinel/抛异常语句的 Python 未执行。另一个包含 `../README.md` 的 ZIP
+以 `invalid_member_path` 整体拒绝；两条路径结束后任务目录 leftovers 为 `[]`。
+全部文档同步后最终重跑为：Day 13 `89 passed in 1.30s`，完整
+`469 passed, 2 warnings in 4.77s`；Ruff check、63-file format check、diff check、
+pip check 与 `docker compose config --quiet` 均通过。Compose 只保留两条既有本机
+Docker config Access denied warning；未修改部署，因此未运行 Docker build/runtime。
+
 ## 下一开发日
 
-MigrationLens Day 13 — ZIP Guard 保持 `planned`，尚未开始。它只负责上传 ZIP 的路径、
-类型、成员数、大小、压缩比、编码和清理边界，不开始 AST scanner、Agent 或 locked
-benchmark。P0 明确不采用 cross-encoder reranker；20 条 locked retrieval questions 仍须
-等待人工复核、hash 与 frozen commit，不能在 Day 13 运行。
+MigrationLens Day 14 — AST 基础与符号表保持 `planned`，尚未开始。它只能在 ZIP Guard
+context 内读取稳定排序、已验证的普通 Python 文件；Day 13 没有提前实现 AST、八类规则、
+Agent 或业务 API。P0 明确不采用 cross-encoder reranker；20 条 locked retrieval
+questions 仍须等待人工复核、hash 与 frozen commit，不能在 Day 14 自动运行。
 
 ## 项目文档
 
@@ -618,6 +682,7 @@ benchmark。P0 明确不采用 cross-encoder reranker；20 条 locked retrieval 
 
 Day 10 已验证固定 revision 的真实模型与 62-point Qdrant index；Day 11 已验证正式
 artifact 上的 BM25 与真实 Dense + RRF hybrid 调用链；Day 12 已取得明确标注的 12 题
-dev 三路指标。但 20 题 locked 评测、CI、样本量和负载测试等发布证据仍未完成，因此
+dev 三路指标；Day 13 已验证 ZIP Guard 的攻击拒绝、硬限制、受控提取和 cleanup。但
+AST/规则尚未开始，20 题 locked 评测、CI、样本量和负载测试等发布证据仍未完成，因此
 MigrationLens 尚未达到可写入简历的发布门槛。不得把 FakeEmbedding、smoke、dev 指标、
 目标阈值、计划数量或未运行命令描述为 locked 结果、生产检索质量、GPU 性能或发布证据。

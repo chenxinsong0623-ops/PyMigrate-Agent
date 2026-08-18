@@ -1783,3 +1783,255 @@ locked evaluation = `NOT RUN`。没有 locked Recall/MRR、没有 locked 调参�
 cross-encoder reranker。ZIP Guard、AST scanner、八类扫描规则、import graph、五个
 Agent tools、LangGraph Agent、Citation Guard、业务 API、报告表、CI、Locust、P1 与 WDI
 仍未实现。Day 13 只从 ZIP Guard 开始，不能提前运行 locked 或开始 Agent。
+
+## 2026-08-18：MigrationLens Day 13 —— ZIP Guard 安全信任边界
+
+状态：`completed`（实现、89 个定向 case、完整回归与真实临时 ZIP smoke 已完成）
+
+### 1. 本日唯一目标与边界
+
+Day 13 只把不可信 ZIP 转换为 Day 14 可安全只读的 validated Python files：
+
+```text
+untrusted ZIP
+  -> compressed-input bound
+  -> validate every ZipInfo
+  -> bounded read every regular file
+  -> validate selected Python UTF-8/LOC
+  -> controlled extraction of selected Python only
+  -> context-scoped cleanup
+```
+
+没有调用 `extract()`/`extractall()`，没有 import、compile、exec、eval 或 AST parse 上传
+代码，没有安装用户 dependency，也没有修改源码。Day 12 的 20 条 locked retrieval
+candidates 没有进入 Retriever，locked evaluation 继续 `NOT RUN`。
+
+### 2. 开发前基线与命令调用失败
+
+开发前 branch=`main`，HEAD 为
+`2458d41 feat: add Day 12 retrieval evaluation benchmark`，`git status --short` 无输出。
+使用指定 `D:\conda_envs\pymigrate-agent\python.exe` 实际得到：
+
+- `python -m pip check`：`No broken requirements found.`；
+- `python -m pytest -q`：`380 passed, 2 warnings in 4.30s`；
+- `python -m ruff check .`：`All checks passed!`；
+- `python -m ruff format --check .`：`60 files already formatted`；
+- `git diff --check`：退出码 0。
+
+第一次并行脚本把 quoted exe path 直接置于 PowerShell 行首，没有加调用运算符 `&`，
+四条 Python 命令都得到 ParserError，解释器没有启动。修正为
+`& 'D:\conda_envs\pymigrate-agent\python.exe' -m ...` 后取得以上真实基线。这个失败
+说明“命令文本出现过”不等于工具实际运行；证据必须检查 exit code 和真实 stdout。
+
+### 3. 为什么不能直接 extractall
+
+`extractall()` 不能替代产品自己的安全契约。即使标准库版本对部分路径做处理，它也不
+同时证明 mixed-separator traversal、Windows drive/UNC、symlink/special type、casefold
+duplicate、祖先文件冲突、七项资源上限、非 Python 成员、UTF-8、LOC 和跨整个 ZIP 的
+all-or-nothing 语义。先提取再检查还会在后续成员失败时留下前几个用户文件。
+
+Day 13 因而只用 `ZipFile.infolist()` 和 `ZipFile.open()` 做受控读取；任务目录在全部
+metadata、实际 bytes、CRC、Python encoding/LOC 都通过后才创建。
+
+### 4. Compressed input、metadata 与实际 bytes 三层限制
+
+第一层以 64 KiB chunk 读取 compressed upload，最多读取上限 `2 MiB + 1`；超过即停止，
+也避免验证期间 archive path 被替换后不同阶段读取不同 bytes。2 MiB 的小上限使把完整
+compressed bytes 固定在内存中可控。
+
+第二层检查全部 central-directory metadata：200 members、1 MiB/member、10 MiB total、
+ratio 100、compression type 和 encryption。`compressed_size==0 && file_size==0` 是合法
+空成员；`compressed_size==0 && file_size>0` 按无限 ratio fail closed，不做除零。
+
+第三层不只信任 metadata。每个普通文件都通过 `ZipFile.open()` 以最多 64 KiB 流式读到
+EOF，实际逐成员和累计 bytes 再比较 hard limits 与 metadata；读到 EOF 同时触发 CRC
+验证。只有 selected Python payload 在受 10 MiB 总上限约束下暂存，非 Python bytes
+验证后立即丢弃。
+
+### 5. 跨平台 canonical path 与 destination identity
+
+ZIP 名称以 `/` 为标准，但恶意输入会用 `\` 或 mixed separators 绕过只看 `/` 的判断。
+`canonicalize_member_path()` 先用 `PureWindowsPath` 拒绝 drive/root/UNC，再统一 separator，
+按组件拒绝精确 `..`；`model..py` 不会因包含两个点而误拒绝。空组件和 `.` 可安全折叠，
+规范化后必须仍有真实相对组件。
+
+Windows ADS 使用 `:`，保留设备名、尾随 dot/space 和控制字符都可能产生不可移植或
+alias destination，因此 fail closed。destination collision 不只比较原字符串，而使用
+每个组件的 NFKC + casefold；`pkg/a.py`、`./pkg/a.py`、`pkg/A.py` 和 Unicode alias 不会
+在大小写不敏感文件系统上静默覆盖。
+
+还必须检查祖先关系：普通文件 `pkg` 与 `pkg/model.py` 无论哪个先出现都冲突；显式目录
+`pkg/` 与 `pkg/model.py` 则合法。controlled write 使用 exclusive create，写入前后都
+重新 resolve 并证明 target 严格位于随机 task root。
+
+### 6. Unix/DOS member type 与 symlink
+
+文件名后缀不能证明成员类型。Unix ZIP 的 `external_attr >> 16` 可能编码
+`S_IFREG/S_IFDIR/S_IFLNK/S_IFIFO/device/socket`；DOS metadata 还有 directory 与 volume
+flags。Day 13 只允许可确认普通文件或正常目录，拒绝 symbolic link、FIFO、character/
+block device、socket、volume label、加密成员、未知 compression 和彼此冲突的目录 marker。
+
+普通 Windows ZIP 可能没有 Unix type bits，因此 `type=0` 配合非目录名称可作为普通文件，
+目录名称/DOS flag 可作为目录；但只要提供明确 special type 或冲突 metadata 就拒绝。
+判断必须发生在提取前，不能先落盘再跟随 symlink 检查。
+
+### 7. Safe non-Python 与 ignored directory
+
+README、JSON、image 和 binary 可以不进入 Scanner，但仍属于 untrusted ZIP。它们同样
+参与 path/type/member/size/total/ratio/duplicate 和实际流式读取；恶意
+`../README.md` 会使整个 ZIP 失败。非 Python binary 不做 UTF-8 decode，因此合法
+`0xff` bytes 不会错误拒绝。
+
+`.venv`、`venv`、`site-packages`、`node_modules`、`.git` 使用大小写无关的精确路径
+组件匹配；`venv-tools` 不会被 substring 误忽略。ignored Python 不计入最终 Scanner
+files/LOC，但其安全与资源校验完全不跳过。
+
+### 8. Python UTF-8、BOM 与 LOC
+
+selected Python 使用 `payload.decode("utf-8-sig", errors="strict")`。普通 UTF-8 和开头
+UTF-8 BOM 都可接受；BOM 只在验证/统计文本视图中移除，受控提取保留原始 bytes 与
+SHA256，不修改用户源码。任何非法 Python UTF-8 使整个 ZIP 在创建 task root 前失败。
+
+LOC 固定为 `len(decoded_text.splitlines())`：空文件 0 行；`x` 与 `x\n` 都是 1 行；
+单独 `\n` 为 1 行；`x\n\n` 为 2 行；CRLF/CR 使用 `splitlines()` 的确定性语义。该定义
+只做资源统计，不等于 Day 14 的 AST/source-location 语义。
+
+### 9. Random task ownership 与 cleanup
+
+`ZipGuard` 是单次 context manager。validate-all 成功后才用 `tempfile.mkdtemp()` 创建
+`migrationlens-zip-<random>`，返回的 `ZipGuardResult` 只在 context 内有效；Day 14 应
+在 context 内读 `task_root / relative_path`。正常退出、consumer 异常和 controlled
+write 失败都删除 exact root。
+
+cleanup 只接受创建时记录的 direct child、受控 prefix、真实目录；symlink/reparse point
+不跟随，父目录与相邻文件不删除，重复调用安全。安全复核新测试真实发现：初版在
+`shutil.rmtree` 瞬时失败后仍在 `finally` 清空 `_task_root`，导致用户源码目录残留且无法
+重试。修复为“删除成功后才清空 ownership”；回归测试先注入 OSError，确认目录和 ownership
+保留，再恢复 `rmtree` 并成功清理。
+
+### 10. Strict result、error 与 logging boundary
+
+`ZipGuardLimits`、`ValidatedPythonFile` 和 `ZipGuardResult` 都是 strict/frozen/
+extra-forbid Pydantic v2 models。limits 允许测试收紧阈值，但任何字段都不能超过 SPEC
+hard maximum，bool 也不能冒充 int。结果按相对路径排序，记录 size、LOC、SHA256、
+member/file/directory/ignored/total inventory，不记录源码正文或上传者路径。
+
+预期 unsafe input 使用固定 `ZipGuardErrorType`。日志 event 是 `ZIP archive rejected`，
+extra 只有 `component=zip_guard` 与 `error_type`；测试用含 secret 的 member/path/异常证明
+它们不进入 log 或异常文本。CRC/畸形 archive 等底层原文被脱敏；程序错误、
+`KeyboardInterrupt` 和 `SystemExit` 在 cleanup 后继续传播。
+
+### 11. 测试先行、真实失败与修复
+
+第一条红测实际运行：
+
+```text
+ModuleNotFoundError: No module named 'app.security'
+```
+
+实现后首轮为 `79 passed, 1 failed`。唯一失败不是生产日志泄漏，而是 pytest 默认
+`caplog.text` 不渲染 `LogRecord` extra；测试改为直接检查 record 的 `component` 和
+`error_type`，继续要求 message 中没有 secret/path。
+
+扩展真实边界测试时，最初 10 MiB fixture 使用 128 KiB pseudo-random block 重复；
+DEFLATE 32 KiB window 无法利用相距 128 KiB 的重复，compressed ZIP 达 10.49 MiB，先触发
+2 MiB upload gate。改用 16 KiB block 在每个 1 MiB member 内重复 64 次，得到 ratio 低于
+100、archive 小于 2 MiB，从而真正隔离验证 10 MiB exact 与 +1。另一个失败即上述 cleanup
+ownership bug，生产实现修复而不是放宽测试。
+
+Ruff format 做机械排版；最终 Ruff check 曾只报告 `logging/lzma` import 顺序，按工具建议
+调整，没有改行为或断言。
+
+### 12. 89 个 Day 13 case 覆盖
+
+pytest collection 为 89 items，覆盖：
+
+- safe path、`./`、nested、backslash 与 deterministic ordering；
+- traversal、多级 mixed traversal、POSIX/Windows/UNC absolute、NUL/ADS/reserved path；
+- normalized/casefold/Unicode duplicate、祖先 file 与 directory collision；
+- Unix symlink/FIFO/character/block/socket、Windows ordinary metadata、malicious directory；
+- 2 MiB upload exact/+1、200 members exact/+1、1 MiB exact/+1、10 MiB exact/+1、
+  ratio 100 boundary/bomb、zero compressed-size、200 selected Python exact/stricter +1、
+  50,000 LOC exact/+1；
+- UTF-8、UTF-8 BOM、非 UTF-8 Python、非 Python binary；
+- ignored components 与 non-substring match，ignored member 仍超限失败；
+- malformed/CRC、validate-all-before-write、write/consumer/cleanup failure、random root、
+  idempotent scoped cleanup、safe logging、constructor no I/O 与上传代码不执行。
+
+实现与文档同步前实际结果：
+
+- Day 13 定向：`89 passed in 1.61s`；
+- 完整 pytest：`469 passed, 2 warnings in 5.15s`；
+- Ruff format check：`63 files already formatted`；
+- `git diff --check`：退出码 0；
+- Ruff check 第一次只剩 import order，修正后将在最终共同门禁重跑。
+
+全部文档同步后使用指定解释器最终重跑：
+
+- Day 13 定向：`89 passed in 1.30s`；
+- 完整 pytest：`469 passed, 2 warnings in 4.77s`；
+- Ruff check：`All checks passed!`；
+- Ruff format check：`63 files already formatted`；
+- `git diff --check`：退出码 0；
+- `python -m pip check`：`No broken requirements found.`；
+- `docker compose config --quiet`：退出码 0，输出两条既有 Docker
+  `config.json` Access denied warning。
+
+Day 13 没有修改部署文件，因此没有为本日运行 Docker build/up/health/down，也不把静态
+Compose config 描述为容器 runtime 证据。
+
+两条 warning 仍是既有 Starlette TestClient deprecation 与 qdrant-client server-version
+compatibility warning，没有删除、过滤或改写。
+
+### 13. 真实临时 ZIP smoke
+
+显式 Python 命令只用标准库在系统临时目录创建无害 fixture。正常 ZIP 含
+`pkg/model.py` 与 README；Python 源文本包含写 sentinel 和抛 RuntimeError 的语句。
+ZIP Guard 返回 Python paths=`["pkg/model.py"]`、files=1、LOC=3、non-Python ignored=1；
+task root 在 context 内存在、退出后不存在，sentinel 始终不存在。
+
+第二个 ZIP 先写 `good.py`，再写 `../README.md`；结果为
+`traversal_error="invalid_member_path"`，未进入 context。最终
+`task_directory_leftovers=[]`。这证明真实 ZIP parse/validate/write/cleanup 调用链，
+但不是 AST、规则、API、Docker 或 locked benchmark 证据。
+
+### 14. 修改、决策与未实现边界
+
+新增 `app/security/__init__.py`、`app/security/zip_guard.py`、
+`tests/unit/test_zip_guard.py`；同步当前任务、README、学习日志和每日计划；向 append-only
+决策日志追加 D-016。没有新增 dependency 或环境变量，未修改 SPEC/AGENTS/Docker；系统
+`tempfile` 目录不需要 `.gitignore` 规则。
+
+Day 14 的稳定输入是 context 内的 absolute random `task_root` 加按 relative path 排序的
+`ValidatedPythonFile(relative_path, size_bytes, line_count, sha256)` 及安全 inventory。
+Day 13 没有实现 AST、symbol table、alias/BaseModel tracking、八类规则、一跳 import、
+Agent、Citation Guard、业务 API 或源码修改。
+
+### Day 13 后应能回答的 26 个问题
+
+1. 为什么标准库 `extractall()` 仍不能替代产品安全契约？
+2. Zip Slip 如何通过 `../`、backslash 和 mixed separator 发生？
+3. canonical relative path 与最终 resolved destination 分别证明什么？
+4. 为什么 Windows drive/UNC 必须在非 Windows 平台也显式判断？
+5. 为什么 `model..py` 合法而精确 `..` 组件非法？
+6. 为什么 symlink 必须从 metadata 在提取前拒绝？
+7. Unix mode 与 DOS directory flag 的差异是什么？
+8. compressed upload size 为什么不能防住 ZIP bomb？
+9. compressed size、uncompressed size 和 ratio 各限制什么？
+10. `compressed_size==0` 应如何避免除零与放过异常成员？
+11. 为什么 metadata 通过后还要有界读取实际 bytes？
+12. CRC 验证补充了什么，不能替代什么？
+13. 为什么所有成员必须 validate-all-before-write？
+14. normalized duplicate destination 为什么会导致 overwrite？
+15. ancestor file 与 child path 为什么是 directory conflict？
+16. 为什么 ignored directory 不能跳过资源和安全校验？
+17. 为什么非 Python binary 不应做 UTF-8 decode？
+18. 为什么 Python 使用严格 UTF-8，而不是 replacement character？
+19. UTF-8 BOM 为什么可接受且提取时要保留原 bytes？
+20. 当前空文件、末尾换行和连续空行如何计 LOC？
+21. controlled extraction 与 extract-all 的核心区别是什么？
+22. 为什么随机 task directory 必须有明确 owner？
+23. `try/finally` cleanup 为什么仍需测试删除失败路径？
+24. fail closed 与吞掉编程错误有什么区别？
+25. 安全错误为何只能记录白名单 `error_type`？
+26. Day 13 与 Day 14 的资源生命周期和职责边界是什么？

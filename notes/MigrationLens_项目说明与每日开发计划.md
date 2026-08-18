@@ -1,6 +1,6 @@
 # MigrationLens 项目说明与每日开发计划
 
-更新时间：2026-08-12
+更新时间：2026-08-18
 产品：MigrationLens — Pydantic v1→v2 升级影响分析 Agent
 权威范围：`SPEC.md`
 
@@ -372,6 +372,46 @@ Retriever：locked evaluation=`NOT RUN`。P0 明确不采用 cross-encoder reran
 没有实现 reranker、ZIP/AST、Agent 或 API。完成后 Qdrant 容器恢复 stopped、volume
 保留；Day 13 ZIP Guard 仍为 `planned`。
 
+### 2.12 MigrationLens Day 13
+
+状态：`completed`
+计划与实际开发日期：2026-08-18
+
+Day 13 新增独立 `app/security/zip_guard.py`，把不可信 ZIP 收敛为 context-scoped、
+稳定排序的 validated Python files。七项冻结 hard limits 为 compressed upload 2 MiB、
+200 members、1 MiB/member、10 MiB total、ratio 100、200 selected Python 和 50,000 LOC；
+不能由环境变量调大，严格 limits 对象只允许收紧。
+
+ZIP 压缩 bytes 先有界读入最多 2 MiB。所有 `ZipInfo` 都先经过跨平台 path、Unix/DOS
+type、encryption、compression、size/total/ratio、duplicate 和 file/directory conflict
+校验；全部普通文件再以 64 KiB 有界流读到 EOF，复核实际 bytes 和 CRC。只有所有成员、
+Python UTF-8 与 LOC 都通过后才创建随机任务目录，并 exclusive-create selected `.py`。
+安全非 Python、ignored directory 中的成员也完整验证和读取，只是不进入分析集合。
+
+路径规则同时处理 `/`、`\` 和 mixed separators，拒绝 absolute、drive/UNC、`..`、NUL、
+Windows ADS/保留名；destination 用 NFKC + casefold 识别 alias。成员类型只允许普通文件
+和正常目录，拒绝 symlink、FIFO/device/socket、volume label、冲突目录 metadata 和未知
+compression。Python 使用严格 `utf-8-sig`，允许开头 BOM 并原样保留 bytes；LOC 使用
+`splitlines()`，空文件为 0，末尾单换行不额外加行。
+
+`ZipGuardResult` 在 context 内提供随机绝对 task root、relative path、size、LOC、SHA256
+和安全 inventory。正常退出、consumer 异常或受控写入失败都只清理本次随机目录；cleanup
+幂等、不跟随 symlink/reparse point，瞬时删除失败保留 ownership 以便重试。错误日志仅含
+固定 event、`component=zip_guard` 和白名单 `error_type`，不含源码、成员名、宿主路径或
+原始异常。
+
+测试先行红测为缺少 `app.security` 的 collection error。安全复核后 Day 13 定向测试为
+`89 passed in 1.61s`，实现与文档同步前完整回归为
+`469 passed, 2 warnings in 5.15s`。真实临时 ZIP smoke 证明正常 Python inventory、
+安全 README 忽略、`../README.md` 整包拒绝、上传 Python 中 sentinel 语句未执行，以及
+context 后任务目录零残留。全部文档同步后最终重跑为 Day 13
+`89 passed in 1.30s`、完整 `469 passed, 2 warnings in 4.77s`；Ruff、63-file format、
+diff、pip 与 Compose config 均通过。Compose 仅保留两条既有 Docker config warning，
+未运行未修改部署的 Docker runtime。
+
+Day 13 没有实现 AST、symbol table、八类规则、import graph、Agent、分析 API 或 locked
+evaluation；Day 14 仍为 `planned`，只能在 ZipGuard context 内消费本日稳定输入。
+
 ## 3. P0、P1 和不做范围
 
 ### 3.1 P0 必须完成
@@ -475,7 +515,8 @@ flowchart LR
 `reporting/` 和 `storage/`。当前真实代码包含基础 `app/api`、`app/core`、
 `app/storage/sqlite.py`、snapshot/chunk/dense index 所在的 `app/ingestion`、真实
 E5/Qdrant/BM25/Dense/Hybrid 所在的 `app/retrieval`，以及 dev evaluator 所在的
-`app/evaluation`；尚无 ZIP Guard、scanner、agent 或业务 reporting 实现。Day 12 的
+`app/evaluation` 和 Day 13 ZIP Guard 所在的 `app/security`；尚无 scanner、agent 或
+业务 reporting 实现。Day 12 的
 `reports/retrieval_dev_*` 是项目评测 artifact，不是分析报告存储。
 
 ## 6. 数据与文档快照
@@ -726,6 +767,8 @@ P0 响应中的说明性文本只使用 `zh-CN`。同步分析响应至少遵守
 
 ### 9.3 ZIP 安全
 
+Day 13 已按 D-016 实现并验证以下边界；该实现尚未接入未来业务分析 API：
+
 - 压缩文件最大 2 MiB；
 - 成员最多 200；
 - 单个解压文件最大 1 MiB；
@@ -739,6 +782,11 @@ P0 响应中的说明性文本只使用 `zh-CN`。同步分析响应至少遵守
 - 不 import、不调用、不修改上传代码；
 - 结束后清理随机任务目录；
 - 日志不记录源码正文、私有路径或异常原文。
+
+实现采用 validate-all-first，而不是 extract-all-then-check。全部普通文件都做有界实际
+读取；只在所有成员、Python UTF-8/LOC 都通过后写 selected Python。硬上限不能通过
+Settings/.env 放宽；`ZipGuard` context 结束即清理随机 task root，Day 14 必须在其生命
+周期内消费 `ZipGuardResult`。
 
 测试必须覆盖正常 ZIP、Zip Slip、绝对路径、软链接、zip bomb/压缩比、大小、
 成员数、重复路径和非 UTF-8 Python。
@@ -862,7 +910,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 10 | 计划 2026-08-14；实际 2026-08-12 | `completed` | e5 稠密索引与检索 | fixed-revision real adapter、62 passage points、provenance payload、top-8、ready transition | 专项 138 passed；完整 285 passed；真实 CPU model、Qdrant 62/62 IDs、重复索引、三查询、ready=200 | e5 语义检索与索引完整性 | BM25、RRF、hybrid、locked |
 | MigrationLens Day 11 | 计划 2026-08-15；实际 2026-08-13 | `completed` | BM25 + RRF 服务 | 项目内 BM25 top-8、复用 dense top-8、RRF 去重、完整 ranking 和 top-3 | 新增 45 cases；完整 330 passed；真实 6 BM25 + 4 Dense/Hybrid smoke；共同门禁 | lexical/dense 互补 | reranker、Agent、locked 调参 |
 | MigrationLens Day 12 | 计划 2026-08-17；实际 2026-08-14 | `completed` | dev 检索集与评分 | 32 题 schema、12 dev、20 locked candidates 隔离、同 query 三路 Recall@1/3 与 MRR@5、dev artifacts | 专项 50 passed；完整 380 passed；真实 E5/Qdrant 12 题 dev：BM25 0.916667/1.0/0.944444，Dense 0.416667/0.666667/0.555556，Hybrid 0.666667/0.833333/0.766667；locked NOT RUN；共同门禁 | 评测分割、泄漏与消融 | locked 运行、P0 禁用的 reranker、ZIP/AST |
-| MigrationLens Day 13 | 2026-08-18 | `planned` | ZIP Guard | 全部资源/路径/成员规则、安全非 Python 忽略、清理 | 正常、穿越、绝对路径、链接、bomb、超限、编码；共同门禁 | 压缩包信任边界 | import/执行/修改代码、AST |
+| MigrationLens Day 13 | 2026-08-18 | `completed` | ZIP Guard | 全部资源/路径/成员规则、有界实际读取、安全非 Python 忽略、selected Python 受控提取与 cleanup | 89 cases；真实 2/1/10 MiB、200/50k、ratio/path/type/encoding/lifecycle；临时 ZIP smoke；共同门禁 | 压缩包信任边界 | import/执行/修改代码、AST |
 | MigrationLens Day 14 | 2026-08-19 | `planned` | AST 基础与符号表 | inventory、编码/语法、alias、BaseModel、类型线索、模块映射、registry | 空/BOM/语法/alias/稳定顺序；共同门禁 | AST 与确定性 schema | 八类规则、一跳 import、LLM |
 | MigrationLens Day 15 | 2026-08-20 | `planned` | 前四类规则 | 配置、验证器、Settings、根模型；按本日规则增量建立候选 fixture | 每类 3 正2负1边界、行号 gold、同名负例；共同门禁 | 上下文敏感匹配 | 后四类、一次性补齐全部 fixture、Agent |
 | MigrationLens Day 16 | 2026-08-21 | `planned` | 后四类规则 | 方法、数据加载、Field、GenericModel 和浅层 receiver；继续增量建立候选 fixture | 正负/alias、普通 `.dict()` 不高置信、low 不成 finding；共同门禁 | 置信度与人工复核 | 一跳 import、一次性补齐全部 fixture、完整类型推断 |

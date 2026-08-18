@@ -280,3 +280,35 @@
 - 影响：`app/evaluation/retrieval.py`、`app/evaluation/retrieval_dev.py`、两份 question
   artifacts、三个 `reports/retrieval_dev_*` artifacts、Day 12 测试与说明文档必须遵守
   该契约。最终 locked 仍只能在人工复核、hash、frozen commit 后按计划单次运行。
+
+## D-016 — Day 13 ZIP Guard 全量预验证与临时目录所有权
+
+- 日期：2026-08-18
+- 状态：已接受
+- 决策：
+  - ZIP Guard 将冻结的七项上限实现为不能通过普通运行时配置放宽的 hard limits；
+    `ZipGuardLimits` 只允许调用方为测试或更严格部署收紧阈值，不能突破 SPEC 最大值；
+  - 压缩输入先以 2 MiB+1 的有界读取固定到内存，随后对全部 `ZipInfo` 做路径、类型、
+    encryption、size、总量、ratio、duplicate 和 file/directory conflict 校验；所有普通
+    文件再以有界流式读取核对实际 bytes 与 CRC。只有全部成员、Python UTF-8 和 LOC
+    都通过后，才创建随机任务目录并 exclusive-create 选中的普通 `.py` 文件；
+  - 路径规范化同时把 `/` 与 `\` 视为 separator，拒绝 absolute、drive/UNC、`..`、
+    NUL、Windows ADS/保留名和不可移植 alias；destination collision 使用 NFKC、casefold
+    与组件序列比较。Unix mode、DOS directory flag 与文件名 marker 冲突时 fail closed；
+  - `.venv`、`venv`、`site-packages`、`node_modules`、`.git` 按路径组件、大小写无关地
+    排除在分析集合外，但其中成员及安全非 Python 成员仍完整参与预验证和实际流式读取；
+  - Python 使用严格 `utf-8-sig` 解码做编码与 LOC 校验，允许开头 UTF-8 BOM，但受控
+    提取保持原始 bytes。LOC 固定为 `len(decoded_text.splitlines())`：空文件为 0，末尾
+    单个换行不增加额外空行；
+  - `ZipGuard` context manager 独占本次随机目录。Day 14 必须在 context 存活期间消费
+    `ZipGuardResult.task_root` 与按相对路径排序的 `ValidatedPythonFile`；退出或任意失败
+    后只删除该精确目录。cleanup 失败保留所有权以便安全重试，不跟随 symlink/reparse
+    point，也不删除父目录或相邻路径。
+- 原因：仅依赖 `extractall()`、central-directory metadata 或提取后检查会产生 Zip Slip、
+  ZIP bomb、symlink、duplicate overwrite、部分提取和清理越界风险。validate-all-first 与
+  context-scoped ownership 让 Day 14 获得可复查的最小输入，同时不运行、import、解析 AST
+  或持久化用户源码。
+- 替代方案：未采用 extract-all-then-scan、固定共享目录、环境变量可放宽上限、只检查
+  `.py`、只信任 `file_size`、UTF-8 失败后替换字符，或在 Day 13 提前实现 AST Scanner。
+- 影响：`app/security/zip_guard.py`、Day 13 测试和 Day 14 Scanner 的输入生命周期必须
+  遵守该契约；不改变 Day 8–12 snapshot、chunk、index、retrieval 或 locked 边界。
