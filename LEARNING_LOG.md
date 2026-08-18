@@ -1581,3 +1581,205 @@ Hybrid query。`root_validator migration` 的 Hybrid top-3 component ranks 分�
 (1,1)、(2,2)、(3,4)，RRF scores 为 0.032786885、0.032258065、0.031498016。
 Qdrant container/network 已 `docker compose down`，命名数据卷保留。上述是 smoke 和
 工程门禁，不是正式检索效果证据。
+
+## 2026-08-14：MigrationLens Day 12 —— Dev 检索集、三路评分与 Evaluator
+
+状态：`completed`（离线实现、完整门禁与真实 12 题 dev 三路评测均完成）
+
+### 1. 为什么 smoke 不等于 evaluation
+
+Day 11 的 smoke 证明一条手写 query 能经过 BM25，或经过 E5、Qdrant、Dense 与 RRF，
+并返回人工可读的 heading。它没有预先独立建立的题集和 gold，也没有固定指标，所以
+不能回答整组问题上的 Recall 或 MRR。Day 12 在运行 Retriever 前先固定 question、split、
+gold 与 metric semantics，才把“能检索”变成“能比较检索质量”。
+
+### 2. Dev 与 locked 的职责
+
+Dev 是允许开发期间反复运行的 12 题集合，可以用于 evaluator 调试、query 格式诊断和
+三路消融。20 条 locked candidates 是未来 holdout；Day 12 只读取它们做 schema、数量、
+类别和 contamination 静态校验，没有传入任何 Retriever。locked 必须等人工复核、hash、
+frozen commit 后单次运行，不能用于调参数或修行为。
+
+### 3. Data leakage 与模板族隔离
+
+如果先看 Hybrid rank 1 再写 gold，或把 dev 问句换几个词放进 locked，评测会间接包含
+被测系统或开发题的信息，分数不再代表未见问题。两份 artifact 因此物理分开；question
+ID、NFKC + casefold + whitespace normalized 文本和 template family 跨 split 不交叉。
+同一迁移规则可以同时出现，但表达模板不同；自动 template-family check 之外还人工审查
+了机械改写风险。
+
+### 4. Gold heading 的独立来源
+
+Gold 在真实评测前直接查看固定 Day 8 `migration.md` 与 Day 9 structured headings 建立。
+八类主题分别对应 BaseModel、config、validators、Field、BaseSettings、GenericModel 等
+官方 section；data loading 与 root model 的说明都确实位于 BaseModel section。Gold 使用
+稳定 `heading_path`，不使用 chunk 数组 ordinal；continuation chunks 共享 heading 时仍
+属于同一语义 gold。loader 还确认每个 gold 都真实存在于正式 artifact。
+
+### 5. Evaluation-only rule category
+
+Scanner 和 rule registry 尚未实现，所以本日没有凭空创建未来 production `rule_id`。
+`RetrievalRuleCategory` 只是 benchmark 的八类稳定 key，并在文档和 D-015 明确限定用途。
+32 题恰好每类 4 条；dev=12，locked candidates=20。
+
+### 6. Query composition
+
+`RetrievalQuestion -> render_query()` 按固定顺序组合 rule category、old API、可选
+AST-like context 和 user question。Unicode 使用 NFKC，内部 whitespace 收敛；空 context
+不输出空标签。renderer 只产生 raw query，并拒绝调用方预加 `query:`/`passage:`。同一
+字符串同时交给 BM25、Dense 和 Hybrid，使三路对比不因 query 不同而失真；E5 的
+`query:` 仍只由既有 `EmbeddingRequest` 边界添加一次。
+
+### 7. Recall@1、Recall@3 与 MRR@5
+
+每题只有一个非空 gold heading：
+
+- rank 1 heading 等于 gold，Recall@1=1；
+- 前 3 任一 heading 等于 gold，Recall@3=1；
+- 前 5 第一个 gold rank 为 `r`，reciprocal rank=`1/r`；前 5 没有则为 0；
+- rank 2 的 MRR 贡献是 0.5，rank 5 是 0.2，rank 6 虽记录 first rank 但 MRR@5=0；
+- duplicate gold heading 只使用 first relevant rank；空 results 是正常 miss。
+
+最终分别对 12 题取算术平均，不制造 “overall retrieval accuracy”。
+
+### 8. 为什么 Hybrid 必须使用完整 results
+
+Day 11 的 `top_results` 是未来 Agent consumer view，固定只有 3 条；MRR@5 必须检查第
+4、5 名。Evaluator 因此使用完整 `HybridSearchResponse.results`。本轮 BaseSettings
+问题的 Hybrid gold 正好在 rank 5，若错误使用 top-3，无法区分 rank 5 与完全未命中。
+final top-3 与 evaluation depth 5 解决的是不同问题，并不矛盾。
+
+### 9. 三路独立评分与 retrieval ablation
+
+BM25、Dense、Hybrid 分别输出 Recall@1、Recall@3、MRR@5。这样才能判断 lexical、
+semantic 与 rank fusion 各自贡献；只报告 Hybrid 会掩盖某一路退化。本轮再次确认 BM25
+raw score 与 cosine score 量纲不同，不能直接比较或相加；RRF 只使用 component rank。
+
+### 10. Miss 与 infrastructure failure
+
+合法查询正常返回 `()`，或返回候选但 gold 不在其中，属于 retrieval miss，可以贡献 0。
+Qdrant timeout、E5 load failure、invalid artifact、rank/provenance/query mismatch 则说明
+本次质量测量没有可靠完成，必须显式失败。Evaluator 不捕获并改写这些异常；全部 12 题
+三路成功前不会调用 artifact writer，因此不能用基础设施故障污染 Recall。
+
+### 11. 可注入与离线普通测试
+
+纯 metric functions 只读取 rank、chunk ID 与 heading。三路 orchestrator 注入最小
+Protocol，测试使用 recording fake/stub；普通 pytest 不加载模型、不启动 Docker、
+不访问 Hugging Face 或 Qdrant。真实 adapter 只由显式
+`python -m app.evaluation.retrieval_dev` 触发，而且入口要求两个 offline 环境变量。
+
+### 12. Machine-readable artifact 与 provenance
+
+CSV 保存三路 aggregate；details JSON 保存 36 个 question/system 明细和最小 ranked
+references，不复制官方 chunk text；manifest 保存 question/chunk/snapshot/output hashes、
+source ref/commit、E5 model/revision/dimension/max length、BM25/Dense/RRF/Hybrid 参数、
+collection、Git HEAD/dirty、Python 和 runtime versions。三份文件作为一个事务发布；
+第二个文件写入失败时不能留下看似完整的部分结果。
+
+Dev questions SHA256 为
+`89a2602fec98c12ced414539ba0152409a85a368e6cbdbf309ed9af50403e9c7`；locked candidates
+SHA256 为 `df0b46bb90c96f7f2967ceb9b1439e6659a202473e1dc679642b4f492cce7f56`。
+Metrics/details SHA256 分别为
+`e6d69e75edc2e7324475e4da3c0440658f3dbd1f54cb0e28fab71459fc7dd43d` 和
+`4aa85eba4f7ef236a0a863e559bda39db0c1ac1d3f29b8c4b1792f2f3b372c79`；manifest
+实际 hash 为 `966a2de897469f423be4a30e0935653829308972e0792ca9f9204dc4327f4a5f`。
+
+### 13. 第一次红测与实现修复
+
+测试先行的第一次运行在 collection 阶段产生 3 个
+`ModuleNotFoundError: No module named 'app.evaluation'`。实现 schema、data loader、
+contamination validation、renderer、pure metrics、evaluator 和 dev-only CLI 后，第一轮
+为 33 passed；artifact/metadata 和额外边界补齐后为 49 passed。
+
+第一次真实 CLI 没有发布 `reports/`：BM25 的完整候选包含 Day 9 合法 preamble chunk，
+其 `heading_path=()`；新 `RankedReference` 错误要求所有 candidate heading 非空，触发
+Pydantic ValidationError。Gold 仍必须非空，只修正 candidate 引用允许空 path，并增加
+preamble non-hit 单测；专项最终 50 passed。没有据真实分数修改 query、gold、chunk、
+BM25、Dense 或 RRF。
+
+### 14. 真实 E5/Qdrant 调用链
+
+先确认 6333 唯一相关容器为本仓库 `migrationlens-day10-verify` 且处于 stopped；启动后
+Qdrant healthz 通过，collection green、62 points、384/Cosine。设置
+`HF_HUB_OFFLINE=1` 与 `TRANSFORMERS_OFFLINE=1` 后，Day 10 builder 真实从 fixed cache
+加载 `intfloat/multilingual-e5-small@614241f...` 到 CPU，以 4 batches 覆盖式 upsert
+并核验 62 IDs，SQLite metadata 为 ready。没有重新下载模型，也没有操作 Dify。
+
+实际 dev 调用链：
+
+```text
+dev.json 的 12 题
+  -> render_query(question) 一次
+  -> BM25.search(raw, top_k=8)
+  -> Dense.search(raw, top_k=8)
+  -> Hybrid.search(raw)
+       -> BM25 top-8 + Dense top-8 -> RRF(k=60) -> full results/top-3
+  -> exact gold heading match
+  -> Recall@1 / Recall@3 / MRR@5
+  -> 3 aggregates + 36 details + manifest
+
+locked_candidates.json 的 20 题
+  -> 只做 schema/count/contamination/gold-exists 静态校验
+  -> NOT EXECUTED
+```
+
+完成后只停止本轮启动的该容器，恢复开发前 stopped 状态；命名 volume 保留。
+
+### 15. 真实 12 题 Dev 结果
+
+| System | Recall@1 | Recall@3 | MRR@5 |
+|---|---:|---:|---:|
+| BM25 | 0.916667 | 1.000000 | 0.944444 |
+| Dense | 0.416667 | 0.666667 | 0.555556 |
+| Hybrid | 0.666667 | 0.833333 | 0.766667 |
+
+这是 12-question dev result，不是 20-question locked benchmark 或 production accuracy。
+Hybrid 优于 Dense，但没有超过 BM25。评测的职责是揭示该事实，而不是保证预设排序。
+
+### 16. 代表性问题诊断
+
+- BM25 优势：Field regex、BaseSettings、parse_raw 和精确配置键都 rank 1；tokenizer 保留
+  dotted/underscore API 信号在小型官方文档上很有效。
+- Dense 优势/持平：BaseModel dict/json、Config、GenericModel 的语义 heading 可 rank 1；
+  但精确 API 问题整体不如 lexical。
+- Hybrid 成功：Dense 的 parse_raw gold rank 4，经 BM25 rank 1 融合后 Hybrid rank 1；
+  Field regex 也从 Dense rank 4 恢复为 Hybrid rank 1。
+- Hybrid 没有改善：`@validator` 的 BM25 gold rank 3、Dense top-8 无 gold，Hybrid 被共同
+  非 gold 候选推到 rank 7；BaseSettings 从 BM25 rank 1 降到 Hybrid rank 5。
+- heading-level 影响：同一 BaseModel heading 有多个 continuation chunks。Metric 将任一
+  相同 heading 视为相关，这符合当前 topic retrieval 任务，但不能评价命中的是该 heading
+  下最精确的 continuation。
+- 所有 36 system/question 调用都返回候选，没有 returned_count=0。Dense 两题 gold 不在
+  top-8 是质量 miss，不是 zero-result 或基础设施 failure。
+
+### 17. E5 truncation 与解释边界
+
+固定 62 passages 中 6 条超过 512-token 模型上限、最大 572；真实 encode 会 truncation。
+它可能影响某些长 continuation 的 semantic evidence，但 12 条 dev 不能估计其因果效应。
+Day 12 没有根据 dev 分数重切 Day 9 chunks，因为那会改变已发布输入和比较基线。
+
+### 18. 为什么本日不做 reranker
+
+冻结 SPEC 明确 P0 不使用 cross-encoder reranker。Day 12 只落实 BM25、Dense、RRF 的
+三路评测，未新增 CrossEncoder/BGE/Cohere/LLM rerank。Reranker 不是当前缺失的 P0
+能力，也不能被用来掩盖本轮 Hybrid 低于 BM25 的事实。
+
+### 19. 实际门禁
+
+- Day 12 专项最终：`50 passed in 0.44s`；
+- 完整 pytest 最终：`380 passed, 2 warnings in 3.32s`；
+- `pip check`：`No broken requirements found.`；
+- Ruff check：`All checks passed!`；
+- Ruff format check：`60 files already formatted`；
+- `git diff --check`：退出码 0；
+- `docker compose config --quiet`：退出码 0，保留两条既有 Docker config warning。
+
+以上是全部项目文档同步后的最终复核结果。
+
+### 20. 仍未实现
+
+locked evaluation = `NOT RUN`。没有 locked Recall/MRR、没有 locked 调参，也没有
+cross-encoder reranker。ZIP Guard、AST scanner、八类扫描规则、import graph、五个
+Agent tools、LangGraph Agent、Citation Guard、业务 API、报告表、CI、Locust、P1 与 WDI
+仍未实现。Day 13 只从 ZIP Guard 开始，不能提前运行 locked 或开始 Agent。

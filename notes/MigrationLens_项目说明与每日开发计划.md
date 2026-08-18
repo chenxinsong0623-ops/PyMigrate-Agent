@@ -335,6 +335,43 @@ Day 11 没有修改 Day 9 artifact、Day 10 dense semantics、`pyproject.toml`�
 reranker、Agent、ZIP/AST 或 API。Day 12 保持 `planned`，明确消费三路独立接口与完整
 ranking metadata。
 
+### 2.11 MigrationLens Day 12
+
+状态：`completed`
+计划日期：2026-08-17
+实际开发日期：2026-08-14
+
+Day 12 新增 strict JSON question schema v1 与 evaluation-only 八类 `rule_category`，
+不提前冻结尚未实现的 scanner production `rule_id`。32 题物理拆分为 12 条 dev 和
+20 条 locked candidates；八类每类总计 4 条，question ID、normalized question text
+与 template family 跨 split 不交叉。Gold 在运行 Retriever 前从固定 Day 8 snapshot 与
+Day 9 headings 独立确认，使用稳定 `heading_path`；loader 还验证 gold 确实存在于正式
+chunk artifact。
+
+确定性 renderer 按固定顺序组合 rule category、old API、可选 AST-like context 和 user
+question，只产生未加 prefix 的 raw query。BM25、Dense、Hybrid 三路接收完全相同的
+query；Hybrid 指标读取完整 `results` 而不是 top-3 consumer view。Recall@1、Recall@3
+与 MRR@5 分别按 exact heading equality 和 first relevant rank 计算，不合并为 overall
+accuracy；infrastructure/contract failure 显式传播，不计为普通 miss。
+
+Dev-only CLI 没有 `--split`、locked path 或 question path 参数，并要求显式 Hugging Face
+offline mode。普通 50 个 Day 12 tests 全部使用 fake/stub ranking，不加载 E5/Qdrant。
+第一次真实 CLI 因合法 preamble candidate 的空 heading 暴露新评测引用模型过严，未发布
+任何 report；只修正 candidate path 允许为空并增加回归测试，没有改变 gold 或 Day 9–11
+行为。
+
+真实运行使用 fixed-revision E5 offline cache、CPU 和仓库自有 Qdrant。collection 重建并
+核验为 62 points、384/Cosine、4 batches；三路 12-question dev 结果为：BM25
+Recall@1/Recall@3/MRR@5=`0.916667/1.000000/0.944444`，Dense=
+`0.416667/0.666667/0.555556`，Hybrid=`0.666667/0.833333/0.766667`。Hybrid 优于
+Dense 但低于 BM25，结果原样保留且未调参。CSV、36-detail JSON 与 manifest 保存输入、
+输出、模型、参数、Git dirty 和 runtime provenance；hash 已 round-trip 验证。
+
+20 条 locked candidates 只做静态 schema/count/污染/gold-exists 校验，没有传入任何
+Retriever：locked evaluation=`NOT RUN`。P0 明确不采用 cross-encoder reranker；Day 12
+没有实现 reranker、ZIP/AST、Agent 或 API。完成后 Qdrant 容器恢复 stopped、volume
+保留；Day 13 ZIP Guard 仍为 `planned`。
+
 ## 3. P0、P1 和不做范围
 
 ### 3.1 P0 必须完成
@@ -436,9 +473,10 @@ flowchart LR
 
 建议代码边界包括 `security/`、`scanner/`、`ingestion/`、`retrieval/`、`agent/`、
 `reporting/` 和 `storage/`。当前真实代码包含基础 `app/api`、`app/core`、
-`app/storage/sqlite.py`、Qdrant lifecycle 所在的 `app/retrieval`，以及
-`app/ingestion/pydantic_snapshot.py` 与 Day 9 离线 Markdown chunker；尚无 scanner、
-真实 embedding/index/search、agent 或 reporting 业务实现。
+`app/storage/sqlite.py`、snapshot/chunk/dense index 所在的 `app/ingestion`、真实
+E5/Qdrant/BM25/Dense/Hybrid 所在的 `app/retrieval`，以及 dev evaluator 所在的
+`app/evaluation`；尚无 ZIP Guard、scanner、agent 或业务 reporting 实现。Day 12 的
+`reports/retrieval_dev_*` 是项目评测 artifact，不是分析报告存储。
 
 ## 6. 数据与文档快照
 
@@ -505,10 +543,13 @@ fixture 必须随规则开发持续建设；不能在冻结日临时生成全部
 
 共 32 条，每类规则 4 条：
 
-- dev 12：调试 chunk、参数和 query；
-- locked 20：冻结后不得继续调检索或 prompt。
+- dev 12：已建立并实际用于 Day 12 evaluator，可调试 query 与比较三路；
+- locked candidates 20：已建立并物理隔离，冻结前只允许 schema、数量、污染与 gold
+  existence 静态校验；未运行检索，冻结后不得调检索或 prompt。
 
-gold 标到稳定的 `heading_path`，不依赖 chunk 数组序号。
+两份 artifact 位于 `data/evaluation/retrieval/`。Gold 在检索前从 fixed snapshot/chunks
+独立建立，标到稳定 `heading_path`，不依赖 chunk 数组序号。D-015 固定了 schema identity、
+template-family isolation、dev-only execution guard 和 exact-heading metric semantics。
 
 ## 7. RAG 设计
 
@@ -726,6 +767,11 @@ AST + alias/浅层类型；不得与检索 Recall 混成一个“准确率”。
 Recall@3、MRR@5。建设目标为 Hybrid Recall@3 ≥ 0.90 且不低于两个单路基线；
 目标不能写入简历。
 
+Day 12 已在独立的 12 条 dev questions 上建立同指标 evaluator，并真实观察到 BM25、
+Dense、Hybrid 的 Recall@3 分别为 1.000000、0.666667、0.833333。它们只用于开发诊断，
+不等于上述 20 条 locked 目标是否通过。20 条 locked candidates 尚未运行，也没有据其
+修改检索行为。
+
 ### 10.3 Agent 与引用
 
 - 结构化输出成功率；
@@ -815,7 +861,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 9 | 2026-08-12 | `completed` | Markdown chunker | H2/H3、27/27 fenced blocks、500–1200/120 overlap、稳定 ID、JSON v1 artifact；62 chunks | 专项 32 passed；完整 219 passed；真实 artifact/coverage/repeated-build 与共同门禁通过 | 内容寻址与结构切分 | embedding、Qdrant upsert/search、BM25、dense、评测 |
 | MigrationLens Day 10 | 计划 2026-08-14；实际 2026-08-12 | `completed` | e5 稠密索引与检索 | fixed-revision real adapter、62 passage points、provenance payload、top-8、ready transition | 专项 138 passed；完整 285 passed；真实 CPU model、Qdrant 62/62 IDs、重复索引、三查询、ready=200 | e5 语义检索与索引完整性 | BM25、RRF、hybrid、locked |
 | MigrationLens Day 11 | 计划 2026-08-15；实际 2026-08-13 | `completed` | BM25 + RRF 服务 | 项目内 BM25 top-8、复用 dense top-8、RRF 去重、完整 ranking 和 top-3 | 新增 45 cases；完整 330 passed；真实 6 BM25 + 4 Dense/Hybrid smoke；共同门禁 | lexical/dense 互补 | reranker、Agent、locked 调参 |
-| MigrationLens Day 12 | 2026-08-17 | `planned` | dev 检索集与评分 | 32 题 schema、12 dev、20 locked 候选隔离、Recall/MRR evaluator | 三路 dev 报告、heading gold、无污染；共同门禁 | 评测分割与消融 | 查看 locked 成绩 |
+| MigrationLens Day 12 | 计划 2026-08-17；实际 2026-08-14 | `completed` | dev 检索集与评分 | 32 题 schema、12 dev、20 locked candidates 隔离、同 query 三路 Recall@1/3 与 MRR@5、dev artifacts | 专项 50 passed；完整 380 passed；真实 E5/Qdrant 12 题 dev：BM25 0.916667/1.0/0.944444，Dense 0.416667/0.666667/0.555556，Hybrid 0.666667/0.833333/0.766667；locked NOT RUN；共同门禁 | 评测分割、泄漏与消融 | locked 运行、P0 禁用的 reranker、ZIP/AST |
 | MigrationLens Day 13 | 2026-08-18 | `planned` | ZIP Guard | 全部资源/路径/成员规则、安全非 Python 忽略、清理 | 正常、穿越、绝对路径、链接、bomb、超限、编码；共同门禁 | 压缩包信任边界 | import/执行/修改代码、AST |
 | MigrationLens Day 14 | 2026-08-19 | `planned` | AST 基础与符号表 | inventory、编码/语法、alias、BaseModel、类型线索、模块映射、registry | 空/BOM/语法/alias/稳定顺序；共同门禁 | AST 与确定性 schema | 八类规则、一跳 import、LLM |
 | MigrationLens Day 15 | 2026-08-20 | `planned` | 前四类规则 | 配置、验证器、Settings、根模型；按本日规则增量建立候选 fixture | 每类 3 正2负1边界、行号 gold、同名负例；共同门禁 | 上下文敏感匹配 | 后四类、一次性补齐全部 fixture、Agent |

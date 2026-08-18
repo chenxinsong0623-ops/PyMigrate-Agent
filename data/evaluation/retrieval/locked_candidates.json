@@ -1,0 +1,287 @@
+{
+  "gold_source": "official_snapshot_heading_review",
+  "questions": [
+    {
+      "ast_context": "draft = Invoice.construct(id=invoice_id)",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "old_api": "BaseModel.construct()",
+      "question_id": "locked-methods-construct-bypass",
+      "rule_category": "base_model_methods",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_dependency_breakage",
+      "user_question": "依赖升级后需要保留无校验构造路径，官方方法对照表给出的新调用是什么？"
+    },
+    {
+      "ast_context": "message = Message.parse_obj(payload)",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "old_api": "parse_obj",
+      "question_id": "locked-methods-object-validation",
+      "rule_category": "base_model_methods",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_migration_checklist",
+      "user_question": "制定对象校验升级清单时，哪个 V2 模型方法承接 parse_obj 的职责？"
+    },
+    {
+      "ast_context": "profile = Profile.parse_file(config_path)",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "old_api": "parse_file",
+      "question_id": "locked-loading-file-source",
+      "rule_category": "data_loading",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_incident_diagnosis",
+      "user_question": "版本切换后文件加载入口出现弃用警告，应如何拆分读取与模型校验？"
+    },
+    {
+      "ast_context": "packet = Packet.parse_raw(binary_payload)",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "old_api": "parse_raw for non-JSON data",
+      "question_id": "locked-loading-custom-bytes",
+      "rule_category": "data_loading",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_migration_checklist",
+      "user_question": "为非 JSON 原始载荷设计 V2 迁移步骤时，解析和 model_validate 应如何分工？"
+    },
+    {
+      "ast_context": "class Config: orm_mode = True",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to config"
+      ],
+      "old_api": "orm_mode",
+      "question_id": "locked-config-orm-attributes",
+      "rule_category": "config",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_dependency_breakage",
+      "user_question": "升级后模型无法从对象属性取值，哪个新配置键替代旧 ORM 模式？"
+    },
+    {
+      "ast_context": "schema_extra = {'examples': EXAMPLES}",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to config"
+      ],
+      "old_api": "schema_extra",
+      "question_id": "locked-config-schema-metadata",
+      "rule_category": "config",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_migration_checklist",
+      "user_question": "整理模型 JSON schema 元数据迁移项时，schema_extra 被重命名为何值？"
+    },
+    {
+      "ast_context": "@validate_arguments",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to validators"
+      ],
+      "old_api": "validate_arguments",
+      "question_id": "locked-validators-call-arguments",
+      "rule_category": "validators",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_dependency_breakage",
+      "user_question": "函数参数校验装饰器在 V2 升级后名称变化，应查阅哪一迁移主题？"
+    },
+    {
+      "ast_context": "@validator('tags', each_item=True)",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to validators"
+      ],
+      "old_api": "validator(each_item=True)",
+      "question_id": "locked-validators-container-items",
+      "rule_category": "validators",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_incident_diagnosis",
+      "user_question": "容器元素校验在升级后失去 each_item 参数，约束应移到何处？"
+    },
+    {
+      "ast_context": "values: list[int] = Field(min_items=1)",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "old_api": "Field(min_items=...)",
+      "question_id": "locked-field-minimum-items",
+      "rule_category": "field_arguments",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_dependency_breakage",
+      "user_question": "列表最小元素数约束在 V2 报错时，应使用哪个长度参数？"
+    },
+    {
+      "ast_context": "name: str = Field(allow_mutation=False)",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "old_api": "Field(allow_mutation=False)",
+      "question_id": "locked-field-frozen-value",
+      "rule_category": "field_arguments",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_incident_diagnosis",
+      "user_question": "字段不可修改语义迁移后不再接受 allow_mutation，新的反向参数是什么？"
+    },
+    {
+      "ast_context": "kind: str = Field(const=True)",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "old_api": "Field(const=True)",
+      "question_id": "locked-field-constant-value",
+      "rule_category": "field_arguments",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_migration_checklist",
+      "user_question": "清点已移除的 Field 关键字时，固定值约束 const 应在哪个官方章节核对？"
+    },
+    {
+      "ast_context": "from pydantic import BaseSettings",
+      "gold_heading_path": [
+        "Migration guide",
+        "`BaseSettings` has moved to `pydantic-settings`"
+      ],
+      "old_api": "BaseSettings import dependency",
+      "question_id": "locked-settings-package-dependency",
+      "rule_category": "settings",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_dependency_breakage",
+      "user_question": "部署环境升级后 BaseSettings 导入失败，需要新增哪个独立发行包？"
+    },
+    {
+      "ast_context": "class Config: env_file = '.env'",
+      "gold_heading_path": [
+        "Migration guide",
+        "`BaseSettings` has moved to `pydantic-settings`"
+      ],
+      "old_api": "settings management",
+      "question_id": "locked-settings-management-move",
+      "rule_category": "settings",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_migration_checklist",
+      "user_question": "准备配置管理模块升级方案时，官方指南把 Settings 功能迁移到哪里？"
+    },
+    {
+      "ast_context": "def parse_env_var(cls, field_name, raw_value)",
+      "gold_heading_path": [
+        "Migration guide",
+        "`BaseSettings` has moved to `pydantic-settings`"
+      ],
+      "old_api": "BaseSettings.parse_env_var",
+      "question_id": "locked-settings-env-parser",
+      "rule_category": "settings",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_incident_diagnosis",
+      "user_question": "自定义环境变量解析钩子在 V2 消失后，应改用哪类 settings source 扩展？"
+    },
+    {
+      "ast_context": "from pydantic.generics import GenericModel",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.generics.GenericModel`"
+      ],
+      "old_api": "pydantic.generics.GenericModel",
+      "question_id": "locked-generic-import-removal",
+      "rule_category": "generic_model",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_dependency_breakage",
+      "user_question": "依赖更新后泛型模型导入路径失效，为什么专用类已经不再必要？"
+    },
+    {
+      "ast_context": "class Page(GenericModel, Generic[T])",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.generics.GenericModel`"
+      ],
+      "old_api": "GenericModel inheritance",
+      "question_id": "locked-generic-inheritance-shape",
+      "rule_category": "generic_model",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_migration_checklist",
+      "user_question": "重构分页响应模型时，BaseModel 与 Generic 应按什么继承组合声明？"
+    },
+    {
+      "ast_context": "isinstance(value, Response[int])",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.generics.GenericModel`"
+      ],
+      "old_api": "parameterized generic isinstance",
+      "question_id": "locked-generic-runtime-check",
+      "rule_category": "generic_model",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_incident_diagnosis",
+      "user_question": "参数化泛型模型的运行时 isinstance 检查不可靠时，官方建议采用什么子类方式？"
+    },
+    {
+      "ast_context": "class Lookup(BaseModel): __root__: dict[str, int]",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "old_api": "custom root model __root__",
+      "question_id": "locked-root-mapping-wrapper",
+      "rule_category": "root_model",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_dependency_breakage",
+      "user_question": "字典包装模型在升级后拒绝 __root__ 字段，新的专用模型抽象是什么？"
+    },
+    {
+      "ast_context": "class Identifiers(BaseModel): __root__: list[int]",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "old_api": "root collection model",
+      "question_id": "locked-root-collection-design",
+      "rule_category": "root_model",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_migration_checklist",
+      "user_question": "为单一集合值设计 V2 模型时，应在升级清单中采用哪个根类型？"
+    },
+    {
+      "ast_context": "class Config: arbitrary_types_allowed = True",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "old_api": "RootModel arbitrary_types_allowed",
+      "question_id": "locked-root-arbitrary-types",
+      "rule_category": "root_model",
+      "schema_version": 1,
+      "split": "locked_candidate",
+      "template_family": "locked_incident_diagnosis",
+      "user_question": "迁移自定义根模型时 arbitrary_types_allowed 不再生效，官方说明记录了什么限制？"
+    }
+  ],
+  "schema_version": 1,
+  "split": "locked_candidate"
+}

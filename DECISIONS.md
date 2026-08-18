@@ -244,3 +244,39 @@
   <https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf>；BM25 公式背景见
   Robertson 与 Zaragoza, *The Probabilistic Relevance Framework: BM25 and Beyond*：
   <https://doi.org/10.1561/1500000019>。
+
+## D-015 — Day 12 Retrieval evaluation identity、gold 与 locked guard
+
+- 日期：2026-08-14
+- 状态：已接受
+- 决策：
+  - retrieval question 使用 JSON schema v1 和 evaluation-only 八类
+    `rule_category`；它只表达 benchmark 主题，不提前冻结尚未实现的 scanner
+    production `rule_id`。32 题物理拆分为
+    `data/evaluation/retrieval/dev.json` 的 12 条 dev 与
+    `data/evaluation/retrieval/locked_candidates.json` 的 20 条 locked candidates；
+  - question ID、NFKC/casefold/whitespace normalized user question 与 template family
+    在两个 split 间隔离；八类各恰好 4 条。template family 是可自动检查的模板边界，
+    不能替代对机械改写/语义泄漏的人工审查；
+  - 单题 gold 是人工从固定 Day 8 snapshot 与 Day 9 chunks 独立确认的一个稳定
+    `heading_path`。它在运行被测 Retriever 前建立，loader 要求该 heading 存在于正式
+    chunk artifact；不使用 chunk 数组位置，也不从 BM25/Dense/Hybrid 输出反推；
+  - Day 12 evaluator 只接受恰好 12 条 dev。显式 CLI 不提供 `--split`、locked path 或
+    question path 参数；locked artifact 在任何 Retriever 调用前被拒绝。Day 12 可以读取
+    locked candidates 做 schema/count/污染静态校验，但不得执行检索或产生 locked 指标；
+  - BM25、Dense、Hybrid 消费同一个确定性 raw query。Recall@1/Recall@3/MRR@5 只按
+    exact heading equality 和 first relevant rank 计算；Hybrid 使用完整 `results`，而非
+    consumer `top_results`。基础设施/契约失败显式传播，不计作普通 miss，也不发布完整
+    三路指标；
+  - dev 输出使用 `retrieval_dev_*` 文件名并记录输入/输出 hash、模型、参数、Git dirty
+    状态与 runtime versions，不占用未来 frozen locked 的正式文件名。
+- 原因：question identity、gold 来源和可执行入口一旦被 dev 结果或 future locked 数据
+  污染，就不能通过事后修改恢复独立评测。物理 split、exact heading gold、dev-only
+  entrypoint 和完整 provenance 让 Day 12 可用于开发诊断，又不会提前消费最终 holdout。
+- 替代方案：未采用未来 scanner rule ID、单文件混合 split、可选 `--split locked`、从
+  rank 1 生成 gold、chunk ordinal gold、多个宽松等价 gold、只评 Hybrid、用 top-3 计算
+  MRR@5、把 Qdrant/E5 failure 记为 Recall=0，或把 dev 结果写成最终
+  `retrieval_metrics.csv`。
+- 影响：`app/evaluation/retrieval.py`、`app/evaluation/retrieval_dev.py`、两份 question
+  artifacts、三个 `reports/retrieval_dev_*` artifacts、Day 12 测试与说明文档必须遵守
+  该契约。最终 locked 仍只能在人工复核、hash、frozen commit 后按计划单次运行。

@@ -18,6 +18,7 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 9 | `completed` | 离线 H2/H3 Markdown chunker、fenced code 保护、500–1200 字符目标、120 字符 overlap、稳定 ID、来源元数据、内容 hash、JSON schema v1 artifact 与重复构建审计 |
 | MigrationLens Day 10 | `completed` | 固定 revision 的真实 multilingual-e5-small、384 维 normalized embedding、稳定 UUIDv5 Qdrant points、显式 passage index build、top-8 dense query、post-write verification 与 index-ready transition |
 | MigrationLens Day 11 | `completed` | 只读离线 BM25 top-8、复用 DenseRetriever top-8、按 chunk ID 去重的可配置 RRF、完整融合排名与 final top-3 |
+| MigrationLens Day 12 | `completed` | 32 题严格 schema、12 dev/20 locked candidates 隔离、确定性 raw query、BM25/Dense/Hybrid 三路 Recall@1/Recall@3/MRR@5 evaluator 与真实 dev artifacts |
 
 当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite 仍只包含最小
 `system_metadata`，不能描述为已经运行的报告存储；Qdrant startup 仍只创建或校验
@@ -37,18 +38,21 @@ verification 后把 `document_index_status` 写为 `ready`。Synthetic fake、�
 
 Day 11 的 BM25 直接读取同一 62-chunk artifact，不访问网络、模型 cache 或 Qdrant；
 HybridRetriever 组合该 BM25 与 Day 10 `DenseRetriever`，两路各取 top-8 后仅按 rank
-执行 RRF，并同时保留完整融合排名与 final top-3。当前已能检索，但尚未完成正式检索
-评测。
+执行 RRF，并同时保留完整融合排名与 final top-3。Day 12 已用预先独立建立的 heading
+gold 在 12 条 dev questions 上完成三路评分；20 条 locked candidates 只做静态隔离校验，
+没有执行最终 locked benchmark。
 
 尚未实现：
 
 - GitHub Actions；
 - ZIP Guard、AST scanner、八类规则和一跳 import；
-- reranker 与 locked retrieval evaluation；
+- final locked retrieval evaluation；
 - LangGraph Agent、五个只读工具和 Citation Guard；
 - 分析 API、报告存储、benchmark、评测和负载测试；
 - 真实 LLM；
 - WDI-ClaimCheck 的任何业务代码。
+
+P0 按冻结 SPEC 明确不采用 cross-encoder reranker；它不是待补齐的 P0 功能。
 
 计划中的数量、质量阈值、FakeLLM 行为和未运行命令都不是实测结果。
 
@@ -287,6 +291,63 @@ RRF score、chunk text/heading/content hash 与 URL/ref/resolved commit/snapshot
 provenance。Dense/Qdrant failure 会显式传播；当前没有 degraded mode，不会把失败伪装
 为 empty dense 或正常 BM25-only hybrid。
 
+## Retrieval Evaluation
+
+Day 12 的 question schema v1 使用 evaluation-only `rule_category`，不提前冻结未来
+scanner `rule_id`。整个设计为 32 题、冻结八类每类 4 题，物理拆分为：
+
+- [`data/evaluation/retrieval/dev.json`](data/evaluation/retrieval/dev.json)：12 条，允许开发
+  期间运行；
+- [`data/evaluation/retrieval/locked_candidates.json`](data/evaluation/retrieval/locked_candidates.json)：
+  20 条，只建立候选、gold 与污染隔离，Day 12 不执行检索。
+
+两个 split 的 question ID、normalized user question 与 template family 不交叉。Gold 在
+运行 Retriever 前从固定 Day 8 snapshot 和 Day 9 chunks 人工确认，使用稳定
+`heading_path`，不从当前 BM25/Dense/Hybrid rank 反推，也不依赖 chunk 数组位置。
+
+`render_query()` 按固定顺序组合 rule category、old API、AST-like context 与 user
+question，并让三路消费完全相同、未加 `query:`/`passage:` 的 raw query。Evaluator
+分别调用 BM25 top-8、Dense top-8 与 Hybrid；Hybrid 的 MRR@5 使用完整 `results`，不是
+只有前三项的 `top_results`。
+
+指标按单一 gold heading 精确相等计算：Recall@1 检查首位，Recall@3 检查前三，MRR@5
+使用前五第一个相关排名的倒数。空结果是正常 miss；Qdrant/E5/artifact/provenance
+failure 显式失败，不能伪装成 Recall=0。普通 pytest 全部离线；真实运行只由以下 dev-only
+CLI 触发，它没有 `--split`、locked path 或 question path 参数：
+
+```powershell
+$Py = 'D:\conda_envs\pymigrate-agent\python.exe'
+$env:HF_HUB_OFFLINE = '1'
+$env:TRANSFORMERS_OFFLINE = '1'
+
+# 先确保固定 Day 10 index 已经在当前 Qdrant 中通过 62-point verification。
+& $Py -m app.evaluation.retrieval_dev
+```
+
+CLI 要求固定 E5 cache、可访问且精确匹配 Day 9 62 个 stable point IDs 的 Qdrant index。
+成功后原子发布：
+
+- [`reports/retrieval_dev_metrics.csv`](reports/retrieval_dev_metrics.csv)；
+- [`reports/retrieval_dev_details.json`](reports/retrieval_dev_details.json)；
+- [`reports/retrieval_dev_manifest.json`](reports/retrieval_dev_manifest.json)。
+
+2026-08-14 在 fixed-revision E5 offline cache、CPU、`migrationlens-documents` 62 points、
+384/Cosine、BM25 k1=1.5/b=0.75、两路 top-8、RRF k=60、Hybrid final top-3 上真实得到：
+
+| System | Dev Recall@1 | Dev Recall@3 | Dev MRR@5 | Questions |
+|---|---:|---:|---:|---:|
+| BM25 | 0.916667 | 1.000000 | 0.944444 | 12 |
+| Dense | 0.416667 | 0.666667 | 0.555556 | 12 |
+| Hybrid | 0.666667 | 0.833333 | 0.766667 | 12 |
+
+Hybrid 在本 12 题 dev set 上优于 Dense、低于 BM25；没有为了预设排序调整 query、gold、
+tokenizer 或参数。RRF k=60 是记录的 baseline，不是最优声明。固定 passages 中有 6 条
+超过 E5 512-token 上限；这是当前 evaluation limitation，Day 12 没有重切 chunks。
+
+这些只是 development retrieval questions 上的诊断结果，不是 final benchmark、生产
+accuracy 或发布门槛。locked evaluation = **NOT RUN**；必须等待人工复核、artifact hash、
+frozen commit 和计划中的单次 locked run。
+
 ## 本地运行
 
 先确保 Qdrant 可通过 `http://127.0.0.1:6333` 访问，或用
@@ -514,11 +575,30 @@ Ruff check 和 Ruff format check 已通过；最终静态门禁和 Git/哈希审
 记录为准。真实 smoke 只是通路证据，不是 Recall/MRR；Day 11 没有创建 gold、运行
 locked evaluation、计算指标或调参。
 
+### Day 12 验证边界
+
+2026-08-14 先以完全离线 fake/stub ranking 验证 question schema、12/20/32 与八类×4、
+contamination、query、指标、三路编排、locked guard 和 artifact metadata。真实运行前
+固定 gold 已从 Day 8/9 source 独立建立。专项最终为 `50 passed`；普通 pytest 没有加载
+E5 或连接 Qdrant。
+
+真实链只启动属于本仓库的 stopped Qdrant 容器；重建前后均确认 collection 为 62
+points、384/Cosine。E5 在 `HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1` 下真实从 fixed
+revision cache 加载到 CPU，没有重新下载。显式 dev-only CLI 执行 12 题三路评测并生成
+CSV、details JSON 和 manifest；输出 hash round-trip 通过。第一次真实运行因合法
+preamble candidate 的空 heading 暴露新评测 schema 过严，没有发布 artifact；只修复
+candidate 引用模型并新增测试后成功。没有改变 Day 9–11 frozen behavior。
+
+三路真实 dev 指标见 “Retrieval Evaluation”。它们不是 locked、production 或发布证据。
+20 条 locked candidates 没有进入 Retriever，也没有据其调参。完成后 Qdrant 容器恢复
+stopped，volume 保留。
+
 ## 下一开发日
 
-MigrationLens Day 12 保持 `planned`，尚未开始。它将消费 Day 11 三路独立接口与完整
-排名 metadata，建立严格隔离的 dev/locked 检索题 schema 和 evaluator。当前能
-“检索”，但尚未完成“正式检索评测”；reranker、Agent、ZIP/AST 与 locked 运行均未实现。
+MigrationLens Day 13 — ZIP Guard 保持 `planned`，尚未开始。它只负责上传 ZIP 的路径、
+类型、成员数、大小、压缩比、编码和清理边界，不开始 AST scanner、Agent 或 locked
+benchmark。P0 明确不采用 cross-encoder reranker；20 条 locked retrieval questions 仍须
+等待人工复核、hash 与 frozen commit，不能在 Day 13 运行。
 
 ## 项目文档
 
@@ -537,7 +617,7 @@ MigrationLens Day 12 保持 `planned`，尚未开始。它将消费 Day 11 三�
 ## 证据边界
 
 Day 10 已验证固定 revision 的真实模型与 62-point Qdrant index；Day 11 已验证正式
-artifact 上的 BM25，以及真实 Dense + RRF hybrid 调用链。但 locked 评测、CI、样本量
-和负载测试等发布证据仍未完成，因此 MigrationLens 尚未达到可写入简历的发布门槛。
-不得把 FakeEmbedding、BM25/Hybrid 人工 smoke、目标阈值、计划数量或未运行命令描述为
-Recall/MRR、生产检索质量、GPU 性能或发布证据。
+artifact 上的 BM25 与真实 Dense + RRF hybrid 调用链；Day 12 已取得明确标注的 12 题
+dev 三路指标。但 20 题 locked 评测、CI、样本量和负载测试等发布证据仍未完成，因此
+MigrationLens 尚未达到可写入简历的发布门槛。不得把 FakeEmbedding、smoke、dev 指标、
+目标阈值、计划数量或未运行命令描述为 locked 结果、生产检索质量、GPU 性能或发布证据。

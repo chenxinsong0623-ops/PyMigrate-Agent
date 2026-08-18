@@ -1,0 +1,3220 @@
+{
+  "aggregates": [
+    {
+      "mrr_at_5": 0.9444444444444443,
+      "question_count": 12,
+      "recall_at_1": 0.9166666666666666,
+      "recall_at_3": 1.0,
+      "system": "bm25"
+    },
+    {
+      "mrr_at_5": 0.5555555555555556,
+      "question_count": 12,
+      "recall_at_1": 0.4166666666666667,
+      "recall_at_3": 0.6666666666666666,
+      "system": "dense"
+    },
+    {
+      "mrr_at_5": 0.7666666666666666,
+      "question_count": 12,
+      "recall_at_1": 0.6666666666666666,
+      "recall_at_3": 0.8333333333333334,
+      "system": "hybrid"
+    }
+  ],
+  "details": [
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "question_id": "dev-methods-dict-export",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: BaseModel method migration. Legacy API or concept: BaseModel.dict(). AST context: payload = user.dict(). Question: 升级到 Pydantic V2 时,这个模型导出调用应迁移到哪个方法?",
+      "results": [
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:a7007dd6c702bd15dfa7401e2ceecee71104556c751fa56a4afa709bbaa53260",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:b05d8822534d2a6c3d0bf48ca8515c2e7b9ccc7f8f5b2646d8725dbebcf3b936",
+          "heading_path": [
+            "Migration guide",
+            "Changes to dataclasses"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:13c78530e21f40e59c439a025b8768b8a68d90506323687e4cedf9632838d931",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:c9ef99d33dae214158512a8c1e49c8264eb56566cf94a88f0473844ca593c6aa",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:9d6f97cffdb8b575a0f27f444ada3c5dfa094f9408bd396f880154551a83f3c9",
+          "heading_path": [
+            "Continue using Pydantic V1 features"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:7c7a2d2abe3ae4ffc778a0021ba207536e0b9da7df4205bd60149ddb2fa35a01",
+          "heading_path": [
+            "Migration guide",
+            "Input types are not preserved"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:3a0b547feb2bcb54b99014a107be50c15cb81ea0b4f6e3e63562c495d2023f76",
+          "heading_path": [
+            "Migration guide",
+            "Mypy plugins"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "bm25"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "question_id": "dev-methods-dict-export",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: BaseModel method migration. Legacy API or concept: BaseModel.dict(). AST context: payload = user.dict(). Question: 升级到 Pydantic V2 时,这个模型导出调用应迁移到哪个方法?",
+      "results": [
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:3d145fda8f73412d04c43d322202b7ede3ec1e3c21ba2c2c0bf7a66c862e90d8",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:9d6f97cffdb8b575a0f27f444ada3c5dfa094f9408bd396f880154551a83f3c9",
+          "heading_path": [
+            "Continue using Pydantic V1 features"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:dc7353da30c597eb599b474bb54c5de4ed5b52293f9268a2c68af3fb576b35ea",
+          "heading_path": [
+            "Migration guide",
+            "Input types are not preserved"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:d30095f4ea972e8df8b98733b034ab622636dd2ed2cca9b6b70b3123cffdf44c",
+          "heading_path": [
+            "Migration guide",
+            "Changes to JSON schema generation"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "dense"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "question_id": "dev-methods-dict-export",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: BaseModel method migration. Legacy API or concept: BaseModel.dict(). AST context: payload = user.dict(). Question: 升级到 Pydantic V2 时,这个模型导出调用应迁移到哪个方法?",
+      "results": [
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:9d6f97cffdb8b575a0f27f444ada3c5dfa094f9408bd396f880154551a83f3c9",
+          "heading_path": [
+            "Continue using Pydantic V1 features"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:a7007dd6c702bd15dfa7401e2ceecee71104556c751fa56a4afa709bbaa53260",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:b05d8822534d2a6c3d0bf48ca8515c2e7b9ccc7f8f5b2646d8725dbebcf3b936",
+          "heading_path": [
+            "Migration guide",
+            "Changes to dataclasses"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:13c78530e21f40e59c439a025b8768b8a68d90506323687e4cedf9632838d931",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:3d145fda8f73412d04c43d322202b7ede3ec1e3c21ba2c2c0bf7a66c862e90d8",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 8
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 9
+        },
+        {
+          "chunk_id": "sha256:c9ef99d33dae214158512a8c1e49c8264eb56566cf94a88f0473844ca593c6aa",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 10
+        },
+        {
+          "chunk_id": "sha256:7c7a2d2abe3ae4ffc778a0021ba207536e0b9da7df4205bd60149ddb2fa35a01",
+          "heading_path": [
+            "Migration guide",
+            "Input types are not preserved"
+          ],
+          "rank": 11
+        },
+        {
+          "chunk_id": "sha256:dc7353da30c597eb599b474bb54c5de4ed5b52293f9268a2c68af3fb576b35ea",
+          "heading_path": [
+            "Migration guide",
+            "Input types are not preserved"
+          ],
+          "rank": 12
+        },
+        {
+          "chunk_id": "sha256:3a0b547feb2bcb54b99014a107be50c15cb81ea0b4f6e3e63562c495d2023f76",
+          "heading_path": [
+            "Migration guide",
+            "Mypy plugins"
+          ],
+          "rank": 13
+        },
+        {
+          "chunk_id": "sha256:d30095f4ea972e8df8b98733b034ab622636dd2ed2cca9b6b70b3123cffdf44c",
+          "heading_path": [
+            "Migration guide",
+            "Changes to JSON schema generation"
+          ],
+          "rank": 14
+        }
+      ],
+      "returned_count": 14,
+      "system": "hybrid"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "question_id": "dev-methods-json-export",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: BaseModel method migration. Legacy API or concept: BaseModel.json(). AST context: body = order.json(). Question: 代码审查发现模型实例调用 json;V2 的方法重命名说明在哪里?",
+      "results": [
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:d30095f4ea972e8df8b98733b034ab622636dd2ed2cca9b6b70b3123cffdf44c",
+          "heading_path": [
+            "Migration guide",
+            "Changes to JSON schema generation"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:c9ef99d33dae214158512a8c1e49c8264eb56566cf94a88f0473844ca593c6aa",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:fa7b7c7cf37accdf41a0b47975cf1da2b7a4a234cd7eb005637fdb43e246d9fb",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:13c78530e21f40e59c439a025b8768b8a68d90506323687e4cedf9632838d931",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:3301560f7ea89b62aef6fae60b0c668bad801878e11332adb83da2e61970da40",
+          "heading_path": [
+            "Migration guide",
+            "Changes to JSON schema generation"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:b05d8822534d2a6c3d0bf48ca8515c2e7b9ccc7f8f5b2646d8725dbebcf3b936",
+          "heading_path": [
+            "Migration guide",
+            "Changes to dataclasses"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "bm25"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "question_id": "dev-methods-json-export",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: BaseModel method migration. Legacy API or concept: BaseModel.json(). AST context: body = order.json(). Question: 代码审查发现模型实例调用 json;V2 的方法重命名说明在哪里?",
+      "results": [
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:d30095f4ea972e8df8b98733b034ab622636dd2ed2cca9b6b70b3123cffdf44c",
+          "heading_path": [
+            "Migration guide",
+            "Changes to JSON schema generation"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:c9ef99d33dae214158512a8c1e49c8264eb56566cf94a88f0473844ca593c6aa",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:dc7353da30c597eb599b474bb54c5de4ed5b52293f9268a2c68af3fb576b35ea",
+          "heading_path": [
+            "Migration guide",
+            "Input types are not preserved"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:f3bebb842668e6f0cce8e2cde36a488162010d87ea8db1454680c7f0aed52fe5",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:d4cdefab3051032a5f0ed16d6a3bfe14d29a09f3f11a64deafca446d577acdff",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "dense"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "question_id": "dev-methods-json-export",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: BaseModel method migration. Legacy API or concept: BaseModel.json(). AST context: body = order.json(). Question: 代码审查发现模型实例调用 json;V2 的方法重命名说明在哪里?",
+      "results": [
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:d30095f4ea972e8df8b98733b034ab622636dd2ed2cca9b6b70b3123cffdf44c",
+          "heading_path": [
+            "Migration guide",
+            "Changes to JSON schema generation"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:c9ef99d33dae214158512a8c1e49c8264eb56566cf94a88f0473844ca593c6aa",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:fa7b7c7cf37accdf41a0b47975cf1da2b7a4a234cd7eb005637fdb43e246d9fb",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:13c78530e21f40e59c439a025b8768b8a68d90506323687e4cedf9632838d931",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:dc7353da30c597eb599b474bb54c5de4ed5b52293f9268a2c68af3fb576b35ea",
+          "heading_path": [
+            "Migration guide",
+            "Input types are not preserved"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:3301560f7ea89b62aef6fae60b0c668bad801878e11332adb83da2e61970da40",
+          "heading_path": [
+            "Migration guide",
+            "Changes to JSON schema generation"
+          ],
+          "rank": 8
+        },
+        {
+          "chunk_id": "sha256:f3bebb842668e6f0cce8e2cde36a488162010d87ea8db1454680c7f0aed52fe5",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 9
+        },
+        {
+          "chunk_id": "sha256:b05d8822534d2a6c3d0bf48ca8515c2e7b9ccc7f8f5b2646d8725dbebcf3b936",
+          "heading_path": [
+            "Migration guide",
+            "Changes to dataclasses"
+          ],
+          "rank": 10
+        },
+        {
+          "chunk_id": "sha256:d4cdefab3051032a5f0ed16d6a3bfe14d29a09f3f11a64deafca446d577acdff",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 11
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 12
+        }
+      ],
+      "returned_count": 12,
+      "system": "hybrid"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "question_id": "dev-loading-raw-json",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic model data loading migration. Legacy API or concept: parse_raw. AST context: event = Event.parse_raw(raw_message). Question: 从 JSON 字符串加载模型的 parse_raw 在 V2 中应如何处理?",
+      "results": [
+        {
+          "chunk_id": "sha256:13c78530e21f40e59c439a025b8768b8a68d90506323687e4cedf9632838d931",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:b05d8822534d2a6c3d0bf48ca8515c2e7b9ccc7f8f5b2646d8725dbebcf3b936",
+          "heading_path": [
+            "Migration guide",
+            "Changes to dataclasses"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:f3bfc387e86e1f8aa70533873ac315284c0f70b2e2278f6861a4f4d9552fea49",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:fbbf9f44714144677d5f64c736fc969b43bb4031ccb16cf7261318dd43647bff",
+          "heading_path": [
+            "Migration guide",
+            "Introduction of `TypeAdapter`"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:d30095f4ea972e8df8b98733b034ab622636dd2ed2cca9b6b70b3123cffdf44c",
+          "heading_path": [
+            "Migration guide",
+            "Changes to JSON schema generation"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:1faf26d916b407ac3928e7fda41687201bdcd39d158f6f2db5d12074127ba2e4",
+          "heading_path": [
+            "Migration guide",
+            "Defining custom types"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "bm25"
+    },
+    {
+      "first_gold_rank": 4,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "question_id": "dev-loading-raw-json",
+      "recall_at_1": 0,
+      "recall_at_3": 0,
+      "reciprocal_rank_at_5": 0.25,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic model data loading migration. Legacy API or concept: parse_raw. AST context: event = Event.parse_raw(raw_message). Question: 从 JSON 字符串加载模型的 parse_raw 在 V2 中应如何处理?",
+      "results": [
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:f3bebb842668e6f0cce8e2cde36a488162010d87ea8db1454680c7f0aed52fe5",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:f3bfc387e86e1f8aa70533873ac315284c0f70b2e2278f6861a4f4d9552fea49",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:13c78530e21f40e59c439a025b8768b8a68d90506323687e4cedf9632838d931",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:d4cdefab3051032a5f0ed16d6a3bfe14d29a09f3f11a64deafca446d577acdff",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:c9ef99d33dae214158512a8c1e49c8264eb56566cf94a88f0473844ca593c6aa",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "dense"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "question_id": "dev-loading-raw-json",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic model data loading migration. Legacy API or concept: parse_raw. AST context: event = Event.parse_raw(raw_message). Question: 从 JSON 字符串加载模型的 parse_raw 在 V2 中应如何处理?",
+      "results": [
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:13c78530e21f40e59c439a025b8768b8a68d90506323687e4cedf9632838d931",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:f3bfc387e86e1f8aa70533873ac315284c0f70b2e2278f6861a4f4d9552fea49",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:f3bebb842668e6f0cce8e2cde36a488162010d87ea8db1454680c7f0aed52fe5",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:b05d8822534d2a6c3d0bf48ca8515c2e7b9ccc7f8f5b2646d8725dbebcf3b936",
+          "heading_path": [
+            "Migration guide",
+            "Changes to dataclasses"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:fbbf9f44714144677d5f64c736fc969b43bb4031ccb16cf7261318dd43647bff",
+          "heading_path": [
+            "Migration guide",
+            "Introduction of `TypeAdapter`"
+          ],
+          "rank": 8
+        },
+        {
+          "chunk_id": "sha256:d30095f4ea972e8df8b98733b034ab622636dd2ed2cca9b6b70b3123cffdf44c",
+          "heading_path": [
+            "Migration guide",
+            "Changes to JSON schema generation"
+          ],
+          "rank": 9
+        },
+        {
+          "chunk_id": "sha256:d4cdefab3051032a5f0ed16d6a3bfe14d29a09f3f11a64deafca446d577acdff",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 10
+        },
+        {
+          "chunk_id": "sha256:1faf26d916b407ac3928e7fda41687201bdcd39d158f6f2db5d12074127ba2e4",
+          "heading_path": [
+            "Migration guide",
+            "Defining custom types"
+          ],
+          "rank": 11
+        },
+        {
+          "chunk_id": "sha256:c9ef99d33dae214158512a8c1e49c8264eb56566cf94a88f0473844ca593c6aa",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 12
+        }
+      ],
+      "returned_count": 12,
+      "system": "hybrid"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "question_id": "dev-loading-orm-object",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic model data loading migration. Legacy API or concept: from_orm. AST context: record = User.from_orm(db_user). Question: 审查 ORM 对象校验路径时,from_orm 的弃用与替代配置是什么?",
+      "results": [
+        {
+          "chunk_id": "sha256:13c78530e21f40e59c439a025b8768b8a68d90506323687e4cedf9632838d931",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:f37dae2b808da309f14da2a146a3f74b25b9d3cbed3ca4e87b44fa3965ee4fcb",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:b05d8822534d2a6c3d0bf48ca8515c2e7b9ccc7f8f5b2646d8725dbebcf3b936",
+          "heading_path": [
+            "Migration guide",
+            "Changes to dataclasses"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:70982752518546907f71f5f87c4554e25e0f46327553a374b0a8b7708b40fb1d",
+          "heading_path": [
+            "Migration guide",
+            "Type conversion from floats to integers"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:8bbf61b7e4ab1a2dc6eb9ead2c9e7be8358ba6ae9e23f900cca1542fecc2f6c7",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:757c9b3565628a4f8e246c6f071345df7c5da7b2533305328445ebcd4c8ed4ae",
+          "heading_path": [],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "bm25"
+    },
+    {
+      "first_gold_rank": 3,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "question_id": "dev-loading-orm-object",
+      "recall_at_1": 0,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 0.3333333333333333,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic model data loading migration. Legacy API or concept: from_orm. AST context: record = User.from_orm(db_user). Question: 审查 ORM 对象校验路径时,from_orm 的弃用与替代配置是什么?",
+      "results": [
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:1ae61278608efc895b8b846293e3d3ad4343012120edb79fc304d4a1993b5ea0",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:f3bfc387e86e1f8aa70533873ac315284c0f70b2e2278f6861a4f4d9552fea49",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:f3bebb842668e6f0cce8e2cde36a488162010d87ea8db1454680c7f0aed52fe5",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:97526f3d0eb7e95a430e44bc3af996bf821d5102a49a3b9b108209e76ea6c208",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:d4cdefab3051032a5f0ed16d6a3bfe14d29a09f3f11a64deafca446d577acdff",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "dense"
+    },
+    {
+      "first_gold_rank": 2,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "question_id": "dev-loading-orm-object",
+      "recall_at_1": 0,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 0.5,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic model data loading migration. Legacy API or concept: from_orm. AST context: record = User.from_orm(db_user). Question: 审查 ORM 对象校验路径时,from_orm 的弃用与替代配置是什么?",
+      "results": [
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:13c78530e21f40e59c439a025b8768b8a68d90506323687e4cedf9632838d931",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:1ae61278608efc895b8b846293e3d3ad4343012120edb79fc304d4a1993b5ea0",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:f37dae2b808da309f14da2a146a3f74b25b9d3cbed3ca4e87b44fa3965ee4fcb",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:b05d8822534d2a6c3d0bf48ca8515c2e7b9ccc7f8f5b2646d8725dbebcf3b936",
+          "heading_path": [
+            "Migration guide",
+            "Changes to dataclasses"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:f3bfc387e86e1f8aa70533873ac315284c0f70b2e2278f6861a4f4d9552fea49",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 8
+        },
+        {
+          "chunk_id": "sha256:70982752518546907f71f5f87c4554e25e0f46327553a374b0a8b7708b40fb1d",
+          "heading_path": [
+            "Migration guide",
+            "Type conversion from floats to integers"
+          ],
+          "rank": 9
+        },
+        {
+          "chunk_id": "sha256:f3bebb842668e6f0cce8e2cde36a488162010d87ea8db1454680c7f0aed52fe5",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 10
+        },
+        {
+          "chunk_id": "sha256:8bbf61b7e4ab1a2dc6eb9ead2c9e7be8358ba6ae9e23f900cca1542fecc2f6c7",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 11
+        },
+        {
+          "chunk_id": "sha256:97526f3d0eb7e95a430e44bc3af996bf821d5102a49a3b9b108209e76ea6c208",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 12
+        },
+        {
+          "chunk_id": "sha256:757c9b3565628a4f8e246c6f071345df7c5da7b2533305328445ebcd4c8ed4ae",
+          "heading_path": [],
+          "rank": 13
+        },
+        {
+          "chunk_id": "sha256:d4cdefab3051032a5f0ed16d6a3bfe14d29a09f3f11a64deafca446d577acdff",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 14
+        }
+      ],
+      "returned_count": 14,
+      "system": "hybrid"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to config"
+      ],
+      "question_id": "dev-config-inner-class",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic model configuration migration. Legacy API or concept: class Config. AST context: class Config: orm_mode = True. Question: BaseModel 内部的 Config 类在 Pydantic V2 中改用什么配置形式?",
+      "results": [
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:f37dae2b808da309f14da2a146a3f74b25b9d3cbed3ca4e87b44fa3965ee4fcb",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:2f726b656b39707230609cc222de3afc76bf255e2f7ea613f0088b439f17396f",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:d36212b4677eec5fb52e3f0e8be6890ebb89cfc68612505b0ab71ad99665a450",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:13c78530e21f40e59c439a025b8768b8a68d90506323687e4cedf9632838d931",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:fa7b7c7cf37accdf41a0b47975cf1da2b7a4a234cd7eb005637fdb43e246d9fb",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:ac0ec52eb30d3cfb945a08b2ede37c188a7cc9c39c354a42050fda1043da1533",
+          "heading_path": [
+            "Migration guide",
+            "Changes to dataclasses"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "bm25"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to config"
+      ],
+      "question_id": "dev-config-inner-class",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic model configuration migration. Legacy API or concept: class Config. AST context: class Config: orm_mode = True. Question: BaseModel 内部的 Config 类在 Pydantic V2 中改用什么配置形式?",
+      "results": [
+        {
+          "chunk_id": "sha256:d36212b4677eec5fb52e3f0e8be6890ebb89cfc68612505b0ab71ad99665a450",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:dc7353da30c597eb599b474bb54c5de4ed5b52293f9268a2c68af3fb576b35ea",
+          "heading_path": [
+            "Migration guide",
+            "Input types are not preserved"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:2f726b656b39707230609cc222de3afc76bf255e2f7ea613f0088b439f17396f",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:929d8e5071b8f4cc06ead413059eadef237209e6a2597a539ece45d98617b80a",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.generics.GenericModel`"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:f37dae2b808da309f14da2a146a3f74b25b9d3cbed3ca4e87b44fa3965ee4fcb",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "dense"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to config"
+      ],
+      "question_id": "dev-config-inner-class",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic model configuration migration. Legacy API or concept: class Config. AST context: class Config: orm_mode = True. Question: BaseModel 内部的 Config 类在 Pydantic V2 中改用什么配置形式?",
+      "results": [
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:d36212b4677eec5fb52e3f0e8be6890ebb89cfc68612505b0ab71ad99665a450",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:2f726b656b39707230609cc222de3afc76bf255e2f7ea613f0088b439f17396f",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:f37dae2b808da309f14da2a146a3f74b25b9d3cbed3ca4e87b44fa3965ee4fcb",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:dc7353da30c597eb599b474bb54c5de4ed5b52293f9268a2c68af3fb576b35ea",
+          "heading_path": [
+            "Migration guide",
+            "Input types are not preserved"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:13c78530e21f40e59c439a025b8768b8a68d90506323687e4cedf9632838d931",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 8
+        },
+        {
+          "chunk_id": "sha256:fa7b7c7cf37accdf41a0b47975cf1da2b7a4a234cd7eb005637fdb43e246d9fb",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 9
+        },
+        {
+          "chunk_id": "sha256:929d8e5071b8f4cc06ead413059eadef237209e6a2597a539ece45d98617b80a",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.generics.GenericModel`"
+          ],
+          "rank": 10
+        },
+        {
+          "chunk_id": "sha256:ac0ec52eb30d3cfb945a08b2ede37c188a7cc9c39c354a42050fda1043da1533",
+          "heading_path": [
+            "Migration guide",
+            "Changes to dataclasses"
+          ],
+          "rank": 11
+        }
+      ],
+      "returned_count": 11,
+      "system": "hybrid"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to config"
+      ],
+      "question_id": "dev-config-population-name",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic model configuration migration. Legacy API or concept: allow_population_by_field_name. AST context: allow_population_by_field_name = True. Question: 字段名填充配置键在 V2 的重命名表中对应哪个新名称?",
+      "results": [
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:2f726b656b39707230609cc222de3afc76bf255e2f7ea613f0088b439f17396f",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:b5707656f931fcfe464f57b98a2eccee98f10e029ef7fe4ff5d5214c8a7b2198",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:0af112a0215826bd27700756716cc6b7b70dc3c9bc4ab30a3cf50bb4da4c98c9",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.Field`"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:6e9b22048009f6918fe684ba7155c988dd1505eb47c69f4eeda57b077f594061",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:13c78530e21f40e59c439a025b8768b8a68d90506323687e4cedf9632838d931",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:f37dae2b808da309f14da2a146a3f74b25b9d3cbed3ca4e87b44fa3965ee4fcb",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "bm25"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to config"
+      ],
+      "question_id": "dev-config-population-name",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic model configuration migration. Legacy API or concept: allow_population_by_field_name. AST context: allow_population_by_field_name = True. Question: 字段名填充配置键在 V2 的重命名表中对应哪个新名称?",
+      "results": [
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:3d145fda8f73412d04c43d322202b7ede3ec1e3c21ba2c2c0bf7a66c862e90d8",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:f3bebb842668e6f0cce8e2cde36a488162010d87ea8db1454680c7f0aed52fe5",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:f3bfc387e86e1f8aa70533873ac315284c0f70b2e2278f6861a4f4d9552fea49",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:d4cdefab3051032a5f0ed16d6a3bfe14d29a09f3f11a64deafca446d577acdff",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "dense"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to config"
+      ],
+      "question_id": "dev-config-population-name",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic model configuration migration. Legacy API or concept: allow_population_by_field_name. AST context: allow_population_by_field_name = True. Question: 字段名填充配置键在 V2 的重命名表中对应哪个新名称?",
+      "results": [
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:2f726b656b39707230609cc222de3afc76bf255e2f7ea613f0088b439f17396f",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:b5707656f931fcfe464f57b98a2eccee98f10e029ef7fe4ff5d5214c8a7b2198",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:0af112a0215826bd27700756716cc6b7b70dc3c9bc4ab30a3cf50bb4da4c98c9",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.Field`"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:3d145fda8f73412d04c43d322202b7ede3ec1e3c21ba2c2c0bf7a66c862e90d8",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 8
+        },
+        {
+          "chunk_id": "sha256:6e9b22048009f6918fe684ba7155c988dd1505eb47c69f4eeda57b077f594061",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 9
+        },
+        {
+          "chunk_id": "sha256:13c78530e21f40e59c439a025b8768b8a68d90506323687e4cedf9632838d931",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 10
+        },
+        {
+          "chunk_id": "sha256:f3bebb842668e6f0cce8e2cde36a488162010d87ea8db1454680c7f0aed52fe5",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 11
+        },
+        {
+          "chunk_id": "sha256:f3bfc387e86e1f8aa70533873ac315284c0f70b2e2278f6861a4f4d9552fea49",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 12
+        },
+        {
+          "chunk_id": "sha256:d4cdefab3051032a5f0ed16d6a3bfe14d29a09f3f11a64deafca446d577acdff",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 13
+        },
+        {
+          "chunk_id": "sha256:f37dae2b808da309f14da2a146a3f74b25b9d3cbed3ca4e87b44fa3965ee4fcb",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 14
+        }
+      ],
+      "returned_count": 14,
+      "system": "hybrid"
+    },
+    {
+      "first_gold_rank": 3,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to validators"
+      ],
+      "question_id": "dev-validators-field-decorator",
+      "recall_at_1": 0,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 0.3333333333333333,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic validator migration. Legacy API or concept: @validator. AST context: @validator('email'). Question: 旧版字段 validator 装饰器迁移到 V2 时应查看哪项官方变化?",
+      "results": [
+        {
+          "chunk_id": "sha256:d4b2c5b5bcff6f214f65b068a6a546669408b403ec0ce472d3d73e8801174fb4",
+          "heading_path": [
+            "Other changes"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:6e9b22048009f6918fe684ba7155c988dd1505eb47c69f4eeda57b077f594061",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:9b0d1f9d34f06b880e1b9b36e0aa72ab47b7d9c38055c1ce2c729ac7ed9f9e4f",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:3a0b547feb2bcb54b99014a107be50c15cb81ea0b4f6e3e63562c495d2023f76",
+          "heading_path": [
+            "Migration guide",
+            "Mypy plugins"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:04635a5f8d860711edca7f27d9d4ba271f3c55932f130230dd315bb8a2ffdf47",
+          "heading_path": [
+            "Migration guide"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:757c9b3565628a4f8e246c6f071345df7c5da7b2533305328445ebcd4c8ed4ae",
+          "heading_path": [],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:d4cdefab3051032a5f0ed16d6a3bfe14d29a09f3f11a64deafca446d577acdff",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "bm25"
+    },
+    {
+      "first_gold_rank": null,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to validators"
+      ],
+      "question_id": "dev-validators-field-decorator",
+      "recall_at_1": 0,
+      "recall_at_3": 0,
+      "reciprocal_rank_at_5": 0.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic validator migration. Legacy API or concept: @validator. AST context: @validator('email'). Question: 旧版字段 validator 装饰器迁移到 V2 时应查看哪项官方变化?",
+      "results": [
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:3d145fda8f73412d04c43d322202b7ede3ec1e3c21ba2c2c0bf7a66c862e90d8",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:d4cdefab3051032a5f0ed16d6a3bfe14d29a09f3f11a64deafca446d577acdff",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:757c9b3565628a4f8e246c6f071345df7c5da7b2533305328445ebcd4c8ed4ae",
+          "heading_path": [],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:b05d8822534d2a6c3d0bf48ca8515c2e7b9ccc7f8f5b2646d8725dbebcf3b936",
+          "heading_path": [
+            "Migration guide",
+            "Changes to dataclasses"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "dense"
+    },
+    {
+      "first_gold_rank": 7,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to validators"
+      ],
+      "question_id": "dev-validators-field-decorator",
+      "recall_at_1": 0,
+      "recall_at_3": 0,
+      "reciprocal_rank_at_5": 0.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic validator migration. Legacy API or concept: @validator. AST context: @validator('email'). Question: 旧版字段 validator 装饰器迁移到 V2 时应查看哪项官方变化?",
+      "results": [
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:d4cdefab3051032a5f0ed16d6a3bfe14d29a09f3f11a64deafca446d577acdff",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:757c9b3565628a4f8e246c6f071345df7c5da7b2533305328445ebcd4c8ed4ae",
+          "heading_path": [],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:d4b2c5b5bcff6f214f65b068a6a546669408b403ec0ce472d3d73e8801174fb4",
+          "heading_path": [
+            "Other changes"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:6e9b22048009f6918fe684ba7155c988dd1505eb47c69f4eeda57b077f594061",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:3d145fda8f73412d04c43d322202b7ede3ec1e3c21ba2c2c0bf7a66c862e90d8",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 8
+        },
+        {
+          "chunk_id": "sha256:9b0d1f9d34f06b880e1b9b36e0aa72ab47b7d9c38055c1ce2c729ac7ed9f9e4f",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 9
+        },
+        {
+          "chunk_id": "sha256:3a0b547feb2bcb54b99014a107be50c15cb81ea0b4f6e3e63562c495d2023f76",
+          "heading_path": [
+            "Migration guide",
+            "Mypy plugins"
+          ],
+          "rank": 10
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 11
+        },
+        {
+          "chunk_id": "sha256:04635a5f8d860711edca7f27d9d4ba271f3c55932f130230dd315bb8a2ffdf47",
+          "heading_path": [
+            "Migration guide"
+          ],
+          "rank": 12
+        },
+        {
+          "chunk_id": "sha256:b05d8822534d2a6c3d0bf48ca8515c2e7b9ccc7f8f5b2646d8725dbebcf3b936",
+          "heading_path": [
+            "Migration guide",
+            "Changes to dataclasses"
+          ],
+          "rank": 13
+        }
+      ],
+      "returned_count": 13,
+      "system": "hybrid"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to validators"
+      ],
+      "question_id": "dev-validators-root-decorator",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic validator migration. Legacy API or concept: @root_validator. AST context: @root_validator(skip_on_failure=True). Question: 模型级 root_validator 的替代装饰器和行为变化是什么?",
+      "results": [
+        {
+          "chunk_id": "sha256:6e9b22048009f6918fe684ba7155c988dd1505eb47c69f4eeda57b077f594061",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:9b0d1f9d34f06b880e1b9b36e0aa72ab47b7d9c38055c1ce2c729ac7ed9f9e4f",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:f4ac4f5be8d32371db0ca9694adcf7c944c598310a2722498c69ef7385d6f6f6",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:9d6f97cffdb8b575a0f27f444ada3c5dfa094f9408bd396f880154551a83f3c9",
+          "heading_path": [
+            "Continue using Pydantic V1 features"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:d4cdefab3051032a5f0ed16d6a3bfe14d29a09f3f11a64deafca446d577acdff",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:8c039b33f6fb74f235dae991549095c1dd5a11b78077d176154888a965ab57bc",
+          "heading_path": [
+            "Continue using Pydantic V1 features",
+            "Using Pydantic v1 features in a v1/v2 environment"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "bm25"
+    },
+    {
+      "first_gold_rank": 3,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to validators"
+      ],
+      "question_id": "dev-validators-root-decorator",
+      "recall_at_1": 0,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 0.3333333333333333,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic validator migration. Legacy API or concept: @root_validator. AST context: @root_validator(skip_on_failure=True). Question: 模型级 root_validator 的替代装饰器和行为变化是什么?",
+      "results": [
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:6e9b22048009f6918fe684ba7155c988dd1505eb47c69f4eeda57b077f594061",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:3d145fda8f73412d04c43d322202b7ede3ec1e3c21ba2c2c0bf7a66c862e90d8",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:d4cdefab3051032a5f0ed16d6a3bfe14d29a09f3f11a64deafca446d577acdff",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:97526f3d0eb7e95a430e44bc3af996bf821d5102a49a3b9b108209e76ea6c208",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "dense"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to validators"
+      ],
+      "question_id": "dev-validators-root-decorator",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic validator migration. Legacy API or concept: @root_validator. AST context: @root_validator(skip_on_failure=True). Question: 模型级 root_validator 的替代装饰器和行为变化是什么?",
+      "results": [
+        {
+          "chunk_id": "sha256:6e9b22048009f6918fe684ba7155c988dd1505eb47c69f4eeda57b077f594061",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:d4cdefab3051032a5f0ed16d6a3bfe14d29a09f3f11a64deafca446d577acdff",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:9b0d1f9d34f06b880e1b9b36e0aa72ab47b7d9c38055c1ce2c729ac7ed9f9e4f",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:f4ac4f5be8d32371db0ca9694adcf7c944c598310a2722498c69ef7385d6f6f6",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 8
+        },
+        {
+          "chunk_id": "sha256:3d145fda8f73412d04c43d322202b7ede3ec1e3c21ba2c2c0bf7a66c862e90d8",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 9
+        },
+        {
+          "chunk_id": "sha256:9d6f97cffdb8b575a0f27f444ada3c5dfa094f9408bd396f880154551a83f3c9",
+          "heading_path": [
+            "Continue using Pydantic V1 features"
+          ],
+          "rank": 10
+        },
+        {
+          "chunk_id": "sha256:8c039b33f6fb74f235dae991549095c1dd5a11b78077d176154888a965ab57bc",
+          "heading_path": [
+            "Continue using Pydantic V1 features",
+            "Using Pydantic v1 features in a v1/v2 environment"
+          ],
+          "rank": 11
+        },
+        {
+          "chunk_id": "sha256:97526f3d0eb7e95a430e44bc3af996bf821d5102a49a3b9b108209e76ea6c208",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 12
+        }
+      ],
+      "returned_count": 12,
+      "system": "hybrid"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "question_id": "dev-field-regex-keyword",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic Field argument migration. Legacy API or concept: Field(regex=...). AST context: code: str = Field(regex='^[A-Z]+$'). Question: Field 的 regex 关键字在 Pydantic V2 中替换成什么?",
+      "results": [
+        {
+          "chunk_id": "sha256:0af112a0215826bd27700756716cc6b7b70dc3c9bc4ab30a3cf50bb4da4c98c9",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.Field`"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:fb96a4702dee3522f5938c1e12471fce3bac94bf16f4db0e2058dd323b240c1d",
+          "heading_path": [
+            "Migration guide",
+            "Changes to Handling of Standard Types"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:0d1db986c0b44a126b784dc247532454e28df474cd490c30513ad43c6149c8c8",
+          "heading_path": [
+            "Migration guide",
+            "Changes to Handling of Standard Types"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:757c9b3565628a4f8e246c6f071345df7c5da7b2533305328445ebcd4c8ed4ae",
+          "heading_path": [],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:f4ac4f5be8d32371db0ca9694adcf7c944c598310a2722498c69ef7385d6f6f6",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:9b0d1f9d34f06b880e1b9b36e0aa72ab47b7d9c38055c1ce2c729ac7ed9f9e4f",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:ed0a5f39912241667e6a9f408fe4be711cc0b13abbe9f0a2d6d3c257853e9975",
+          "heading_path": [
+            "Migration guide",
+            "Url and Dsn types in `pydantic.networks` no longer inherit from `str`"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "bm25"
+    },
+    {
+      "first_gold_rank": 4,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "question_id": "dev-field-regex-keyword",
+      "recall_at_1": 0,
+      "recall_at_3": 0,
+      "reciprocal_rank_at_5": 0.25,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic Field argument migration. Legacy API or concept: Field(regex=...). AST context: code: str = Field(regex='^[A-Z]+$'). Question: Field 的 regex 关键字在 Pydantic V2 中替换成什么?",
+      "results": [
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:3d145fda8f73412d04c43d322202b7ede3ec1e3c21ba2c2c0bf7a66c862e90d8",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:0af112a0215826bd27700756716cc6b7b70dc3c9bc4ab30a3cf50bb4da4c98c9",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.Field`"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:f3bebb842668e6f0cce8e2cde36a488162010d87ea8db1454680c7f0aed52fe5",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:1ae61278608efc895b8b846293e3d3ad4343012120edb79fc304d4a1993b5ea0",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:97526f3d0eb7e95a430e44bc3af996bf821d5102a49a3b9b108209e76ea6c208",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "dense"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "question_id": "dev-field-regex-keyword",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic Field argument migration. Legacy API or concept: Field(regex=...). AST context: code: str = Field(regex='^[A-Z]+$'). Question: Field 的 regex 关键字在 Pydantic V2 中替换成什么?",
+      "results": [
+        {
+          "chunk_id": "sha256:0af112a0215826bd27700756716cc6b7b70dc3c9bc4ab30a3cf50bb4da4c98c9",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.Field`"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:fb96a4702dee3522f5938c1e12471fce3bac94bf16f4db0e2058dd323b240c1d",
+          "heading_path": [
+            "Migration guide",
+            "Changes to Handling of Standard Types"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:0d1db986c0b44a126b784dc247532454e28df474cd490c30513ad43c6149c8c8",
+          "heading_path": [
+            "Migration guide",
+            "Changes to Handling of Standard Types"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:3d145fda8f73412d04c43d322202b7ede3ec1e3c21ba2c2c0bf7a66c862e90d8",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:757c9b3565628a4f8e246c6f071345df7c5da7b2533305328445ebcd4c8ed4ae",
+          "heading_path": [],
+          "rank": 8
+        },
+        {
+          "chunk_id": "sha256:f3bebb842668e6f0cce8e2cde36a488162010d87ea8db1454680c7f0aed52fe5",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 9
+        },
+        {
+          "chunk_id": "sha256:f4ac4f5be8d32371db0ca9694adcf7c944c598310a2722498c69ef7385d6f6f6",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 10
+        },
+        {
+          "chunk_id": "sha256:1ae61278608efc895b8b846293e3d3ad4343012120edb79fc304d4a1993b5ea0",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 11
+        },
+        {
+          "chunk_id": "sha256:9b0d1f9d34f06b880e1b9b36e0aa72ab47b7d9c38055c1ce2c729ac7ed9f9e4f",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 12
+        },
+        {
+          "chunk_id": "sha256:97526f3d0eb7e95a430e44bc3af996bf821d5102a49a3b9b108209e76ea6c208",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 13
+        },
+        {
+          "chunk_id": "sha256:ed0a5f39912241667e6a9f408fe4be711cc0b13abbe9f0a2d6d3c257853e9975",
+          "heading_path": [
+            "Migration guide",
+            "Url and Dsn types in `pydantic.networks` no longer inherit from `str`"
+          ],
+          "rank": 14
+        }
+      ],
+      "returned_count": 14,
+      "system": "hybrid"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "`BaseSettings` has moved to `pydantic-settings`"
+      ],
+      "question_id": "dev-settings-import-move",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic settings migration. Legacy API or concept: pydantic.BaseSettings. AST context: from pydantic import BaseSettings. Question: 服务配置仍从 pydantic 导入 BaseSettings;V2 应从哪里导入?",
+      "results": [
+        {
+          "chunk_id": "sha256:25d03d85759c40f931d826a2078ed976e3b66d86318d1a670a95056269d4b33c",
+          "heading_path": [
+            "Migration guide",
+            "`BaseSettings` has moved to `pydantic-settings`"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:8c039b33f6fb74f235dae991549095c1dd5a11b78077d176154888a965ab57bc",
+          "heading_path": [
+            "Continue using Pydantic V1 features",
+            "Using Pydantic v1 features in a v1/v2 environment"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:f37dae2b808da309f14da2a146a3f74b25b9d3cbed3ca4e87b44fa3965ee4fcb",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:9d6f97cffdb8b575a0f27f444ada3c5dfa094f9408bd396f880154551a83f3c9",
+          "heading_path": [
+            "Continue using Pydantic V1 features"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:d36212b4677eec5fb52e3f0e8be6890ebb89cfc68612505b0ab71ad99665a450",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:757c9b3565628a4f8e246c6f071345df7c5da7b2533305328445ebcd4c8ed4ae",
+          "heading_path": [],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "bm25"
+    },
+    {
+      "first_gold_rank": null,
+      "gold_heading_path": [
+        "Migration guide",
+        "`BaseSettings` has moved to `pydantic-settings`"
+      ],
+      "question_id": "dev-settings-import-move",
+      "recall_at_1": 0,
+      "recall_at_3": 0,
+      "reciprocal_rank_at_5": 0.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic settings migration. Legacy API or concept: pydantic.BaseSettings. AST context: from pydantic import BaseSettings. Question: 服务配置仍从 pydantic 导入 BaseSettings;V2 应从哪里导入?",
+      "results": [
+        {
+          "chunk_id": "sha256:3a0b547feb2bcb54b99014a107be50c15cb81ea0b4f6e3e63562c495d2023f76",
+          "heading_path": [
+            "Migration guide",
+            "Mypy plugins"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:9d6f97cffdb8b575a0f27f444ada3c5dfa094f9408bd396f880154551a83f3c9",
+          "heading_path": [
+            "Continue using Pydantic V1 features"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:757c9b3565628a4f8e246c6f071345df7c5da7b2533305328445ebcd4c8ed4ae",
+          "heading_path": [],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:f3bebb842668e6f0cce8e2cde36a488162010d87ea8db1454680c7f0aed52fe5",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:3d145fda8f73412d04c43d322202b7ede3ec1e3c21ba2c2c0bf7a66c862e90d8",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "dense"
+    },
+    {
+      "first_gold_rank": 5,
+      "gold_heading_path": [
+        "Migration guide",
+        "`BaseSettings` has moved to `pydantic-settings`"
+      ],
+      "question_id": "dev-settings-import-move",
+      "recall_at_1": 0,
+      "recall_at_3": 0,
+      "reciprocal_rank_at_5": 0.2,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic settings migration. Legacy API or concept: pydantic.BaseSettings. AST context: from pydantic import BaseSettings. Question: 服务配置仍从 pydantic 导入 BaseSettings;V2 应从哪里导入?",
+      "results": [
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:9d6f97cffdb8b575a0f27f444ada3c5dfa094f9408bd396f880154551a83f3c9",
+          "heading_path": [
+            "Continue using Pydantic V1 features"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:757c9b3565628a4f8e246c6f071345df7c5da7b2533305328445ebcd4c8ed4ae",
+          "heading_path": [],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:25d03d85759c40f931d826a2078ed976e3b66d86318d1a670a95056269d4b33c",
+          "heading_path": [
+            "Migration guide",
+            "`BaseSettings` has moved to `pydantic-settings`"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:3a0b547feb2bcb54b99014a107be50c15cb81ea0b4f6e3e63562c495d2023f76",
+          "heading_path": [
+            "Migration guide",
+            "Mypy plugins"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:8c039b33f6fb74f235dae991549095c1dd5a11b78077d176154888a965ab57bc",
+          "heading_path": [
+            "Continue using Pydantic V1 features",
+            "Using Pydantic v1 features in a v1/v2 environment"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 8
+        },
+        {
+          "chunk_id": "sha256:f37dae2b808da309f14da2a146a3f74b25b9d3cbed3ca4e87b44fa3965ee4fcb",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 9
+        },
+        {
+          "chunk_id": "sha256:d36212b4677eec5fb52e3f0e8be6890ebb89cfc68612505b0ab71ad99665a450",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 10
+        },
+        {
+          "chunk_id": "sha256:f3bebb842668e6f0cce8e2cde36a488162010d87ea8db1454680c7f0aed52fe5",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 11
+        },
+        {
+          "chunk_id": "sha256:3d145fda8f73412d04c43d322202b7ede3ec1e3c21ba2c2c0bf7a66c862e90d8",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 12
+        }
+      ],
+      "returned_count": 12,
+      "system": "hybrid"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.generics.GenericModel`"
+      ],
+      "question_id": "dev-generic-model-base",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic generic model migration. Legacy API or concept: GenericModel. AST context: class Box(GenericModel, Generic[T]). Question: GenericModel 基类移除后,泛型 BaseModel 应怎样声明?",
+      "results": [
+        {
+          "chunk_id": "sha256:929d8e5071b8f4cc06ead413059eadef237209e6a2597a539ece45d98617b80a",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.generics.GenericModel`"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:c9ef99d33dae214158512a8c1e49c8264eb56566cf94a88f0473844ca593c6aa",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:fbbf9f44714144677d5f64c736fc969b43bb4031ccb16cf7261318dd43647bff",
+          "heading_path": [
+            "Migration guide",
+            "Introduction of `TypeAdapter`"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:7c7a2d2abe3ae4ffc778a0021ba207536e0b9da7df4205bd60149ddb2fa35a01",
+          "heading_path": [
+            "Migration guide",
+            "Input types are not preserved"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:13c78530e21f40e59c439a025b8768b8a68d90506323687e4cedf9632838d931",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:33ffc32486da101bb1fe5ddac4f258c029e26e963f5e17fe46a7aa2045de0796",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:9d6f97cffdb8b575a0f27f444ada3c5dfa094f9408bd396f880154551a83f3c9",
+          "heading_path": [
+            "Continue using Pydantic V1 features"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "bm25"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.generics.GenericModel`"
+      ],
+      "question_id": "dev-generic-model-base",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic generic model migration. Legacy API or concept: GenericModel. AST context: class Box(GenericModel, Generic[T]). Question: GenericModel 基类移除后,泛型 BaseModel 应怎样声明?",
+      "results": [
+        {
+          "chunk_id": "sha256:929d8e5071b8f4cc06ead413059eadef237209e6a2597a539ece45d98617b80a",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.generics.GenericModel`"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:dc7353da30c597eb599b474bb54c5de4ed5b52293f9268a2c68af3fb576b35ea",
+          "heading_path": [
+            "Migration guide",
+            "Input types are not preserved"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:d30095f4ea972e8df8b98733b034ab622636dd2ed2cca9b6b70b3123cffdf44c",
+          "heading_path": [
+            "Migration guide",
+            "Changes to JSON schema generation"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:33ffc32486da101bb1fe5ddac4f258c029e26e963f5e17fe46a7aa2045de0796",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:fbbf9f44714144677d5f64c736fc969b43bb4031ccb16cf7261318dd43647bff",
+          "heading_path": [
+            "Migration guide",
+            "Introduction of `TypeAdapter`"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "dense"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.generics.GenericModel`"
+      ],
+      "question_id": "dev-generic-model-base",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic generic model migration. Legacy API or concept: GenericModel. AST context: class Box(GenericModel, Generic[T]). Question: GenericModel 基类移除后,泛型 BaseModel 应怎样声明?",
+      "results": [
+        {
+          "chunk_id": "sha256:929d8e5071b8f4cc06ead413059eadef237209e6a2597a539ece45d98617b80a",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.generics.GenericModel`"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:fbbf9f44714144677d5f64c736fc969b43bb4031ccb16cf7261318dd43647bff",
+          "heading_path": [
+            "Migration guide",
+            "Introduction of `TypeAdapter`"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:33ffc32486da101bb1fe5ddac4f258c029e26e963f5e17fe46a7aa2045de0796",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:c9ef99d33dae214158512a8c1e49c8264eb56566cf94a88f0473844ca593c6aa",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:dc7353da30c597eb599b474bb54c5de4ed5b52293f9268a2c68af3fb576b35ea",
+          "heading_path": [
+            "Migration guide",
+            "Input types are not preserved"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 8
+        },
+        {
+          "chunk_id": "sha256:7c7a2d2abe3ae4ffc778a0021ba207536e0b9da7df4205bd60149ddb2fa35a01",
+          "heading_path": [
+            "Migration guide",
+            "Input types are not preserved"
+          ],
+          "rank": 9
+        },
+        {
+          "chunk_id": "sha256:13c78530e21f40e59c439a025b8768b8a68d90506323687e4cedf9632838d931",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 10
+        },
+        {
+          "chunk_id": "sha256:d30095f4ea972e8df8b98733b034ab622636dd2ed2cca9b6b70b3123cffdf44c",
+          "heading_path": [
+            "Migration guide",
+            "Changes to JSON schema generation"
+          ],
+          "rank": 11
+        },
+        {
+          "chunk_id": "sha256:9d6f97cffdb8b575a0f27f444ada3c5dfa094f9408bd396f880154551a83f3c9",
+          "heading_path": [
+            "Continue using Pydantic V1 features"
+          ],
+          "rank": 12
+        }
+      ],
+      "returned_count": 12,
+      "system": "hybrid"
+    },
+    {
+      "first_gold_rank": 1,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "question_id": "dev-root-model-list",
+      "recall_at_1": 1,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 1.0,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic root model migration. Legacy API or concept: __root__. AST context: class Tags(BaseModel): __root__: list[str]. Question: 使用 __root__ 包装字符串列表的模型在 V2 中迁移到什么类型?",
+      "results": [
+        {
+          "chunk_id": "sha256:21fe7f2ef58f859dd9717353b330908446c823dbd17df60e0a628d966b0b42cb",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:fbbf9f44714144677d5f64c736fc969b43bb4031ccb16cf7261318dd43647bff",
+          "heading_path": [
+            "Migration guide",
+            "Introduction of `TypeAdapter`"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:0af112a0215826bd27700756716cc6b7b70dc3c9bc4ab30a3cf50bb4da4c98c9",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.Field`"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:c9ef99d33dae214158512a8c1e49c8264eb56566cf94a88f0473844ca593c6aa",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:9d6f97cffdb8b575a0f27f444ada3c5dfa094f9408bd396f880154551a83f3c9",
+          "heading_path": [
+            "Continue using Pydantic V1 features"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:6e9b22048009f6918fe684ba7155c988dd1505eb47c69f4eeda57b077f594061",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "bm25"
+    },
+    {
+      "first_gold_rank": 2,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "question_id": "dev-root-model-list",
+      "recall_at_1": 0,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 0.5,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic root model migration. Legacy API or concept: __root__. AST context: class Tags(BaseModel): __root__: list[str]. Question: 使用 __root__ 包装字符串列表的模型在 V2 中迁移到什么类型?",
+      "results": [
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:fbbf9f44714144677d5f64c736fc969b43bb4031ccb16cf7261318dd43647bff",
+          "heading_path": [
+            "Migration guide",
+            "Introduction of `TypeAdapter`"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:dc7353da30c597eb599b474bb54c5de4ed5b52293f9268a2c68af3fb576b35ea",
+          "heading_path": [
+            "Migration guide",
+            "Input types are not preserved"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:f3bebb842668e6f0cce8e2cde36a488162010d87ea8db1454680c7f0aed52fe5",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:3d145fda8f73412d04c43d322202b7ede3ec1e3c21ba2c2c0bf7a66c862e90d8",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 8
+        }
+      ],
+      "returned_count": 8,
+      "system": "dense"
+    },
+    {
+      "first_gold_rank": 2,
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "question_id": "dev-root-model-list",
+      "recall_at_1": 0,
+      "recall_at_3": 1,
+      "reciprocal_rank_at_5": 0.5,
+      "rendered_query": "Pydantic v1 to v2 migration. Rule category: Pydantic root model migration. Legacy API or concept: __root__. AST context: class Tags(BaseModel): __root__: list[str]. Question: 使用 __root__ 包装字符串列表的模型在 V2 中迁移到什么类型?",
+      "results": [
+        {
+          "chunk_id": "sha256:fbbf9f44714144677d5f64c736fc969b43bb4031ccb16cf7261318dd43647bff",
+          "heading_path": [
+            "Migration guide",
+            "Introduction of `TypeAdapter`"
+          ],
+          "rank": 1
+        },
+        {
+          "chunk_id": "sha256:fee6e93c83018400dccf410d8f3811f36050c75a56e7abf8ec7149a6b9f3b67b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 2
+        },
+        {
+          "chunk_id": "sha256:51f749b8d612a287863c8d6f365007f600c6db723894b01e61e07a02fec62d3b",
+          "heading_path": [
+            "Migration guide",
+            "Changes to config"
+          ],
+          "rank": 3
+        },
+        {
+          "chunk_id": "sha256:211657d371e2325e8c780a2a33f94044ad7b5139220c4986698993bbcb5cf493",
+          "heading_path": [
+            "Deprecated and moved in Pydantic V2"
+          ],
+          "rank": 4
+        },
+        {
+          "chunk_id": "sha256:21fe7f2ef58f859dd9717353b330908446c823dbd17df60e0a628d966b0b42cb",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 5
+        },
+        {
+          "chunk_id": "sha256:0af112a0215826bd27700756716cc6b7b70dc3c9bc4ab30a3cf50bb4da4c98c9",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.Field`"
+          ],
+          "rank": 6
+        },
+        {
+          "chunk_id": "sha256:6482fa2094ced58fea8c5c206bf242fd66a6093cefb386d2f66fa8f5e016fdc3",
+          "heading_path": [
+            "Moved in Pydantic V2"
+          ],
+          "rank": 7
+        },
+        {
+          "chunk_id": "sha256:c9ef99d33dae214158512a8c1e49c8264eb56566cf94a88f0473844ca593c6aa",
+          "heading_path": [
+            "Migration guide",
+            "Changes to `pydantic.BaseModel`"
+          ],
+          "rank": 8
+        },
+        {
+          "chunk_id": "sha256:dc7353da30c597eb599b474bb54c5de4ed5b52293f9268a2c68af3fb576b35ea",
+          "heading_path": [
+            "Migration guide",
+            "Input types are not preserved"
+          ],
+          "rank": 9
+        },
+        {
+          "chunk_id": "sha256:9d6f97cffdb8b575a0f27f444ada3c5dfa094f9408bd396f880154551a83f3c9",
+          "heading_path": [
+            "Continue using Pydantic V1 features"
+          ],
+          "rank": 10
+        },
+        {
+          "chunk_id": "sha256:f3bebb842668e6f0cce8e2cde36a488162010d87ea8db1454680c7f0aed52fe5",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 11
+        },
+        {
+          "chunk_id": "sha256:3d145fda8f73412d04c43d322202b7ede3ec1e3c21ba2c2c0bf7a66c862e90d8",
+          "heading_path": [
+            "Removed in Pydantic V2"
+          ],
+          "rank": 12
+        },
+        {
+          "chunk_id": "sha256:6e9b22048009f6918fe684ba7155c988dd1505eb47c69f4eeda57b077f594061",
+          "heading_path": [
+            "Migration guide",
+            "Changes to validators"
+          ],
+          "rank": 13
+        }
+      ],
+      "returned_count": 13,
+      "system": "hybrid"
+    }
+  ],
+  "evaluator_schema_version": 1,
+  "question_count": 12,
+  "split": "dev"
+}

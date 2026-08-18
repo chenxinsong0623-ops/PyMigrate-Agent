@@ -1,0 +1,71 @@
+{
+  "embedding": {
+    "device": "cpu",
+    "dimension": 384,
+    "max_sequence_length": 512,
+    "model_id": "intfloat/multilingual-e5-small",
+    "offline_cache_required": true,
+    "revision": "614241f622f53c4eeff9890bdc4f31cfecc418b3"
+  },
+  "evaluator_schema_version": 1,
+  "git": {
+    "head": "f351bc723d1b12c128927b10e2c7c17f680b2205",
+    "working_tree_dirty": true
+  },
+  "limitations": [
+    "locked evaluation was not run",
+    "6 of 62 fixed passages are known to exceed the E5 512-token limit",
+    "RRF k=60 is a recorded baseline, not an optimality claim"
+  ],
+  "outputs": {
+    "details_path": "reports/retrieval_dev_details.json",
+    "details_sha256": "4aa85eba4f7ef236a0a863e559bda39db0c1ac1d3f29b8c4b1792f2f3b372c79",
+    "metrics_path": "reports/retrieval_dev_metrics.csv",
+    "metrics_sha256": "e6d69e75edc2e7324475e4da3c0440658f3dbd1f54cb0e28fab71459fc7dd43d"
+  },
+  "project_version": "0.1.0",
+  "python_version": "3.11.15",
+  "qdrant": {
+    "collection_name": "migrationlens-documents",
+    "distance": "cosine",
+    "point_count": 62,
+    "vector_size": 384
+  },
+  "question_count": 12,
+  "questions": {
+    "dev_path": "data/evaluation/retrieval/dev.json",
+    "dev_question_count": 12,
+    "dev_sha256": "89a2602fec98c12ced414539ba0152409a85a368e6cbdbf309ed9af50403e9c7",
+    "locked_candidate_count": 20,
+    "locked_candidates_path": "data/evaluation/retrieval/locked_candidates.json",
+    "locked_candidates_sha256": "df0b46bb90c96f7f2967ceb9b1439e6659a202473e1dc679642b4f492cce7f56",
+    "locked_evaluation": "not_run",
+    "schema_version": 1
+  },
+  "retrieval": {
+    "bm25_b": 0.75,
+    "bm25_k1": 1.5,
+    "bm25_top_k": 8,
+    "dense_top_k": 8,
+    "hybrid_final_top_k": 3,
+    "rrf_k": 60
+  },
+  "runtime_versions": {
+    "pydantic": "2.13.4",
+    "qdrant-client": "1.18.0",
+    "sentence-transformers": "5.6.1",
+    "torch": "2.13.0",
+    "transformers": "5.14.1"
+  },
+  "schema_version": 1,
+  "source": {
+    "chunk_artifact_path": "data/chunks/pydantic-v2-migration.json",
+    "chunk_artifact_sha256": "36ab67593a997edb81cf0385d74213471b95bf5c915e551e92461e88192b1773",
+    "chunk_count": 62,
+    "resolved_commit_sha": "cf67d4b3193c3fe43ede18612ed62785eee11382",
+    "snapshot_path": "data/snapshots/pydantic-v2-migration/migration.md",
+    "snapshot_sha256": "3a33c005259e6ede170df1904a168a4a64e8d8efc5b7fed360b65e5c000c05b7",
+    "source_ref": "v2.13.4"
+  },
+  "split": "dev"
+}

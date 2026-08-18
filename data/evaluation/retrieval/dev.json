@@ -1,0 +1,175 @@
+{
+  "gold_source": "official_snapshot_heading_review",
+  "questions": [
+    {
+      "ast_context": "payload = user.dict()",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "old_api": "BaseModel.dict()",
+      "question_id": "dev-methods-dict-export",
+      "rule_category": "base_model_methods",
+      "schema_version": 1,
+      "split": "dev",
+      "template_family": "dev_upgrade_review",
+      "user_question": "升级到 Pydantic V2 时，这个模型导出调用应迁移到哪个方法？"
+    },
+    {
+      "ast_context": "body = order.json()",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "old_api": "BaseModel.json()",
+      "question_id": "dev-methods-json-export",
+      "rule_category": "base_model_methods",
+      "schema_version": 1,
+      "split": "dev",
+      "template_family": "dev_code_review",
+      "user_question": "代码审查发现模型实例调用 json；V2 的方法重命名说明在哪里？"
+    },
+    {
+      "ast_context": "event = Event.parse_raw(raw_message)",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "old_api": "parse_raw",
+      "question_id": "dev-loading-raw-json",
+      "rule_category": "data_loading",
+      "schema_version": 1,
+      "split": "dev",
+      "template_family": "dev_upgrade_review",
+      "user_question": "从 JSON 字符串加载模型的 parse_raw 在 V2 中应如何处理？"
+    },
+    {
+      "ast_context": "record = User.from_orm(db_user)",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "old_api": "from_orm",
+      "question_id": "dev-loading-orm-object",
+      "rule_category": "data_loading",
+      "schema_version": 1,
+      "split": "dev",
+      "template_family": "dev_code_review",
+      "user_question": "审查 ORM 对象校验路径时，from_orm 的弃用与替代配置是什么？"
+    },
+    {
+      "ast_context": "class Config: orm_mode = True",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to config"
+      ],
+      "old_api": "class Config",
+      "question_id": "dev-config-inner-class",
+      "rule_category": "config",
+      "schema_version": 1,
+      "split": "dev",
+      "template_family": "dev_upgrade_review",
+      "user_question": "BaseModel 内部的 Config 类在 Pydantic V2 中改用什么配置形式？"
+    },
+    {
+      "ast_context": "allow_population_by_field_name = True",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to config"
+      ],
+      "old_api": "allow_population_by_field_name",
+      "question_id": "dev-config-population-name",
+      "rule_category": "config",
+      "schema_version": 1,
+      "split": "dev",
+      "template_family": "dev_code_review",
+      "user_question": "字段名填充配置键在 V2 的重命名表中对应哪个新名称？"
+    },
+    {
+      "ast_context": "@validator('email')",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to validators"
+      ],
+      "old_api": "@validator",
+      "question_id": "dev-validators-field-decorator",
+      "rule_category": "validators",
+      "schema_version": 1,
+      "split": "dev",
+      "template_family": "dev_upgrade_review",
+      "user_question": "旧版字段 validator 装饰器迁移到 V2 时应查看哪项官方变化？"
+    },
+    {
+      "ast_context": "@root_validator(skip_on_failure=True)",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to validators"
+      ],
+      "old_api": "@root_validator",
+      "question_id": "dev-validators-root-decorator",
+      "rule_category": "validators",
+      "schema_version": 1,
+      "split": "dev",
+      "template_family": "dev_code_review",
+      "user_question": "模型级 root_validator 的替代装饰器和行为变化是什么？"
+    },
+    {
+      "ast_context": "code: str = Field(regex='^[A-Z]+$')",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "old_api": "Field(regex=...)",
+      "question_id": "dev-field-regex-keyword",
+      "rule_category": "field_arguments",
+      "schema_version": 1,
+      "split": "dev",
+      "template_family": "dev_upgrade_review",
+      "user_question": "Field 的 regex 关键字在 Pydantic V2 中替换成什么？"
+    },
+    {
+      "ast_context": "from pydantic import BaseSettings",
+      "gold_heading_path": [
+        "Migration guide",
+        "`BaseSettings` has moved to `pydantic-settings`"
+      ],
+      "old_api": "pydantic.BaseSettings",
+      "question_id": "dev-settings-import-move",
+      "rule_category": "settings",
+      "schema_version": 1,
+      "split": "dev",
+      "template_family": "dev_code_review",
+      "user_question": "服务配置仍从 pydantic 导入 BaseSettings；V2 应从哪里导入？"
+    },
+    {
+      "ast_context": "class Box(GenericModel, Generic[T])",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.generics.GenericModel`"
+      ],
+      "old_api": "GenericModel",
+      "question_id": "dev-generic-model-base",
+      "rule_category": "generic_model",
+      "schema_version": 1,
+      "split": "dev",
+      "template_family": "dev_upgrade_review",
+      "user_question": "GenericModel 基类移除后，泛型 BaseModel 应怎样声明？"
+    },
+    {
+      "ast_context": "class Tags(BaseModel): __root__: list[str]",
+      "gold_heading_path": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "old_api": "__root__",
+      "question_id": "dev-root-model-list",
+      "rule_category": "root_model",
+      "schema_version": 1,
+      "split": "dev",
+      "template_family": "dev_code_review",
+      "user_question": "使用 __root__ 包装字符串列表的模型在 V2 中迁移到什么类型？"
+    }
+  ],
+  "schema_version": 1,
+  "split": "dev"
+}
