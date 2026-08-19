@@ -410,7 +410,41 @@ diff、pip 与 Compose config 均通过。Compose 仅保留两条既有 Docker c
 未运行未修改部署的 Docker runtime。
 
 Day 13 没有实现 AST、symbol table、八类规则、import graph、Agent、分析 API 或 locked
-evaluation；Day 14 仍为 `planned`，只能在 ZipGuard context 内消费本日稳定输入。
+evaluation；这些历史边界不被后续 Day 14 回填改写。
+
+### 2.13 MigrationLens Day 14
+
+状态：`completed`
+计划日期：2026-08-19
+实际开发日期：2026-08-18
+
+Day 14 新增 `app/scanner`，只在 ZipGuard context 内消费按相对路径排序的
+`ZipGuardResult.python_files`。每个文件先重新确认 task root/target 是普通非 reparse
+受控路径，再以 inventory size+1 有界读取并复核 size、SHA256 和 Day 13 LOC；严格
+`utf-8-sig` 解码后使用 Python 3.11 标准库 `ast.parse()`，filename 只传相对路径。
+
+公共 `ASTScanResult` 分离 strict/frozen `ScannerRegistry` schema v1 与逐文件对齐的
+运行时 `ast.Module`。registry 记录 file/module/AST hash、Import/ImportFrom alias、
+relative level、scope/source location、当前文件 BaseModel class proof、参数 annotation 与
+简单赋值 type clue；不保存绝对 task root、源码、随机 ID 或时间。
+
+模块 mapping 支持 root module、package module 与 `__init__.py`；非法 identifier/keyword
+path 和 `pkg.py`/`pkg/__init__.py` module collision 显式失败。BaseModel 只接受无歧义
+module-level Pydantic import/alias，并对源码顺序中已经定义的 top-level 本地 class 做
+显式继承闭包；其他库同名、alias shadow、函数局部 class、后定义父类和未知 factory
+保持保守，不做跨文件或完整 type checking。
+
+测试先行首次产生两个预期 `ModuleNotFoundError: No module named 'app.scanner'`。最终新增
+35 个 case，文档前定向为 `35 passed in 0.67s`，完整回归为
+`504 passed, 2 warnings in 6.74s`。真实临时 ZIP smoke 返回两个 modules、四个 alias、
+三个 BaseModel classes 和参数/赋值线索；README/ignored Python 未进入 registry，sentinel
+未执行，context 后 task root 无残留。全部同步后最终定向为 `35 passed in 0.47s`，完整
+回归为 `504 passed, 2 warnings in 5.42s`；Ruff、68-file format、pip、diff 与静态
+Compose config 均通过，未运行未修改部署的 Docker runtime。
+
+Day 14 没有生成八类 production finding、confidence/severity、importer graph、Agent、
+分析 API 或 locked 指标。Day 15 仍为 `planned`，可以消费同一 context 内的 registry 与
+逐文件 `ast.Module`，只增量实现配置、验证器、Settings 与根模型规则。
 
 ## 3. P0、P1 和不做范围
 
@@ -501,7 +535,8 @@ flowchart LR
 组件职责：
 
 - ZIP Guard：校验所有成员，只将普通 `.py` 文件交给扫描器；
-- AST scanner：产生确定性 finding，不依赖 LLM；
+- AST scanner：解析 validated files 并产生确定性 registry，不依赖 LLM；后续规则才产生
+  finding；
 - import graph：只报告一跳本地 importer；
 - hybrid retriever：从固定官方快照返回可追溯 chunk；
 - Agent：对有限歧义项选择证据并组织报告；
@@ -515,8 +550,8 @@ flowchart LR
 `reporting/` 和 `storage/`。当前真实代码包含基础 `app/api`、`app/core`、
 `app/storage/sqlite.py`、snapshot/chunk/dense index 所在的 `app/ingestion`、真实
 E5/Qdrant/BM25/Dense/Hybrid 所在的 `app/retrieval`，以及 dev evaluator 所在的
-`app/evaluation` 和 Day 13 ZIP Guard 所在的 `app/security`；尚无 scanner、agent 或
-业务 reporting 实现。Day 12 的
+`app/evaluation`、Day 13 ZIP Guard 所在的 `app/security`，以及 Day 14 AST/registry
+所在的 `app/scanner`；尚无 production rules、agent 或业务 reporting 实现。Day 12 的
 `reports/retrieval_dev_*` 是项目评测 artifact，不是分析报告存储。
 
 ## 6. 数据与文档快照
@@ -788,6 +823,10 @@ Day 13 已按 D-016 实现并验证以下边界；该实现尚未接入未来业
 Settings/.env 放宽；`ZipGuard` context 结束即清理随机 task root，Day 14 必须在其生命
 周期内消费 `ZipGuardResult`。
 
+Day 14 Scanner 不改变这些 ZIP 语义。它只读取本次 result 明示的 Python inventory，
+重新证明文件 identity 后 parse；不递归目录、不读取 safe non-Python/ignored Python、
+不执行或 import 源码。SyntaxError 或 identity failure 使整个 scan 显式失败。
+
 测试必须覆盖正常 ZIP、Zip Slip、绝对路径、软链接、zip bomb/压缩比、大小、
 成员数、重复路径和非 UTF-8 Python。
 
@@ -911,7 +950,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 11 | 计划 2026-08-15；实际 2026-08-13 | `completed` | BM25 + RRF 服务 | 项目内 BM25 top-8、复用 dense top-8、RRF 去重、完整 ranking 和 top-3 | 新增 45 cases；完整 330 passed；真实 6 BM25 + 4 Dense/Hybrid smoke；共同门禁 | lexical/dense 互补 | reranker、Agent、locked 调参 |
 | MigrationLens Day 12 | 计划 2026-08-17；实际 2026-08-14 | `completed` | dev 检索集与评分 | 32 题 schema、12 dev、20 locked candidates 隔离、同 query 三路 Recall@1/3 与 MRR@5、dev artifacts | 专项 50 passed；完整 380 passed；真实 E5/Qdrant 12 题 dev：BM25 0.916667/1.0/0.944444，Dense 0.416667/0.666667/0.555556，Hybrid 0.666667/0.833333/0.766667；locked NOT RUN；共同门禁 | 评测分割、泄漏与消融 | locked 运行、P0 禁用的 reranker、ZIP/AST |
 | MigrationLens Day 13 | 2026-08-18 | `completed` | ZIP Guard | 全部资源/路径/成员规则、有界实际读取、安全非 Python 忽略、selected Python 受控提取与 cleanup | 89 cases；真实 2/1/10 MiB、200/50k、ratio/path/type/encoding/lifecycle；临时 ZIP smoke；共同门禁 | 压缩包信任边界 | import/执行/修改代码、AST |
-| MigrationLens Day 14 | 2026-08-19 | `planned` | AST 基础与符号表 | inventory、编码/语法、alias、BaseModel、类型线索、模块映射、registry | 空/BOM/语法/alias/稳定顺序；共同门禁 | AST 与确定性 schema | 八类规则、一跳 import、LLM |
+| MigrationLens Day 14 | 计划 2026-08-19；实际 2026-08-18 | `completed` | AST 基础与符号表 | identity recheck、标准库 AST、module/import/BaseModel/type clue registry 与 runtime trees | 35 cases；真实 Day13→Day14 ZIP smoke；共同门禁 | AST 与确定性 schema | 八类规则、一跳 import、LLM |
 | MigrationLens Day 15 | 2026-08-20 | `planned` | 前四类规则 | 配置、验证器、Settings、根模型；按本日规则增量建立候选 fixture | 每类 3 正2负1边界、行号 gold、同名负例；共同门禁 | 上下文敏感匹配 | 后四类、一次性补齐全部 fixture、Agent |
 | MigrationLens Day 16 | 2026-08-21 | `planned` | 后四类规则 | 方法、数据加载、Field、GenericModel 和浅层 receiver；继续增量建立候选 fixture | 正负/alias、普通 `.dict()` 不高置信、low 不成 finding；共同门禁 | 置信度与人工复核 | 一跳 import、一次性补齐全部 fixture、完整类型推断 |
 | MigrationLens Day 17 | 2026-08-22 | `planned` | 一跳反向 import | 本地 import graph、一跳 importer；只增量增加与一跳关系直接相关的混合候选 | 相对/绝对/cycle/同名/仅一跳；共同门禁 | 模块影响而非调用图 | 递归图、在本日补齐 40 个候选、锁定评测 |

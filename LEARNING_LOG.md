@@ -2035,3 +2035,181 @@ Agent、Citation Guard、业务 API 或源码修改。
 24. fail closed 与吞掉编程错误有什么区别？
 25. 安全错误为何只能记录白名单 `error_type`？
 26. Day 13 与 Day 14 的资源生命周期和职责边界是什么？
+
+## 2026-08-18：MigrationLens Day 14 —— AST 基础与确定性扫描注册表
+
+状态：`completed`（实现、35 个新增 case、完整回归与真实 Day13→Day14 ZIP smoke 已完成）
+
+### 1. 本日唯一目标与调用链
+
+Day 14 只把 Day 13 的 validated Python inventory 变成后续规则可消费的 AST 与稳定 symbol
+registry：
+
+```text
+ZipGuardResult.python_files
+  -> task/file identity recheck
+  -> strict UTF-8-sig decode
+  -> ast.parse(relative filename, Python 3.11)
+  -> ScannerRegistry + aligned ast.Module
+```
+
+没有递归扫描 task root，没有 import/exec/eval/compile 调用用户项目，没有运行用户函数、
+pytest 或 dependency，也没有产生八类 migration finding、一跳 importer 或 locked 指标。
+
+### 2. 为什么 AST parse 不执行代码
+
+`ast.parse()` 把源码文本转换为节点树；`ClassDef`、`Call`、`Raise` 等只作为数据节点存在。
+Scanner 没有把 tree 交给 `exec()`、没有 import 模块，也没有调用节点表达的函数。真实
+integration/smoke 在源码中放入写 sentinel 和 `raise RuntimeError`，两者都没有发生；
+这直接验证了“能看见调用节点”与“执行调用”是不同边界。
+
+### 3. 为什么 registry 与 runtime AST 分开
+
+`ast.Module` 是标准库可变运行时对象，包含常量等源码信息，不适合直接放入可序列化的
+Pydantic artifact。只保存摘要又会迫使 Day 15 重复 parse。因此 `ASTScanResult` 分为：
+
+- strict/frozen `ScannerRegistry` schema v1：稳定、无绝对路径、无源码、可 model dump；
+- 同序 `ParsedPythonFile(relative_path, module_name, tree)`：只在当前分析生命周期内供
+  下游规则只读遍历，不记录或持久化。
+
+文件 registry 保存原始 SHA256 与基于 `ast.dump(include_attributes=True)` 的 AST SHA256。
+后者能证明同一 Python/AST 语义与位置的稳定 dump identity，但不能替代源文件 SHA256。
+
+### 4. Module mapping 与冲突
+
+模块名只相对于本次 validated inventory：root `models.py -> models`，package module
+`pkg/models.py -> pkg.models`，package initializer `pkg/__init__.py -> pkg`，analysis root
+`__init__.py -> __init__`。每个组件必须是非 keyword Python identifier。
+
+`pkg.py` 和 `pkg/__init__.py` 可以是两个安全 ZIP path，但都会映射 module `pkg`；Scanner
+必须以 `module_name_conflict` 拒绝，而不能由输入顺序决定保留谁。Day 14 只建立 mapping，
+没有解析 import target、cycle 或 reverse importer。
+
+### 5. Import、alias 与 source location
+
+`ast.Import` 和 `ast.ImportFrom` 结构不同。前者保存 imported module；后者保存 source
+module、imported symbol 和 relative `level`。每个 `ast.alias` 单独形成 record，保留
+statement 内 ordinal、`asname`、实际 local binding、scope 和 AST 自带 start/end 位置。
+
+`import x.y` 无 `as` 时绑定本地 `x`，不是 `x.y`；`from . import sibling as local` 的
+module 可以为 `None`，level=1。位置直接来自 `lineno/col_offset/end_lineno/end_col_offset`，
+其中 column 是 CPython UTF-8 byte offset，不用字符串搜索猜行号。
+
+### 6. BaseModel proof 与同名负例
+
+当前实现只承认 module scope 内无歧义且没有其他 module-level binding 的：
+
+```text
+from pydantic import BaseModel [as BM]
+import pydantic [as pd] -> pd.BaseModel
+```
+
+裸同名 `BaseModel`、其他库的同名 import 或重新绑定 alias 都不是证明。函数局部 class
+即便引用 module alias 也不在本日高置信闭包内。top-level 本地继承只沿“父类已经在源码
+前方唯一声明”的显式边固定点传播，因此 `User -> Admin -> SuperAdmin` 可证明，后定义父类
+或动态表达式不推断。
+
+### 7. Parameter 与 assignment type clue
+
+参数 annotation 只接受简单 `Name`/attribute chain，保留原 reference，并尝试解析当前
+文件 class 或 BaseModel alias。`user: User = ...` 记录 annotation clue；
+`user = User(...)` 只有 callee 能解析为当前文件 class/BaseModel alias 才记录 constructor
+clue。普通已声明 class 会留下 `is_base_model_subclass=false`，未知 `factory()` 完全忽略。
+
+class-body field 不是普通 receiver variable，因此不进入 assignment type clue；module 或
+function scope 才记录。本日不传播 return type、不跨函数/分支/文件，也不处理 string/
+generic annotation、monkey patch 或 getattr。
+
+### 8. Identity、SyntaxError 与安全失败
+
+Scanner 不相信“刚由 Day 13 写过”就永远不变。读取前重新检查 task root、target、普通
+文件类型、symlink/reparse 和 root containment；以 expected size+1 有界读取后复核 size、
+SHA256、严格 UTF-8 与 LOC。测试实际覆盖文件删除、读取 OSError、同长度 hash 变化、大小
+变化、行数变化和 context 过期。
+
+任何一个文件失败都终止整个 scan，不返回 partial registry。稳定 error types 区分
+invalid inventory、task root、missing/read、identity、encoding、syntax、module path 和
+module collision。异常 message 固定 `AST scan failed`；日志只含 `component=ast_scanner`
+与 `error_type`，不含源码、绝对路径或原始异常。
+
+### 9. 测试先行、失败与修复
+
+新增两个测试文件后第一次真实运行在 collection 阶段得到两个：
+
+```text
+ModuleNotFoundError: No module named 'app.scanner'
+```
+
+实现最小 package 后首轮 `34 passed in 1.15s`。首次 Ruff check 报 10 个行宽、import
+顺序和可改 bytes literal 问题；Ruff formatter/lint 做机械修正，没有改变测试语义。
+保守性复核新增函数局部 alias shadow 与后定义父类负例，最终新增集合为
+`35 passed in 0.67s`。
+
+文档同步前完整回归为 `504 passed, 2 warnings in 6.74s`。两条 warning 仍是既有
+Starlette TestClient deprecation 与 qdrant-client server-version compatibility warning，
+没有过滤。全部代码与文档同步后的最终门禁为：Day 14 定向
+`35 passed in 0.47s`；完整 pytest `504 passed, 2 warnings in 5.42s`；Ruff check 通过；
+Ruff format 为 `68 files already formatted`；pip check 无 broken requirements；
+`git diff --check` 与 `docker compose config --quiet` 均退出码 0。Compose 只输出两条既有
+Docker config Access denied warning；部署未修改，因此没有运行 build/up/runtime。
+
+### 10. 35 个新增 case 的分类
+
+- 基础/确定性：空文件、普通 parse、multi-file order、跨随机 root 相同 registry、BOM；
+- module：root/package/init mapping、非法组件、module collision；
+- import：一般 Import/ImportFrom、pydantic direct/module alias、relative level、多 alias；
+- class：direct/alias/module BaseModel、裸同名/其他库/rebind 负例、源码顺序继承闭包、
+  nested scope 与 conservative shadow；
+- types/locations：parameter、method、annotated assignment、constructor、普通 class、
+  unknown factory、BaseModel annotation 与 AST end positions；
+- failure/security：SyntaxError、missing、read error、size/hash/LOC mismatch、重新变为非
+  UTF-8、strict/frozen models、安全日志；
+- integration：真实 ZipGuard chain、unlisted file 不递归、context 结束后拒绝。
+
+### 11. 真实临时 ZIP smoke
+
+标准库创建 ZIP：`project/models.py`、`project/service.py`、README、
+`.venv/ignored.py`。结果为 validated Python=2、ignored Python=1、ignored non-Python=1；
+modules=`project.models/project.service`；aliases=`pd/BM/Path/UserAlias`；证明的 classes=
+`User/Admin/Audit`；parameter=`user -> User`，assignment=`current -> User`。
+
+sentinel 在 context 内外都为 false；task root 在 context 内为 true、退出后为 false，
+leftovers=`[]`。这证明真实 ZIP/parse/registry/cleanup 调用链，不是 detection accuracy。
+
+### 12. 修改、决策与后续边界
+
+新增 `app/scanner/__init__.py`、`models.py`、`ast_scanner.py`、一个单元测试文件和一个
+Day13→Day14 集成测试文件；同步项目文档，向 append-only 决策日志追加 D-017。没有新
+dependency、配置或部署改动，没有修改 Day 13 或 locked artifacts。
+
+Day 15 的稳定输入是同一 context 内的 `ScannerRegistry` 与同序 `ast.Module`。Day 15
+只计划配置、验证器、Settings、根模型；Day 16 才是方法/数据加载/Field/GenericModel，
+Day 17 才是一跳 importer。Agent、API、Citation Guard 与 locked evaluation 均未开始。
+
+### Day 14 后应能回答的 25 个问题
+
+1. AST 与源码字符串的区别是什么？
+2. 为什么 `ast.parse()` 不会执行 sentinel？
+3. `NodeVisitor` 如何实现结构化遍历？
+4. `Import` 与 `ImportFrom` 的字段有什么差别？
+5. alias/local binding 为什么会影响后续规则？
+6. relative import level 为什么必须保留？
+7. 为什么 BaseModel 不能只按类名判断？
+8. direct alias 与 module alias 分别怎样证明 BaseModel？
+9. alias shadow 为什么需要保守处理？
+10. 当前文件继承闭包为什么要求父类先定义？
+11. module mapping 为什么只相对于 validated inventory？
+12. `__init__.py` 如何映射 package module？
+13. 两个路径映射同一 module 时为什么必须失败？
+14. AST source location 的 column 采用什么单位？
+15. parameter annotation clue 能证明什么？
+16. annotated assignment clue 与 constructor clue 有何不同？
+17. 为什么未知 factory call 不应推断类型？
+18. shallow type tracking 明确不做哪些数据流？
+19. 为什么 Scanner 不能递归 task root？
+20. 为什么 Day 13 后仍要复核 size/SHA256/LOC？
+21. SyntaxError 为什么不能静默跳过？
+22. deterministic registry 排序依赖哪些 canonical fields？
+23. 为什么 runtime AST 与 Pydantic registry 要分离？
+24. 为什么 Day 14 不产生八类 finding？
+25. Day 14 与 Day 15、Day 16、Day 17 的输入/职责边界是什么？

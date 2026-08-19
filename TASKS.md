@@ -5,184 +5,210 @@
 
 ## 1. 当前开发日与状态
 
-MigrationLens Day 13 — ZIP Guard
+MigrationLens Day 14 — AST 基础与确定性扫描注册表
 
 状态：`completed`
 
-计划与实际开发日期：2026-08-18。Day 12 已提交为
-`2458d41 feat: add Day 12 retrieval evaluation benchmark`；开发前 branch 为 `main`，
-`git status --short` 无输出。Day 14 AST 基础与符号表保持 `planned`。
+计划日期：2026-08-19；实际开发日期：2026-08-18。开发前 branch 为 `main`，HEAD 为
+`25e1040 feat: add Day 13 secure ZIP guard`，工作树干净。Day 15 前四类规则仍为
+`planned`，本日没有生成八类 production finding 或一跳 importer graph。
 
-Day 13 只建立：
+Day 14 只建立：
 
 ```text
-untrusted ZIP -> validate every member -> bounded read -> validated Python files
+Day 13 validated Python inventory
+  -> exact identity recheck
+  -> standard-library ast.parse
+  -> deterministic ScannerRegistry + aligned runtime AST
 ```
 
-没有运行、import、compile、解析 AST 或修改用户源码；20 条 locked retrieval candidates
-继续保持 `NOT RUN`。
+20 条 locked retrieval candidates 继续保持 `NOT RUN`。
 
 ## 2. 开发前事实与基线
 
 - 指定解释器：`D:\conda_envs\pymigrate-agent\python.exe`；
-- Git HEAD：`2458d41 feat: add Day 12 retrieval evaluation benchmark`；
-- branch：`main`；`git status --short` 无输出；
+- Git branch/HEAD：`main` / `25e1040 feat: add Day 13 secure ZIP guard`；
+- `git status --short`：无输出；
 - `python -m pip check`：`No broken requirements found.`；
-- 完整 pytest：`380 passed, 2 warnings in 4.30s`；
+- 完整 pytest：`469 passed, 2 warnings in 8.19s`；
 - warnings：既有 Starlette TestClient deprecation，以及 qdrant-client 无法取得 server
   version 的 compatibility warning；均未过滤；
 - Ruff check：`All checks passed!`；
-- Ruff format check：`60 files already formatted`；
+- Ruff format check：`63 files already formatted`；
 - `git diff --check`：退出码 0。
 
-第一次并行基线脚本把带引号的解释器路径直接放在 PowerShell 命令开头，缺少调用运算符
-`&`，四条 Python 命令都产生 ParserError，实际没有启动。加 `&` 后用同一指定解释器
-重跑并取得以上基线；ParserError 不算项目测试失败。
+## 3. 公共接口与生命周期
 
-## 3. 固定安全限制与全量预验证
+```python
+from app.scanner import ASTScanner
+from app.security import ZipGuard
 
-`app/security/zip_guard.py` 固定并执行：
-
-- upload compressed bytes `<= 2 MiB`；
-- members `<= 200`；
-- one uncompressed regular file `<= 1 MiB`；
-- total uncompressed bytes `<= 10 MiB`；
-- per-member compression ratio `<= 100`；
-- selected Python files `<= 200`；
-- selected Python LOC `<= 50,000`。
-
-这些是不能通过 Settings 或环境变量放宽的 hard limits。严格、冻结的
-`ZipGuardLimits` 只允许为测试或更严格部署收紧数值，并拒绝 bool 以及任何超过 SPEC
-上限的值；因此没有修改 `.env.example`、Settings 或依赖。
-
-压缩输入先以 `max+1` 有界读取到最多 2 MiB 内存，固定本次验证 bytes 并避免路径替换。
-全部 central-directory metadata 通过后，每个普通文件仍使用 64 KiB 有界流实际读到 EOF，
-逐成员和累计复核真实 bytes，并由 `zipfile` 完成 CRC 检查。Python payload 最多只在已受
-10 MiB 总上限约束的内存中保留；非 Python 文件同样实际读取，但不保留正文。
-
-## 4. 路径、成员类型与碰撞
-
-`canonicalize_member_path()` 同时按 `/`、`\` 处理路径组件，允许安全的 `./` 和重复
-separator 规范化，拒绝：
-
-- POSIX absolute、Windows rooted/drive、UNC；
-- 任意层级的精确 `..` 组件；
-- NUL、控制字符、Windows ADS `:`、保留名、尾随 dot/space；
-- 规范化后没有安全组件的成员。
-
-destination identity 使用组件序列的 NFKC + casefold，拒绝 `./pkg/a.py` 与
-`pkg/a.py`、大小写/Unicode alias 等 duplicate；文件占据另一成员祖先路径以及同路径
-file/directory 冲突都在写盘前拒绝。
-
-成员类型综合检查 Unix mode、DOS directory flag 和文件名目录 marker。只允许可确认的
-普通文件与正常目录；拒绝 symlink、FIFO、character/block device、socket、volume label、
-加密成员、未知 compression method、冲突目录 metadata 和带 payload 的目录。
-
-## 5. Python、ignored directory 与稳定输出
-
-全部成员安全通过后，只有普通 `.py`/`.PY` 且不位于以下路径组件中的文件进入分析集合：
-
-```text
-.venv  venv  site-packages  node_modules  .git
-```
-
-组件匹配大小写无关，不使用 substring；ignored directory 内的成员仍完整执行路径、类型、
-metadata、ratio 和实际流式读取校验。安全 README、JSON、图片和 binary 同样验证后忽略，
-binary 非 UTF-8 不会因不进入 Scanner 而失败。
-
-Python bytes 使用严格 `utf-8-sig` 校验：普通 UTF-8 与开头 BOM 均允许，提取时保留原始
-bytes；非法 UTF-8 使整个 ZIP 失败。LOC 使用 `len(decoded_text.splitlines())`：空文件
-0 行，非空无末尾换行 1 行，末尾单个换行不增加额外空行，连续空行按实际 line boundary
-计数。
-
-稳定返回 `ZipGuardResult`：随机绝对 `task_root`、按规范化相对路径排序的
-`ValidatedPythonFile`、每文件 bytes/LOC/SHA256，以及 member/file/directory/ignored/
-Python/总解压 inventory。结果不包含源码正文或上传者路径。
-
-## 6. Controlled extraction、cleanup 与错误边界
-
-只有全部 metadata、实际 bytes、UTF-8 和 LOC 通过后才创建
-`migrationlens-zip-<random>` 任务目录，并以 exclusive create 只写 selected Python
-files。写每个文件前后都重新证明 resolved target 严格位于任务根目录。
-
-`ZipGuard` 是单次 context manager：未来 Day 14 必须在 context 内读取文件；正常退出、
-Scanner/consumer 异常或提取失败都清理该精确随机目录。cleanup 幂等，先验证 root 是直接
-子目录、带受控前缀、不是 symlink/reparse point；不删除父目录或相邻文件。安全复核发现
-并修正了一个真实问题：首次 `rmtree` 出现瞬时 OSError 时，旧实现会清空所有权；现在
-失败后保留 root ownership，允许安全重试，只有成功后才清空内部引用。
-
-预期不可信输入错误转换为固定 `ZipGuardErrorType`。日志 event 固定为
-`ZIP archive rejected`，只附加 `component=zip_guard` 和白名单 `error_type`；不记录成员
-名、宿主路径、源码、原始异常、traceback 或 secret。`KeyboardInterrupt`、`SystemExit`
-和程序错误只在 cleanup 后原样传播，不伪装成普通 unsafe ZIP。
-
-## 7. 测试先行、失败与当前门禁
-
-第一条 Day 13 红测在 collection 阶段按预期失败：
-`ModuleNotFoundError: No module named 'app.security'`。实现最小 security package 后，
-首轮为 `79 passed, 1 failed`；唯一失败是 pytest 默认 log formatter 不显示 extra 字段，
-测试改为直接检查 `LogRecord.error_type`，没有把敏感信息加入 message。
-
-安全复核新增真实 2 MiB、1 MiB/10 MiB、200 Python、special metadata、cleanup retry 等
-边界后，cleanup retry 测试真实暴露上述 ownership 缺陷；修复后 Day 13 最终定向集为：
-
-- `89 passed in 1.61s`。
-
-实现完成、文档同步前的完整回归为：
-
-- `469 passed, 2 warnings in 5.15s`。
-
-同期 `git diff --check` 和 Ruff format check 通过；Ruff check 只发现新增模块 import 顺序，
-按工具建议机械修正。全部文档同步后的最终共同门禁为：
-
-- Day 13 定向：`89 passed in 1.30s`；
-- 完整 pytest：`469 passed, 2 warnings in 4.77s`；
-- Ruff check：`All checks passed!`；
-- Ruff format check：`63 files already formatted`；
-- `git diff --check`：退出码 0；
-- `python -m pip check`：`No broken requirements found.`；
-- `docker compose config --quiet`：退出码 0；保留两条既有 Docker
-  `config.json` Access denied warning，未运行 Docker build/runtime。
-
-## 8. 真实临时 ZIP smoke
-
-使用标准库在系统临时目录自行构造两个无害 fixture：
-
-1. 正常 ZIP：`pkg/model.py` 加安全 `README.md`。Python 源文本包含创建 sentinel 和
-   `raise RuntimeError` 语句；ZIP Guard 返回 1 个 Python 文件、3 LOC，README 被忽略，
-   sentinel 在 context 内外都不存在，证明未执行或 import 上传代码；
-2. 恶意 ZIP：先放 `good.py`，再放 `../README.md`。整个 ZIP 以
-   `invalid_member_path` 拒绝，没有进入 context；
-3. 两条路径结束后 `migrationlens-zip-*` leftovers 为 `[]`，正常任务根在 context 内
-   存在、退出后不存在。
-
-该 smoke 只证明真实 ZIP Guard 调用链、拒绝和 cleanup，不是 AST、规则或业务 API 证据。
-
-## 9. Artifact、文档、Git 与未实现边界
-
-新增 `app/security/__init__.py`、`app/security/zip_guard.py` 和一个包含 89 个 pytest
-case 的 `tests/unit/test_zip_guard.py`。同步 `README.md`、`TASKS.md`、
-`LEARNING_LOG.md`、每日计划，并向 append-only `DECISIONS.md` 追加 D-016。
-
-`SPEC.md`、`AGENTS.md`、`.env.example`、`.gitignore`、`pyproject.toml`、
-`THIRD_PARTY_NOTICES.md` 和 Docker 文件保持不变：范围与长期 contributor 规则未改变，
-没有配置或新 dependency，系统 `tempfile` 目录不需要 Git ignore。
-
-没有运行 `git add`、commit、push 或 tag；没有 `.env`、secret、模型/cache、SQLite、
-Qdrant 数据、上传 ZIP、用户源码、任务目录或 `.tmp/.bak/.partial` 进入改动集。
-
-## 10. Day 14 输入与未实现内容
-
-Day 14 只能在：
-
-```text
 with ZipGuard(archive_path) as validated:
-    validated.task_root
-    validated.python_files  # sorted relative path + size + LOC + SHA256
+    scan_result = ASTScanner().scan(validated)
+    registry = scan_result.registry
+    parsed_files = scan_result.parsed_files
 ```
 
-生命周期内读取已经验证并受控提取的 Python 文件；退出后路径失效并完成 cleanup。
+Scanner 只遍历 `validated.python_files`，不递归发现额外文件，不读取 README、JSON、
+`.pyi`、ignored Python 或 context 内后来出现但未列入 inventory 的文件。扫描必须在
+ZipGuard context 内完成；退出后的 result 以 `task_root_unavailable` 显式失败。
 
-仍未实现 AST parser/scanner、symbol table、alias/BaseModel tracking、八类规则、一跳 import、
-Agent、Citation Guard、业务分析 API 或用户源码修改。Day 14 保持 `planned`；locked
-retrieval evaluation 继续 `NOT RUN`。
+`ASTScanResult` 分离两类数据：
+
+- `ScannerRegistry` 是 strict/frozen/extra-forbid 的 Pydantic v2 schema v1；
+- `parsed_files` 与 files 对齐，保存标准库 `ast.Module`，供 Day 15–17 只读遍历；
+  它不序列化、记录或持久化。
+
+## 4. Registry schema 与确定性
+
+`ScannerRegistry` 包含：
+
+- `files`：relative path、module、package 标记、bytes/LOC/SHA256、AST SHA256、
+  AST node count 与 top-level statement count；
+- `modules`：与 files 按相对路径严格对齐的 module mapping；
+- `imports`：Import/ImportFrom、module、symbol、local name/alias、relative level、
+  alias ordinal、scope 和 AST location；
+- `classes`：qualified scope、base references、BaseModel proof 与 AST location；
+- `parameter_type_clues` 与 `assignment_type_clues`：浅层静态类型线索。
+
+所有 tuple 使用相对路径、AST line/column、alias ordinal 和 symbol name 显式排序；不使用
+UUID4、时间、Python `hash()`、临时绝对路径或容器偶然迭代顺序。`ast_sha256` 对包含
+source attributes 的 deterministic `ast.dump` 计算，但 registry 不保存 dump 或源码。
+
+## 5. Module 与 import/alias 语义
+
+模块映射只以本次 validated inventory 为基准：
+
+```text
+models.py          -> models
+pkg/models.py      -> pkg.models
+pkg/__init__.py    -> pkg
+__init__.py        -> __init__
+```
+
+路径组件必须是非 keyword Python identifier；无法表示的路径以 `invalid_module_path`
+失败。`pkg.py` 与 `pkg/__init__.py` 都映射 `pkg` 时以
+`module_name_conflict` 失败。根 `__init__.py` 使用 `__init__` 作为 archive
+analysis root 的显式 identity。Day 14 不解析 importer 或构建 graph。
+
+普通 `import` 与 `from ... import ...` 都保留。`import x.y` 无 alias 时的本地
+binding 为 `x`；显式 `as` 保存 local name；`ImportFrom.level` 原样记录相对层级。
+Import registry 本身不生成 Settings、validator、GenericModel 或其他 finding。
+
+## 6. BaseModel 与浅层类型线索
+
+BaseModel tracking 只接受当前文件 module scope 内无歧义、未被其他 module-level binding
+遮蔽的 `from pydantic import BaseModel [as BM]`，或
+`import pydantic [as pd]` 配合 `pd.BaseModel`。
+
+只按名字写 `class User(BaseModel)`、从其他库导入同名 `BaseModel`、或重新绑定 alias，
+都不会被认作 Pydantic。明确的 top-level 本地继承边按源码顺序做固定点闭包，例如
+`User(BaseModel) -> Admin(User) -> SuperAdmin(Admin)`；父类必须先定义。不进行跨文件、
+动态 binding 或完整 type checking。
+
+参数只记录简单 `Name`/dotted attribute annotation。简单赋值支持：
+
+- `user: User = ...`：记录 annotation clue；
+- `user = User(...)`：callee 必须解析为当前文件已声明 class 或 BaseModel alias；
+- 已声明普通类可记录为非 BaseModel clue；未知 factory call 不猜成类型；
+- class-body fields 不当作 receiver assignment clue；只记录 function/module scope。
+
+Day 14 只记录证据，不匹配 `.dict()`、Config 或其他迁移规则。
+
+## 7. AST、位置与安全读取
+
+每个文件用严格 `utf-8-sig` 重新解码，再以相对 filename、`mode=exec`、
+`type_comments=True` 和 Python 3.11 feature version 调用 `ast.parse()`。每个
+import/class/type clue 的 `line/column/end_line/end_column` 直接取 AST attributes；
+column 遵守 CPython UTF-8 byte offset，不通过字符串搜索猜行号。
+
+Scanner 在读取前确认 task root 与文件是非 symlink/reparse 的普通受控路径，目标仍位于
+root 内；以 inventory `size+1` 上限读取，然后复核 size、SHA256 和 Day 13
+`splitlines()` LOC。文件变化、类型/路径替换或统计不一致统一 fail closed。
+
+## 8. 失败与日志语义
+
+稳定 `ScannerErrorType` 包含：
+
+```text
+invalid_inventory
+task_root_unavailable
+file_missing
+file_read_failed
+file_identity_mismatch
+non_utf8_python
+syntax_error
+invalid_module_path
+module_name_conflict
+```
+
+任何一个文件失败都会使整个 scan 失败，不返回部分 registry。公开错误固定为
+`AST scan failed`；日志只附加 `component=ast_scanner` 与白名单 `error_type`，不含
+源码、绝对 task root、成员名、原始异常或 traceback。程序错误和进程控制异常不伪装成
+不可信输入错误。
+
+## 9. 测试先行与当前门禁
+
+第一条 Day 14 红测在 collection 阶段按预期失败：两个测试文件均得到
+`ModuleNotFoundError: No module named 'app.scanner'`。实现最小 package 后首轮为
+`34 passed in 1.15s`。Ruff 首次报告 10 个行宽/import/bytes-literal 问题，机械修正；
+没有放宽测试。
+
+保守性复核增加“函数局部 alias shadow”和“父类后定义”负例后，定向集为
+`35 passed in 0.67s`。实现、smoke 和文档同步前完整回归为
+`504 passed, 2 warnings in 6.74s`。全部代码与文档同步后的最终共同门禁为：
+
+- Day 14 定向：`35 passed in 0.47s`；
+- 完整 pytest：`504 passed, 2 warnings in 5.42s`；
+- Ruff check：`All checks passed!`；
+- Ruff format check：`68 files already formatted`；
+- `python -m pip check`：`No broken requirements found.`；
+- `git diff --check`：退出码 0；
+- `docker compose config --quiet`：退出码 0，保留两条既有 Docker `config.json`
+  Access denied warning；部署未改，未运行 Docker runtime。
+
+## 10. 真实 Day 13 → Day 14 smoke
+
+标准库临时 ZIP 包含 `project/models.py`、`project/service.py`、README 和
+`.venv/ignored.py`，源码包含 `pd`/`BM` alias、`User`/`Admin`/`Audit`、
+参数/赋值线索、写 sentinel 和抛异常语句。
+
+真实输出：validated Python=2、ignored Python=1、ignored non-Python=1；modules 为
+`project.models/project.service`；aliases 为 `pd/BM/Path/UserAlias`；BaseModel
+classes 为 `User/Admin/Audit`；参数 `user -> User`、赋值 `current -> User`。
+sentinel 在 context 内外均不存在，task root 只在 context 内存在，退出后
+leftovers=`[]`。
+
+该 smoke 只证明 ZIP Guard → AST Scanner → registry 调用链和不执行源码，不是规则
+检测准确率、locked benchmark 或业务 API 证据。
+
+## 11. Artifact、Git 与未实现边界
+
+新增 `app/scanner/__init__.py`、`app/scanner/models.py`、
+`app/scanner/ast_scanner.py`、`tests/unit/test_ast_scanner.py` 和
+`tests/integration/test_zip_guard_ast_scanner.py`。同步 README、学习日志、每日计划，
+并向 append-only `DECISIONS.md` 追加 D-017。
+
+没有新 dependency、环境变量、配置、Docker 或 runtime storage；`SPEC.md`、
+`AGENTS.md`、`pyproject.toml`、notices、Day 12 artifacts、Day 13 实现和部署文件
+保持不变。没有运行 locked retrieval evaluation、用户代码、用户 pytest、用户
+dependency 安装或源码修改。
+
+没有执行 `git add`、commit、push 或 tag。Day 14 修改保持 unstaged；没有 `.env`、
+用户 ZIP、解压源码、task root、cache、模型、SQLite/Qdrant 数据或 smoke 临时文件进入
+工作树。
+
+## 12. Day 15 稳定输入
+
+Day 15 可在同一个 ZipGuard context 内消费：
+
+```text
+ASTScanResult.registry
+  files/modules/imports/classes/parameter_type_clues/assignment_type_clues
+ASTScanResult.parsed_files
+  与 files 同序的 relative_path/module_name/ast.Module
+```
+
+Day 15 只应在该输入上增量实现配置、验证器、Settings 与根模型四类规则。Day 16 的
+方法/数据加载/Field/GenericModel、Day 17 的一跳反向 import 均尚未实现；Agent、
+Citation Guard、分析 API、报告存储和 locked evaluation 也未开始。

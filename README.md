@@ -20,6 +20,7 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 11 | `completed` | 只读离线 BM25 top-8、复用 DenseRetriever top-8、按 chunk ID 去重的可配置 RRF、完整融合排名与 final top-3 |
 | MigrationLens Day 12 | `completed` | 32 题严格 schema、12 dev/20 locked candidates 隔离、确定性 raw query、BM25/Dense/Hybrid 三路 Recall@1/Recall@3/MRR@5 evaluator 与真实 dev artifacts |
 | MigrationLens Day 13 | `completed` | 全成员 ZIP 路径/类型/资源预验证、有界实际读取、UTF-8/LOC、只提取 selected Python、随机任务目录与可靠 cleanup |
+| MigrationLens Day 14 | `completed` | 标准库 AST parse、文件/模块/alias/BaseModel/浅层类型 registry、source location、identity recheck 与安全失败 |
 
 当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite 仍只包含最小
 `system_metadata`，不能描述为已经运行的报告存储；Qdrant startup 仍只创建或校验
@@ -44,11 +45,14 @@ gold 在 12 条 dev questions 上完成三路评分；20 条 locked candidates �
 没有执行最终 locked benchmark。Day 13 已在独立 `app/security` 边界完成 ZIP Guard：
 先验证并实际流式读取所有成员，再只受控写出可交给 Day 14 的普通 Python 文件；安全
 非 Python 和 ignored-directory 内容不会进入分析集合，但不会绕过安全检查。
+Day 14 只消费 Day 13 的显式 Python inventory，以 size/SHA256/LOC 重新证明文件身份后
+调用标准库 `ast.parse()`；输出 strict/frozen `ScannerRegistry` 和与其同序的运行时
+`ast.Module`。它不递归发现文件、不执行源码，也没有提前产生八类 migration finding。
 
 尚未实现：
 
 - GitHub Actions；
-- AST scanner、八类规则和一跳 import；
+- 八类规则和一跳 import；
 - final locked retrieval evaluation；
 - LangGraph Agent、五个只读工具和 Citation Guard；
 - 分析 API、报告存储、benchmark、评测和负载测试；
@@ -362,12 +366,12 @@ Day 13 提供 `untrusted ZIP -> validated Python files` 的安全信任边界。
 ```python
 from pathlib import Path
 
+from app.scanner import ASTScanner
 from app.security import ZipGuard
 
 with ZipGuard(Path("project.zip")) as validated:
-    for python_file in validated.python_files:
-        source_path = validated.task_root / python_file.relative_path
-        # Day 14 Scanner 必须在这个 context 生命周期内只读 source_path。
+    scan_result = ASTScanner().scan(validated)
+    registry = scan_result.registry
 ```
 
 冻结限制：compressed upload `<=2 MiB`、members `<=200`、每个普通文件解压后
@@ -393,7 +397,46 @@ size、LOC、SHA256 和不含源码的 inventory。退出 context、consumer 异
 只清理该精确目录；cleanup 幂等且拒绝跟随 symlink/reparse point，瞬时失败保留所有权
 以便安全重试。错误只公开固定 `error_type`，日志不含成员名、宿主路径、源码或原始异常。
 
-Day 13 的 output 是 Day 14 的受控输入，不是 AST 或迁移 finding；Day 14 尚未开始。
+Day 13 的 output 是 Day 14 的受控输入；ZIP Guard 本身仍不是 AST 或迁移 finding。
+
+## AST Scanner
+
+Day 14 公共接口位于 `app.scanner`：
+
+```python
+from pathlib import Path
+
+from app.scanner import ASTScanner
+from app.security import ZipGuard
+
+with ZipGuard(Path("project.zip")) as validated:
+    scan_result = ASTScanner().scan(validated)
+    registry = scan_result.registry
+    parsed_files = scan_result.parsed_files
+```
+
+Scanner 不递归 task root，只按 `validated.python_files` 的稳定顺序读取。每个文件先确认
+仍是 root 内的普通非 reparse 文件，再以 inventory size+1 有界读取，复核 bytes、SHA256
+和 `splitlines()` LOC，严格 `utf-8-sig` 解码后以相对 filename 调用 Python 3.11
+`ast.parse()`。缺失、读取失败、身份变化、SyntaxError、非法模块路径和模块名冲突都使
+整个 scan 失败，不返回部分 registry。
+
+`ScannerRegistry` schema v1 包含 files、modules、imports、classes、parameter type clues
+和 assignment type clues；所有模型 strict/frozen/extra-forbid，所有集合为显式稳定排序的
+tuple。模块映射为 `models.py -> models`、`pkg/models.py -> pkg.models`、
+`pkg/__init__.py -> pkg`；root `__init__.py` 使用显式 `__init__` identity。不能唯一表示的
+模块路径或 `pkg.py`/`pkg/__init__.py` collision 显式失败。
+
+Import registry 保存 Import/ImportFrom、alias/local binding、relative level、scope 与 AST
+位置。BaseModel 只通过无歧义 module-level Pydantic import/alias 证明，并对源码顺序中已
+定义的当前文件 top-level class 做显式继承闭包；同名、其他库或重绑定不猜测。类型线索
+只支持简单参数 annotation、annotated assignment 和可解析的本地 class constructor。
+未知 factory、跨文件类型、branch/data flow 都不推断。
+
+`scan_result.parsed_files` 保存与 registry files 同序的标准库 `ast.Module`，只供当前分析
+生命周期内的后续规则只读遍历，不序列化或持久化。registry 不含 task root、源码正文、
+随机 ID 或时间。Day 14 尚未匹配 Config、validator、Settings、`__root__`、方法、Field、
+GenericModel 或 importer graph。
 
 ## 本地运行
 
@@ -657,12 +700,31 @@ README；含写 sentinel/抛异常语句的 Python 未执行。另一个包含 `
 pip check 与 `docker compose config --quiet` 均通过。Compose 只保留两条既有本机
 Docker config Access denied warning；未修改部署，因此未运行 Docker build/runtime。
 
+### Day 14 验证边界
+
+2026-08-18 先写两个 Day 14 测试文件，首次 collection 因 `app.scanner` 尚不存在而得到
+两个预期 `ModuleNotFoundError`。最终新增 35 个 case，覆盖空文件、BOM、SyntaxError、
+module mapping/collision、一般 import/relative alias、BaseModel direct/alias/module alias、
+同名与遮蔽负例、当前文件继承、参数/赋值线索、AST 位置、missing/read/identity failure、
+安全日志、稳定输出、只消费 inventory，以及真实 ZipGuard lifecycle/sentinel 集成。
+
+真实临时 ZIP smoke 返回两个 modules `project.models/project.service`，忽略 README 与
+`.venv/ignored.py`，识别 `pd/BM/Path/UserAlias`、`User/Admin/Audit` 和两类类型线索；
+源码中的 sentinel/raise 没有执行，context 后 task root 与 leftovers 均为空。该结果是
+静态调用链证据，不是规则准确率。
+
+文档同步前定向测试为 `35 passed in 0.67s`，完整回归为
+`504 passed, 2 warnings in 6.74s`。全部同步后的最终定向为
+`35 passed in 0.47s`，完整回归为 `504 passed, 2 warnings in 5.42s`；Ruff、68-file
+format、pip、diff 与静态 Compose config 均通过。部署未改，没有运行 Docker runtime。
+
 ## 下一开发日
 
-MigrationLens Day 14 — AST 基础与符号表保持 `planned`，尚未开始。它只能在 ZIP Guard
-context 内读取稳定排序、已验证的普通 Python 文件；Day 13 没有提前实现 AST、八类规则、
-Agent 或业务 API。P0 明确不采用 cross-encoder reranker；20 条 locked retrieval
-questions 仍须等待人工复核、hash 与 frozen commit，不能在 Day 14 自动运行。
+MigrationLens Day 15 — 前四类规则保持 `planned`，尚未开始。它可以在同一 ZipGuard
+context 内消费 Day 14 的 registry 与逐文件 `ast.Module`，只增量实现配置、验证器、
+Settings 和根模型规则。Day 16 后四类规则、Day 17 一跳 importer、Agent 与业务 API 均
+未开始。P0 不采用 cross-encoder reranker；20 条 locked retrieval questions 仍须等待
+人工复核、hash 与 frozen commit。
 
 ## 项目文档
 
@@ -682,7 +744,7 @@ questions 仍须等待人工复核、hash 与 frozen commit，不能在 Day 14 �
 
 Day 10 已验证固定 revision 的真实模型与 62-point Qdrant index；Day 11 已验证正式
 artifact 上的 BM25 与真实 Dense + RRF hybrid 调用链；Day 12 已取得明确标注的 12 题
-dev 三路指标；Day 13 已验证 ZIP Guard 的攻击拒绝、硬限制、受控提取和 cleanup。但
-AST/规则尚未开始，20 题 locked 评测、CI、样本量和负载测试等发布证据仍未完成，因此
+dev 三路指标；Day 13 已验证 ZIP Guard；Day 14 已验证只读 AST/registry 调用链。但八类
+规则尚未开始，20 题 locked 评测、CI、样本量和负载测试等发布证据仍未完成，因此
 MigrationLens 尚未达到可写入简历的发布门槛。不得把 FakeEmbedding、smoke、dev 指标、
 目标阈值、计划数量或未运行命令描述为 locked 结果、生产检索质量、GPU 性能或发布证据。

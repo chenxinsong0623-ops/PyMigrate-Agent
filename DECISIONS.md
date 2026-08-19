@@ -312,3 +312,38 @@
   `.py`、只信任 `file_size`、UTF-8 失败后替换字符，或在 Day 13 提前实现 AST Scanner。
 - 影响：`app/security/zip_guard.py`、Day 13 测试和 Day 14 Scanner 的输入生命周期必须
   遵守该契约；不改变 Day 8–12 snapshot、chunk、index、retrieval 或 locked 边界。
+
+## D-017 — Day 14 AST registry、模块身份与失败语义
+
+- 日期：2026-08-18
+- 状态：已接受
+- 决策：
+  - `ASTScanner.scan(ZipGuardResult)` 只能在 Day 13 context 内按
+    `validated.python_files` 明示顺序读取，不递归发现路径。每个文件重新确认位于受控
+    root、是普通非 reparse 文件，并以 inventory size+1 有界读取；size、SHA256、严格
+    `utf-8-sig` 和 `splitlines()` LOC 必须全部匹配后才能调用标准库 `ast.parse()`；
+  - 公共结果为 `ASTScanResult`：strict/frozen Pydantic `ScannerRegistry` schema v1 保存
+    稳定 file/module/import/class/type-clue metadata；同序 `ParsedPythonFile` 保存运行时
+    `ast.Module`，只供当前分析生命周期内后续规则只读遍历，不序列化、记录或持久化。
+    registry 不包含 task root、源码正文、时间或随机 identity；AST identity 使用包含
+    source attributes 的 deterministic `ast.dump` SHA256；
+  - 模块 identity 固定为 `models.py -> models`、`pkg/models.py -> pkg.models`、
+    `pkg/__init__.py -> pkg`，archive root `__init__.py -> __init__`。路径组件不能表示为
+    非 keyword Python identifier 时显式失败；两个文件映射同一 module name 时显式冲突，
+    Day 14 不构建 importer graph；
+  - BaseModel 只由当前文件 module scope 的无歧义 `pydantic` import/alias 证明；明确、
+    已先定义的 top-level 本地 class inheritance 使用确定性固定点闭包。同名、其他库、
+    alias 重绑定、函数局部 class 和后定义父类不猜测。参数 annotation、annotated
+    assignment 与已解析本地 class constructor 只形成浅层 type clue，不形成 finding；
+  - 单文件 SyntaxError、缺失、读取失败、identity mismatch、非法模块路径或模块冲突都使
+    整个 scan 失败，不返回 partial registry。公开异常消息固定为 `AST scan failed`；日志
+    只含 `component=ast_scanner` 与白名单 `error_type`。
+- 原因：Day 15–17 需要同时消费真实 AST 和可比较的稳定 symbol contract；把 AST object
+  直接塞入可序列化模型会引入对象 identity 与序列化漂移，而只保存摘要又会迫使规则重复
+  parse。分离 runtime AST 与 registry，并在读取时重新证明 Day 13 inventory identity，
+  可以避免目录递归、context 过期、TOCTOU、partial success 和绝对临时路径污染。
+- 替代方案：未采用递归扫描 task root、跳过 SyntaxError 文件、UUID4/时间 identity、
+  序列化完整 AST/source、按 `Model`/`BaseModel` 名称猜测、跨文件类型推断、完整 symbol
+  table/type checker，或在 Day 14 提前生成八类 finding 和一跳 importer graph。
+- 影响：`app/scanner/`、Day 14 测试和 Day 15–17 的输入契约必须遵守本决策；不改变
+  Day 13 ZIP Guard、Day 8–12 retrieval artifacts、locked policy 或冻结 P0 范围。
