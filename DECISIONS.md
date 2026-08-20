@@ -347,3 +347,41 @@
   table/type checker，或在 Day 14 提前生成八类 finding 和一跳 importer graph。
 - 影响：`app/scanner/`、Day 14 测试和 Day 15–17 的输入契约必须遵守本决策；不改变
   Day 13 ZIP Guard、Day 8–12 retrieval artifacts、locked policy 或冻结 P0 范围。
+
+## D-018 — Day 15 production finding、静态证明与 candidate gold 契约
+
+- 日期：2026-08-20
+- 状态：已接受
+- 决策：
+  - 前四类长期 production rule ID 固定为 `pydantic_v1_config`、
+    `pydantic_v1_validator`、`pydantic_v1_settings` 与
+    `pydantic_v1_root_model`。Day 12 retrieval evaluation 的八类 `rule_category` 仍只是
+    benchmark 主题，不反向充当 production ID；
+  - `RuleScanner.scan(ASTScanResult)` 只消费 Day 14 registry 和对齐的 runtime AST，先用
+    Day 14 `ast_sha256` 复核树身份，再做只读遍历；不重新 parse/读取/发现文件，不执行、
+    import 或修改受分析代码，也不调用 Retriever、LLM、Agent 或网络；
+  - 输出使用 strict/frozen/extra-forbid Pydantic schema v1。每个实际 AST construct 独立
+    产生 finding：Config class 与每个已识别 key 分开，validator decorator、旧 Settings
+    import/reference 和 `__root__` target 各自对齐 AST location。finding 保存 typed evidence，
+    按 path、start location、rule/construct、API、evidence 与 end location 稳定排序并拒绝重复；
+  - Config 与 validator/Settings 默认 severity 为 high，root model 为 medium。Day 15 只
+    发布具有当前文件静态 provenance 的 high-confidence、无需人工确认 finding；同名、
+    其他库、pre-use shadow/rebind、动态 binding 或证据不足的构造不报，不生成猜测性 low
+    finding；
+  - import provenance 来自 Day 14 registry；use-position shadowing 从同一 runtime AST
+    保守构建 binding events。支持 direct import、`as` alias 和 `import pydantic as ...`，
+    但不做 Day 17 的跨文件/一跳 importer、完整 Python symbol table 或数据流推断；
+  - detection 数据使用独立 JSON schema v1 且状态只能是 `candidate`。fixture 每项目 1–4
+    个 Python 文件、单文件 30–200 LOC；label 使用
+    `(fixture_id, file, start_line, rule_id)`，gold heading 必须逐字存在于固定 Day 9 chunk
+    artifact。Day 15 loader 只做静态契约校验，不运行 benchmark 或计算检测指标。
+- 原因：未来 evaluator、Agent 与报告需要稳定 rule identity、位置、排序和 evidence；只按
+  字符串或名字匹配会把同名/重绑定误报为迁移风险。把可证明 finding、未证明候选和未来
+  locked benchmark 分开，既能形成可消费的 production 输出，又不提前消耗 holdout。
+- 替代方案：未采用正则/字符串搜索、按 class 聚合单一 finding、只有自由文本 evidence、
+  UUID/时间排序、重 parse 源码、跨文件猜测、把 low-confidence 猜测写成 finding、一次性
+  建齐或冻结完整 benchmark，或用本日 scanner 输出反推 gold。
+- 影响：`app/scanner/rule_models.py`、`app/scanner/rule_scanner.py`、Day 15 candidate
+  artifact/测试以及 Day 16–24 的 evaluator、Agent 和报告消费方必须遵守本契约；不改变
+  Day 13 ZIP Guard、Day 14 registry、Day 8–12 retrieval artifacts、locked policy 或
+  冻结 P0 范围。

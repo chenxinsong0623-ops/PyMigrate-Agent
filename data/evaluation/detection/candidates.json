@@ -1,0 +1,291 @@
+{
+  "fixtures": [
+    {
+      "fixture_id": "day15-config-positive",
+      "python_files": [
+        "models.py"
+      ],
+      "relative_directory": "data/evaluation/detection/fixtures/day15_config_positive"
+    },
+    {
+      "fixture_id": "day15-negatives",
+      "python_files": [
+        "ordinary.py"
+      ],
+      "relative_directory": "data/evaluation/detection/fixtures/day15_negatives"
+    },
+    {
+      "fixture_id": "day15-root-model-positive",
+      "python_files": [
+        "models.py"
+      ],
+      "relative_directory": "data/evaluation/detection/fixtures/day15_root_model_positive"
+    },
+    {
+      "fixture_id": "day15-settings-positive",
+      "python_files": [
+        "settings.py"
+      ],
+      "relative_directory": "data/evaluation/detection/fixtures/day15_settings_positive"
+    },
+    {
+      "fixture_id": "day15-validator-positive",
+      "python_files": [
+        "validators.py"
+      ],
+      "relative_directory": "data/evaluation/detection/fixtures/day15_validator_positive"
+    }
+  ],
+  "gold_source": "official_snapshot_heading_review",
+  "labels": [
+    {
+      "expected": true,
+      "file": "models.py",
+      "fixture_id": "day15-config-positive",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to config"
+      ],
+      "rule_category": "config",
+      "rule_id": "pydantic_v1_config",
+      "severity": "high",
+      "start_line": 7
+    },
+    {
+      "expected": true,
+      "file": "models.py",
+      "fixture_id": "day15-config-positive",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to config"
+      ],
+      "rule_category": "config",
+      "rule_id": "pydantic_v1_config",
+      "severity": "high",
+      "start_line": 8
+    },
+    {
+      "expected": true,
+      "file": "models.py",
+      "fixture_id": "day15-config-positive",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to config"
+      ],
+      "rule_category": "config",
+      "rule_id": "pydantic_v1_config",
+      "severity": "high",
+      "start_line": 9
+    },
+    {
+      "expected": true,
+      "file": "models.py",
+      "fixture_id": "day15-config-positive",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to config"
+      ],
+      "rule_category": "config",
+      "rule_id": "pydantic_v1_config",
+      "severity": "high",
+      "start_line": 10
+    },
+    {
+      "expected": true,
+      "file": "models.py",
+      "fixture_id": "day15-config-positive",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to config"
+      ],
+      "rule_category": "config",
+      "rule_id": "pydantic_v1_config",
+      "severity": "high",
+      "start_line": 17
+    },
+    {
+      "expected": true,
+      "file": "models.py",
+      "fixture_id": "day15-config-positive",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to config"
+      ],
+      "rule_category": "config",
+      "rule_id": "pydantic_v1_config",
+      "severity": "high",
+      "start_line": 18
+    },
+    {
+      "expected": true,
+      "file": "validators.py",
+      "fixture_id": "day15-validator-positive",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to validators"
+      ],
+      "rule_category": "validator",
+      "rule_id": "pydantic_v1_validator",
+      "severity": "high",
+      "start_line": 8
+    },
+    {
+      "expected": true,
+      "file": "validators.py",
+      "fixture_id": "day15-validator-positive",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to validators"
+      ],
+      "rule_category": "validator",
+      "rule_id": "pydantic_v1_validator",
+      "severity": "high",
+      "start_line": 13
+    },
+    {
+      "expected": true,
+      "file": "validators.py",
+      "fixture_id": "day15-validator-positive",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to validators"
+      ],
+      "rule_category": "validator",
+      "rule_id": "pydantic_v1_validator",
+      "severity": "high",
+      "start_line": 18
+    },
+    {
+      "expected": true,
+      "file": "settings.py",
+      "fixture_id": "day15-settings-positive",
+      "gold_heading": [
+        "Migration guide",
+        "`BaseSettings` has moved to `pydantic-settings`"
+      ],
+      "rule_category": "settings",
+      "rule_id": "pydantic_v1_settings",
+      "severity": "high",
+      "start_line": 4
+    },
+    {
+      "expected": true,
+      "file": "settings.py",
+      "fixture_id": "day15-settings-positive",
+      "gold_heading": [
+        "Migration guide",
+        "`BaseSettings` has moved to `pydantic-settings`"
+      ],
+      "rule_category": "settings",
+      "rule_id": "pydantic_v1_settings",
+      "severity": "high",
+      "start_line": 12
+    },
+    {
+      "expected": true,
+      "file": "models.py",
+      "fixture_id": "day15-root-model-positive",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "root_model",
+      "rule_id": "pydantic_v1_root_model",
+      "severity": "medium",
+      "start_line": 7
+    },
+    {
+      "expected": true,
+      "file": "models.py",
+      "fixture_id": "day15-root-model-positive",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "root_model",
+      "rule_id": "pydantic_v1_root_model",
+      "severity": "medium",
+      "start_line": 11
+    },
+    {
+      "expected": true,
+      "file": "models.py",
+      "fixture_id": "day15-root-model-positive",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "root_model",
+      "rule_id": "pydantic_v1_root_model",
+      "severity": "medium",
+      "start_line": 15
+    },
+    {
+      "expected": false,
+      "file": "ordinary.py",
+      "fixture_id": "day15-negatives",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to config"
+      ],
+      "rule_category": "config",
+      "rule_id": "pydantic_v1_config",
+      "severity": "high",
+      "start_line": 5
+    },
+    {
+      "expected": false,
+      "file": "ordinary.py",
+      "fixture_id": "day15-negatives",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to validators"
+      ],
+      "rule_category": "validator",
+      "rule_id": "pydantic_v1_validator",
+      "severity": "high",
+      "start_line": 12
+    },
+    {
+      "expected": false,
+      "file": "ordinary.py",
+      "fixture_id": "day15-negatives",
+      "gold_heading": [
+        "Migration guide",
+        "`BaseSettings` has moved to `pydantic-settings`"
+      ],
+      "rule_category": "settings",
+      "rule_id": "pydantic_v1_settings",
+      "severity": "high",
+      "start_line": 17
+    },
+    {
+      "expected": false,
+      "file": "ordinary.py",
+      "fixture_id": "day15-negatives",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "root_model",
+      "rule_id": "pydantic_v1_root_model",
+      "severity": "medium",
+      "start_line": 24
+    },
+    {
+      "expected": false,
+      "file": "ordinary.py",
+      "fixture_id": "day15-negatives",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to validators"
+      ],
+      "rule_category": "validator",
+      "rule_id": "pydantic_v1_validator",
+      "severity": "high",
+      "start_line": 33
+    }
+  ],
+  "schema_version": 1,
+  "status": "candidate"
+}

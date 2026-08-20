@@ -21,6 +21,7 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 12 | `completed` | 32 题严格 schema、12 dev/20 locked candidates 隔离、确定性 raw query、BM25/Dense/Hybrid 三路 Recall@1/Recall@3/MRR@5 evaluator 与真实 dev artifacts |
 | MigrationLens Day 13 | `completed` | 全成员 ZIP 路径/类型/资源预验证、有界实际读取、UTF-8/LOC、只提取 selected Python、随机任务目录与可靠 cleanup |
 | MigrationLens Day 14 | `completed` | 标准库 AST parse、文件/模块/alias/BaseModel/浅层类型 registry、source location、identity recheck 与安全失败 |
+| MigrationLens Day 15 | `completed` | Config、validator、Settings、root model 四类 production rule，严格 finding schema、import provenance/shadowing 与 5 个 candidate fixture |
 
 当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite 仍只包含最小
 `system_metadata`，不能描述为已经运行的报告存储；Qdrant startup 仍只创建或校验
@@ -47,12 +48,13 @@ gold 在 12 条 dev questions 上完成三路评分；20 条 locked candidates �
 非 Python 和 ignored-directory 内容不会进入分析集合，但不会绕过安全检查。
 Day 14 只消费 Day 13 的显式 Python inventory，以 size/SHA256/LOC 重新证明文件身份后
 调用标准库 `ast.parse()`；输出 strict/frozen `ScannerRegistry` 和与其同序的运行时
-`ast.Module`。它不递归发现文件、不执行源码，也没有提前产生八类 migration finding。
+`ast.Module`。它不递归发现文件、不执行源码。Day 15 继续只读消费这两部分输入，已经
+实现前四类 production finding；后四类与一跳 import 仍未开始。
 
 尚未实现：
 
 - GitHub Actions；
-- 八类规则和一跳 import；
+- 方法/数据加载、Field、GenericModel 后四类规则和一跳 import；
 - final locked retrieval evaluation；
 - LangGraph Agent、五个只读工具和 Citation Guard；
 - 分析 API、报告存储、benchmark、评测和负载测试；
@@ -435,8 +437,43 @@ Import registry 保存 Import/ImportFrom、alias/local binding、relative level�
 
 `scan_result.parsed_files` 保存与 registry files 同序的标准库 `ast.Module`，只供当前分析
 生命周期内的后续规则只读遍历，不序列化或持久化。registry 不含 task root、源码正文、
-随机 ID 或时间。Day 14 尚未匹配 Config、validator、Settings、`__root__`、方法、Field、
-GenericModel 或 importer graph。
+随机 ID 或时间。Day 14 本身不匹配 migration finding。
+
+## Production Rule Scanner
+
+Day 15 在同一个 ZipGuard context 内追加只读规则阶段：
+
+```python
+from pathlib import Path
+
+from app.scanner import ASTScanner, RuleScanner
+from app.security import ZipGuard
+
+with ZipGuard(Path("project.zip")) as validated:
+    ast_result = ASTScanner().scan(validated)
+    rule_result = RuleScanner().scan(ast_result)
+```
+
+`RuleScanner` 不重新 parse/读取或发现文件，先用 Day 14 `ast_sha256` 确认 runtime AST
+仍与 registry 对齐，再产生 strict/frozen schema v1 findings。四个 production ID 为：
+
+- `pydantic_v1_config`：已证明 BaseModel class 的直接 `class Config` 及已识别 legacy key；
+- `pydantic_v1_validator`：有 Pydantic import provenance 的 `validator`、
+  `root_validator`、`validate_arguments` decorator；
+- `pydantic_v1_settings`：旧 `BaseSettings` direct import 或未遮蔽的 module reference；
+- `pydantic_v1_root_model`：已证明 BaseModel class 直接 body 中的 `__root__` target。
+
+Finding 保存 rule/category、规范相对路径、AST UTF-8 byte location、old API、construct、
+typed evidence、confidence、severity 与 manual-review 标志，并使用显式 tie-break 稳定排序。
+Day 15 只发布具有静态 import/model provenance 的 high-confidence finding；普通同名、
+其他库、pre-use shadow/rebind 和动态歧义不报。Config/validator/Settings severity 为 high，
+root model 为 medium。
+
+`data/evaluation/detection/candidates.json` 是 schema v1、status=`candidate` 的增量数据：
+5 个单文件项目共 14 个 positive 和 5 个 negative label，每个 label 使用
+`(fixture_id, file, start_line, rule_id)`，gold heading 必须存在于固定官方 chunk artifact。
+loader 只做文件、LOC、关系和 heading 静态校验；它不运行 benchmark、不计算检测指标，
+也不是 locked holdout。
 
 ## 本地运行
 
@@ -718,13 +755,26 @@ module mapping/collision、一般 import/relative alias、BaseModel direct/alias
 `35 passed in 0.47s`，完整回归为 `504 passed, 2 warnings in 5.42s`；Ruff、68-file
 format、pip、diff 与静态 Compose config 均通过。部署未改，没有运行 Docker runtime。
 
+### Day 15 验证边界
+
+2026-08-20 先建立规则、candidate 与集成测试；首次 collection 因 production 模块尚未
+存在得到 3 个预期 import error。首轮实现为 `3 failed, 35 passed in 0.54s`，暴露 direct
+validator alias 的 canonical symbol 解析缺陷；只修实现后为 `38 passed in 0.41s`。
+加入 5 个 candidate fixture 的完整 ZIP 调用链 exact-label 校验后，定向集为
+`43 passed in 0.49s`。
+
+fixture 静态摘要为 5 projects/files、14 positive、5 negative、31–38 LOC 和 4 个 exact
+official headings。集成 smoke 实际调用 `ZipGuard -> ASTScanner -> RuleScanner`，覆盖四类
+finding、ignored members、sentinel 不执行与 task root cleanup；它不是 locked detection
+metric。最终共同门禁结果见 `TASKS.md` 与 Day 15 学习日志。
+
 ## 下一开发日
 
-MigrationLens Day 15 — 前四类规则保持 `planned`，尚未开始。它可以在同一 ZipGuard
-context 内消费 Day 14 的 registry 与逐文件 `ast.Module`，只增量实现配置、验证器、
-Settings 和根模型规则。Day 16 后四类规则、Day 17 一跳 importer、Agent 与业务 API 均
-未开始。P0 不采用 cross-encoder reranker；20 条 locked retrieval questions 仍须等待
-人工复核、hash 与 frozen commit。
+MigrationLens Day 16 — 后四类规则保持 `planned`，尚未开始。它可以复用 Day 15 finding
+schema 与保守 binding 证据，增量实现方法、数据加载、Field、GenericModel 和浅层
+receiver；不能提前做 Day 17 一跳 importer、Agent 或业务 API。P0 不采用 cross-encoder
+reranker；20 条 locked retrieval questions 与 detection candidate 都没有运行或冻结为
+最终 holdout。
 
 ## 项目文档
 
@@ -744,7 +794,9 @@ Settings 和根模型规则。Day 16 后四类规则、Day 17 一跳 importer、
 
 Day 10 已验证固定 revision 的真实模型与 62-point Qdrant index；Day 11 已验证正式
 artifact 上的 BM25 与真实 Dense + RRF hybrid 调用链；Day 12 已取得明确标注的 12 题
-dev 三路指标；Day 13 已验证 ZIP Guard；Day 14 已验证只读 AST/registry 调用链。但八类
-规则尚未开始，20 题 locked 评测、CI、样本量和负载测试等发布证据仍未完成，因此
-MigrationLens 尚未达到可写入简历的发布门槛。不得把 FakeEmbedding、smoke、dev 指标、
-目标阈值、计划数量或未运行命令描述为 locked 结果、生产检索质量、GPU 性能或发布证据。
+dev 三路指标；Day 13 已验证 ZIP Guard；Day 14 已验证只读 AST/registry 调用链；Day 15
+已验证前四类确定性 production rules 和 candidate fixture 调用链。后四类、一跳 import、
+20 题 locked 评测、检测 locked benchmark、CI、样本量和负载测试等发布证据仍未完成，
+因此 MigrationLens 尚未达到可写入简历的发布门槛。不得把 FakeEmbedding、smoke、dev
+指标、candidate label、目标阈值、计划数量或未运行命令描述为 locked 结果、生产检索
+质量、完整 detection accuracy、GPU 性能或发布证据。

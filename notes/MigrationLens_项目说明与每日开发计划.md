@@ -1,6 +1,6 @@
 # MigrationLens 项目说明与每日开发计划
 
-更新时间：2026-08-18
+更新时间：2026-08-20
 产品：MigrationLens — Pydantic v1→v2 升级影响分析 Agent
 权威范围：`SPEC.md`
 
@@ -442,9 +442,35 @@ module-level Pydantic import/alias，并对源码顺序中已经定义的 top-le
 回归为 `504 passed, 2 warnings in 5.42s`；Ruff、68-file format、pip、diff 与静态
 Compose config 均通过，未运行未修改部署的 Docker runtime。
 
-Day 14 没有生成八类 production finding、confidence/severity、importer graph、Agent、
-分析 API 或 locked 指标。Day 15 仍为 `planned`，可以消费同一 context 内的 registry 与
-逐文件 `ast.Module`，只增量实现配置、验证器、Settings 与根模型规则。
+Day 14 本身没有生成 production finding、confidence/severity、importer graph、Agent、
+分析 API 或 locked 指标。Day 15 已只读消费同一 context 内的 registry 与逐文件
+`ast.Module`，增量实现配置、验证器、Settings 与根模型规则；后四类和一跳 import 仍未
+开始。
+
+### 2.14 MigrationLens Day 15 实际完成边界
+
+Day 15 新增 `RuleScanner.scan(ASTScanResult)`，执行前用 Day 14 `ast_sha256` 重新证明
+runtime AST 与 registry 对齐，然后只读遍历；不重新读取/parse/发现文件，不调用网络、
+Retriever、LLM 或 Agent。公共 strict/frozen schema v1 的四个 production ID 为
+`pydantic_v1_config`、`pydantic_v1_validator`、`pydantic_v1_settings` 和
+`pydantic_v1_root_model`。
+
+Config 只检查已证明 BaseModel class 的直接 Config class 和三个 legacy key；validator
+只接受有 Pydantic import provenance 且 use-position 未 shadow/rebind 的 direct/module
+alias；Settings 区分旧 direct import 与真实 module reference；root model 只接受已证明
+BaseModel class 直接 body 的 `__root__` target。前三类 severity=high，root=medium；本日
+只输出 high-confidence、无需人工确认 finding，证据不足与同名/其他库构造不报。
+
+candidate schema v1 实际建立 5 个单文件项目，文件 31–38 LOC，共 14 positive、5 negative
+label 和 4 个逐字存在于固定 chunk artifact 的 official heading。artifact 状态仍是
+`candidate`；loader 只做静态契约检查，不计算 Precision/Recall，不是 locked benchmark。
+
+测试先行第一次 collection 得到 3 个预期 import error。首轮实现为
+`3 failed, 35 passed in 0.54s`，修复 direct validator alias 的 canonical symbol 解析后为
+`38 passed in 0.41s`；加入五个 candidate 的完整 ZIP exact-label 集成后为
+`43 passed in 0.49s`。真实 smoke 经过 `ZipGuard -> ASTScanner -> RuleScanner`，sentinel
+未执行、ignored members 未扫描且 task root 完成 cleanup。最终共同门禁结果记录于
+`TASKS.md` 与 `LEARNING_LOG.md`。
 
 ## 3. P0、P1 和不做范围
 
@@ -550,9 +576,10 @@ flowchart LR
 `reporting/` 和 `storage/`。当前真实代码包含基础 `app/api`、`app/core`、
 `app/storage/sqlite.py`、snapshot/chunk/dense index 所在的 `app/ingestion`、真实
 E5/Qdrant/BM25/Dense/Hybrid 所在的 `app/retrieval`，以及 dev evaluator 所在的
-`app/evaluation`、Day 13 ZIP Guard 所在的 `app/security`，以及 Day 14 AST/registry
-所在的 `app/scanner`；尚无 production rules、agent 或业务 reporting 实现。Day 12 的
-`reports/retrieval_dev_*` 是项目评测 artifact，不是分析报告存储。
+`app/evaluation`、Day 13 ZIP Guard 所在的 `app/security`，以及 Day 14 AST/registry 与
+Day 15 前四类 production rules 所在的 `app/scanner`；尚无后四类规则、import graph、
+agent 或业务 reporting 实现。Day 12 的 `reports/retrieval_dev_*` 是项目评测 artifact，
+不是分析报告存储；Day 15 detection artifact 仍是 candidate，不是 locked 结果。
 
 ## 6. 数据与文档快照
 
@@ -951,7 +978,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 12 | 计划 2026-08-17；实际 2026-08-14 | `completed` | dev 检索集与评分 | 32 题 schema、12 dev、20 locked candidates 隔离、同 query 三路 Recall@1/3 与 MRR@5、dev artifacts | 专项 50 passed；完整 380 passed；真实 E5/Qdrant 12 题 dev：BM25 0.916667/1.0/0.944444，Dense 0.416667/0.666667/0.555556，Hybrid 0.666667/0.833333/0.766667；locked NOT RUN；共同门禁 | 评测分割、泄漏与消融 | locked 运行、P0 禁用的 reranker、ZIP/AST |
 | MigrationLens Day 13 | 2026-08-18 | `completed` | ZIP Guard | 全部资源/路径/成员规则、有界实际读取、安全非 Python 忽略、selected Python 受控提取与 cleanup | 89 cases；真实 2/1/10 MiB、200/50k、ratio/path/type/encoding/lifecycle；临时 ZIP smoke；共同门禁 | 压缩包信任边界 | import/执行/修改代码、AST |
 | MigrationLens Day 14 | 计划 2026-08-19；实际 2026-08-18 | `completed` | AST 基础与符号表 | identity recheck、标准库 AST、module/import/BaseModel/type clue registry 与 runtime trees | 35 cases；真实 Day13→Day14 ZIP smoke；共同门禁 | AST 与确定性 schema | 八类规则、一跳 import、LLM |
-| MigrationLens Day 15 | 2026-08-20 | `planned` | 前四类规则 | 配置、验证器、Settings、根模型；按本日规则增量建立候选 fixture | 每类 3 正2负1边界、行号 gold、同名负例；共同门禁 | 上下文敏感匹配 | 后四类、一次性补齐全部 fixture、Agent |
+| MigrationLens Day 15 | 2026-08-20 | `completed` | 前四类规则 | Config、validator、Settings、root model；strict finding schema；5 个 candidate fixture/19 labels | 43 cases；真实 Day13→15 ZIP 与 5-project exact-label smoke；共同门禁 | import provenance、shadowing、确定性 finding | 后四类、完整/locked benchmark、Agent |
 | MigrationLens Day 16 | 2026-08-21 | `planned` | 后四类规则 | 方法、数据加载、Field、GenericModel 和浅层 receiver；继续增量建立候选 fixture | 正负/alias、普通 `.dict()` 不高置信、low 不成 finding；共同门禁 | 置信度与人工复核 | 一跳 import、一次性补齐全部 fixture、完整类型推断 |
 | MigrationLens Day 17 | 2026-08-22 | `planned` | 一跳反向 import | 本地 import graph、一跳 importer；只增量增加与一跳关系直接相关的混合候选 | 相对/绝对/cycle/同名/仅一跳；共同门禁 | 模块影响而非调用图 | 递归图、在本日补齐 40 个候选、锁定评测 |
 | MigrationLens Day 18 | 2026-08-24 | `planned` | 五个只读 Agent 工具 | 类型化 I/O、白名单、timeout、上限、trace、路径隔离 | 每工具五类测试；无危险能力；共同门禁 | 工具契约与审计 | Agent 图、报告、API |

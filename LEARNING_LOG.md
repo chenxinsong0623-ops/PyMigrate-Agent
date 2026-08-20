@@ -2213,3 +2213,196 @@ Day 17 才是一跳 importer。Agent、API、Citation Guard 与 locked evaluatio
 23. 为什么 runtime AST 与 Pydantic registry 要分离？
 24. 为什么 Day 14 不产生八类 finding？
 25. Day 14 与 Day 15、Day 16、Day 17 的输入/职责边界是什么？
+
+## 2026-08-20：MigrationLens Day 15 — 前四类 Production Rules
+
+### 1. 开发起点与范围锁
+
+开发前 branch=`main`、HEAD=`3e77fe7 feat: add Day 14 AST scanner registry`，worktree
+clean。完整检查只从 live repository 取证；没有把前序对话中的接口、测试数或成功状态当作
+当前事实。Day 15 只实现 Config、validator、Settings 和 root model 四类规则；Day 16
+后四类、Day 17 一跳 import、Agent/API/report 与 locked benchmark 没有提前开始。
+
+首次完整 pytest 的测试主体跑完，但系统临时目录 cleanup 因 `pytest-current` 的
+`WinError 5` 退出码 1；这不是通过证据。仅为本次进程把 TEMP/TMP 指向工作区内的临时目录
+并可靠清理后，开发前基线才得到 `504 passed, 2 warnings in 4.94s`。这说明测试断言通过与
+pytest 进程成功退出是两个证据层，不能只看屏幕上的测试点。
+
+### 2. Finding schema 与长期身份
+
+`Finding` 是 evaluator、Agent 与未来报告之间的 production contract，不是调试字符串。
+它包含 `rule_id`、category、relative path、AST location、old API、matched construct、
+typed evidence、confidence、severity 和 manual-review 状态。`RuleScanResult` 使用 schema
+version 1；全部模型 strict/frozen/extra-forbid。
+
+四个 rule ID 固定为：
+
+```text
+pydantic_v1_config
+pydantic_v1_validator
+pydantic_v1_settings
+pydantic_v1_root_model
+```
+
+Day 12 retrieval artifact 的 category 只是在文档检索问题中表达主题，不能反向冒充这里的
+production identity。一个旧 Config class 和其中三个旧 key 是四个可定位 construct，因此
+分别成为 finding；这种粒度让未来 `(file, line, rule_id)` gold 可准确匹配，也让报告能把
+风险指向具体位置。
+
+### 3. 确定性输出与位置
+
+finding 排序显式使用 relative path、start line/UTF-8 byte column、rule ID、construct、
+old API、typed evidence、end location。没有 UUID4、时间、Python `hash()`、临时绝对路径
+或遍历偶然顺序。schema 同时拒绝重复 finding 和未排序 evidence。
+
+位置直接来自 AST attributes。CPython 的 `col_offset`/`end_col_offset` 是 UTF-8 byte offset，
+并非 Unicode code point 或 UI 字符列；含中文前缀的测试明确锁定 `__root__` target 的 byte
+column。字符串搜索既可能命中注释/字符串，也无法正确处理同一行重复 token，因此没有用。
+
+### 4. Day 14 import provenance 如何被消费
+
+Day 14 registry 已保存 import kind、module、imported symbol、local alias、scope 与位置；
+Day 15 以它证明一个名称确实来自 `pydantic`。同一 runtime AST 只用于补充非 import binding
+event 和 use position，不重新读取/parse 源码。每个 AST 在规则执行前重算 Day 14 dump
+hash；测试中原地修改 tree 会得到固定 `Rule scan failed`，而不是在不一致输入上继续。
+
+binding resolver 支持：
+
+- `from pydantic import validator`；
+- `from pydantic import validator as v`；
+- `import pydantic as pd` 配合 `pd.validator`；
+- 同样形式的 BaseSettings 与 validator family。
+
+resolver 按 scope 从内到外检查 use 之前的 binding event。pre-use 参数、赋值、函数/类定义
+或其他 import 会保守地阻断 provenance。完整 Python symbol semantics 包含 `global`、
+`nonlocal`、条件控制流和更复杂数据流；Day 15 没有假装实现完整 type checker，证据不足就
+不生成 high-confidence finding。
+
+### 5. Config rule
+
+入口不是“看到 class Config”，而是先从 Day 14 `ClassRecord` 证明外层 class 是 Pydantic
+BaseModel 或当前文件已证明的本地继承后代。然后只检查该 class 的直接 body：
+
+- `class Config` 本身；
+- `orm_mode`；
+- `schema_extra`；
+- `allow_population_by_field_name`。
+
+普通 class 的 Config、未识别 key、方法局部赋值、嵌套非模型 class 和其他库同名
+BaseModel 不报。direct alias、module alias 和本地继承正例证明规则消费 registry，而不是
+重新猜测类名。
+
+### 6. Validator rule
+
+规则覆盖 `validator`、`root_validator` 与 `validate_arguments`，既处理 bare decorator，
+也处理带参数的 `ast.Call`。decorator 的 syntax name 只是 reference；canonical API 必须从
+ImportRecord 的 `imported_name` 证明。
+
+首轮实现真实得到 `3 failed, 35 passed in 0.54s`：`validator as v` 和
+`validate_arguments as va` 被错误地把本地 alias 当成 canonical target，module alias
+路径则正常。修复后 Name 节点用 canonical validator family 查询 import provenance，
+Attribute 节点用 attribute name；测试未放宽，结果变为 `38 passed in 0.41s`。
+
+同名 decorator、其他库 import、alias rebind 和函数参数 shadow 都是负例。这里的核心不是
+“名字看起来像 validator”，而是“该 use 位置可证明绑定到 Pydantic v1 API”。
+
+### 7. Settings rule
+
+`from pydantic import BaseSettings [as X]` 的 import 本身就是旧 API 事实，因此在 import
+位置报告一次，即使后面把 X 重绑定也不抹除已发生的 import。`import pydantic as pd` 没有
+导入某个成员，只有实际出现且未 shadow 的 `pd.BaseSettings` reference 才报告。
+
+`from pydantic_settings import BaseSettings` 是 v2 目标包，不报；其他库同名、未导入裸名、
+module alias rebind 后的 attribute 也不报。import-level 和 reference-level construct 分开，
+避免一个 module import 在没有使用 BaseSettings 时被误报。
+
+### 8. Root model rule
+
+只有 Day 14 已证明的 BaseModel class 直接 body 中，`Assign` 或 `AnnAssign` 的 Name target
+精确等于 `__root__` 时才报告。普通 class、方法局部、相似字段或 attribute target 不报。
+root-model severity 固定为 medium，而前三类固定为 high；schema 对 rule/category/severity
+组合做交叉验证，consumer 不需要信任任意调用方填值。
+
+### 9. 置信度、evidence 与保守性
+
+Day 15 的正式输出只允许 `confidence=high` 且 `requires_manual_review=false`。这不是声称
+scanner 能理解任意 Python，而是明确约束：只有当前实现已有静态证明的构造才能进入
+production result。证据不足的同名/动态/跨文件场景被省略；未来若设计 medium/low 候选，
+应使用不同消费语义，不能悄悄混入本日正式 finding。
+
+evidence 是排序且 key 唯一的 typed facts，例如 import module/symbol、local/reference
+symbol、model qualified name/evidence 和 config key。它不复制源码正文、绝对路径或原始
+异常，既可序列化核查，也减少用户代码泄漏面。
+
+### 10. Candidate fixture 与 gold 来源
+
+Day 15 增量建立 5 个小项目，每项目 1 个 Python 文件、31–38 LOC：Config、validator、
+Settings、root model 正例各一个，集中负例一个。版本化 artifact 状态只能是 `candidate`；
+静态结果为 5 files、14 positive、5 negative 和 4 个 official headings。
+
+gold 不是从 scanner 输出反推。每个 label 预先记录 `(fixture_id, file, start_line, rule_id)`、
+expected、category、severity 与 exact heading；loader 要求 heading 真实存在于固定 Day 9
+chunk artifact。candidate loader 只校验 schema、路径、1–4 files、30–200 LOC、行范围、
+关系和 heading，不运行 scanner 或计算 Precision/Recall。
+
+五个 fixture 经真实临时 ZIP 调用链扫描后，实际 positive keys 与 14 个正例 exact equality，
+且与 5 个负例无交集。这是受控 candidate integration evidence，不是独立 locked accuracy；
+后续仍需人工冻结和一次性 holdout 协议。
+
+### 11. 安全调用链与 smoke
+
+真实集成链为：
+
+```text
+ZIP bytes
+  -> ZipGuard validated Python inventory
+  -> ASTScanner registry + aligned runtime ast.Module
+  -> RuleScanner deterministic findings
+```
+
+临时 ZIP 同时含 README、ignored `.venv` Python 和会写 sentinel/抛异常的 Python 语句。
+Scanner 只处理 validated inventory；sentinel 在 context 内外都不存在，证明 AST parse/rule
+walk 没有执行源码；context 结束后 task root 被清理。没有 import fixture module、调用其
+函数、安装其依赖或运行其 pytest。
+
+### 12. 测试、工具与文档事实
+
+测试先于 production module：第一次 collection 得到 3 个预期 import error。最终 Day 15
+定向集为 `43 passed in 0.49s`，覆盖每类至少 3 正例、2 负例与边界例，以及 strict/frozen、
+稳定 JSON、AST identity fail-closed、禁止二次 parse、中文 byte column、真实 ZIP lifecycle
+和 candidate exact labels。
+
+没有新增 dependency，因此 `pyproject.toml` 和 notices 不变；也没有配置/部署修改。全部
+同步后的最终结果为：Day 15 定向 `43 passed in 0.49s`；完整 pytest
+`547 passed, 2 warnings in 4.99s`；pip check 无 broken requirements；Ruff check 通过；
+format 为 `80 files already formatted`；diff check 与静态 Compose config 均退出码 0。
+Compose 只输出两条既有 Docker config Access denied warning。没有 commit、push、tag、
+locked run 或 Docker runtime。
+
+### Day 15 后应能回答的 25 个问题
+
+1. Production `rule_id` 与 Day 12 retrieval `rule_category` 为什么不能混用？
+2. 为什么一个 Config class 和其中每个 legacy key 要分别形成 finding？
+3. `Finding` 中哪些字段构成未来 evaluator/Agent/report 的稳定契约？
+4. 为什么 evidence 要 typed、排序且 key 唯一？
+5. finding 的完整 deterministic sort key 是什么？
+6. 为什么 AST column 必须按 UTF-8 byte offset 解释？
+7. Day 15 为什么复核 Day 14 `ast_sha256`？
+8. 规则为什么不能重新 parse 或递归发现文件？
+9. ImportRecord 怎样区分 canonical symbol 与 local alias？
+10. `validator as v` 首轮缺陷的根因是什么？
+11. direct alias 与 module alias 分别怎样被证明？
+12. use-position shadowing 为什么比“是否曾 import”更精确？
+13. 哪些 binding 会保守地阻断一个 validator/Settings reference？
+14. Config rule 为什么必须先证明外层 class 是 BaseModel？
+15. local inheritance evidence 能证明到什么范围？
+16. 为什么 BaseSettings direct import 与 module reference 是不同 construct？
+17. direct BaseSettings import 后重绑定时，为什么 import finding 仍保留？
+18. root model 为什么只检查 class direct body 的 Name target？
+19. 四类 rule 的 severity 分别是什么，schema 如何防止不一致？
+20. “只发布 high confidence”与“scanner 完整理解 Python”有什么区别？
+21. 为什么同名/其他库/动态歧义应该不报，而不是强制产生 low finding？
+22. candidate fixture 与 locked benchmark 的证据等级有何不同？
+23. gold heading 为什么必须来自固定 chunk，且不能从 scanner 输出反推？
+24. sentinel smoke 实际证明什么，又不能证明什么？
+25. Day 16 可以复用哪些契约，又有哪些 Day 17/Agent 边界不能提前进入？

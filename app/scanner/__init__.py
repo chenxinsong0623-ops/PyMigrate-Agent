@@ -20,6 +20,19 @@ from app.scanner.models import (
     ScannerRegistry,
     SourceLocation,
 )
+from app.scanner.rule_models import (
+    Confidence,
+    EvidenceFact,
+    EvidenceKey,
+    Finding,
+    FindingLocation,
+    MatchedConstruct,
+    RuleCategory,
+    RuleId,
+    RuleScanResult,
+    Severity,
+)
+from app.scanner.rule_scanner import RuleScanError, RuleScanErrorType, RuleScanner
 
 __all__ = [
     "ASTScanner",
@@ -28,14 +41,27 @@ __all__ = [
     "AssignmentTypeClue",
     "BaseModelEvidence",
     "ClassRecord",
+    "Confidence",
+    "EvidenceFact",
+    "EvidenceKey",
     "FileRecord",
+    "Finding",
+    "FindingLocation",
     "ImportKind",
     "ImportRecord",
     "ModuleRecord",
+    "MatchedConstruct",
     "ParameterTypeClue",
     "ParsedPythonFile",
     "ScannerError",
     "ScannerErrorType",
     "ScannerRegistry",
     "SourceLocation",
+    "RuleCategory",
+    "RuleId",
+    "RuleScanError",
+    "RuleScanErrorType",
+    "RuleScanResult",
+    "RuleScanner",
+    "Severity",
 ]
