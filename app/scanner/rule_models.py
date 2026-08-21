@@ -1,4 +1,4 @@
-"""Day 15 production rule finding 的严格、确定性输出契约。"""
+"""Day 15–16 production rule finding 的严格、确定性输出契约。"""
 
 from __future__ import annotations
 
@@ -22,15 +22,23 @@ class RuleId(StrEnum):
     PYDANTIC_V1_VALIDATOR = "pydantic_v1_validator"
     PYDANTIC_V1_SETTINGS = "pydantic_v1_settings"
     PYDANTIC_V1_ROOT_MODEL = "pydantic_v1_root_model"
+    PYDANTIC_V1_BASE_MODEL_METHOD = "pydantic_v1_base_model_method"
+    PYDANTIC_V1_DATA_LOADING = "pydantic_v1_data_loading"
+    PYDANTIC_V1_FIELD = "pydantic_v1_field"
+    PYDANTIC_V1_GENERIC_MODEL = "pydantic_v1_generic_model"
 
 
 class RuleCategory(StrEnum):
-    """Day 15 已实现的四类业务规则。"""
+    """八类 Pydantic v1→v2 production rule。"""
 
     CONFIG = "config"
     VALIDATOR = "validator"
     SETTINGS = "settings"
     ROOT_MODEL = "root_model"
+    BASE_MODEL_METHOD = "base_model_method"
+    DATA_LOADING = "data_loading"
+    FIELD = "field"
+    GENERIC_MODEL = "generic_model"
 
 
 class Confidence(StrEnum):
@@ -58,6 +66,11 @@ class MatchedConstruct(StrEnum):
     SETTINGS_IMPORT = "settings_import"
     SETTINGS_REFERENCE = "settings_reference"
     ROOT_FIELD = "root_field"
+    BASE_MODEL_METHOD_CALL = "base_model_method_call"
+    DATA_LOADING_CALL = "data_loading_call"
+    FIELD_KEYWORD = "field_keyword"
+    GENERIC_MODEL_IMPORT = "generic_model_import"
+    GENERIC_MODEL_BASE = "generic_model_base"
 
 
 class EvidenceKey(StrEnum):
@@ -68,9 +81,14 @@ class EvidenceKey(StrEnum):
     IMPORT_MODULE = "import_module"
     IMPORT_SYMBOL = "import_symbol"
     LOCAL_SYMBOL = "local_symbol"
+    FIELD_KEYWORD = "field_keyword"
+    FIELD_KEYWORD_KIND = "field_keyword_kind"
     MODEL_EVIDENCE = "model_evidence"
     MODEL_QUALIFIED_NAME = "model_qualified_name"
     REFERENCE_SYMBOL = "reference_symbol"
+    RECEIVER_EVIDENCE = "receiver_evidence"
+    RECEIVER_SYMBOL = "receiver_symbol"
+    TYPE_REFERENCE = "type_reference"
 
 
 class FindingLocation(_StrictFrozenModel):
@@ -162,16 +180,29 @@ class Finding(_StrictFrozenModel):
                 RuleCategory.ROOT_MODEL,
                 Severity.MEDIUM,
             ),
+            RuleId.PYDANTIC_V1_BASE_MODEL_METHOD: (
+                RuleCategory.BASE_MODEL_METHOD,
+                Severity.MEDIUM,
+            ),
+            RuleId.PYDANTIC_V1_DATA_LOADING: (
+                RuleCategory.DATA_LOADING,
+                Severity.HIGH,
+            ),
+            RuleId.PYDANTIC_V1_FIELD: (RuleCategory.FIELD, Severity.MEDIUM),
+            RuleId.PYDANTIC_V1_GENERIC_MODEL: (
+                RuleCategory.GENERIC_MODEL,
+                Severity.MEDIUM,
+            ),
         }[self.rule_id]
         if (self.category, self.severity) != expected:
             raise ValueError("rule_id、category 与 severity 不一致")
         if self.confidence is not Confidence.HIGH or self.requires_manual_review:
-            raise ValueError("Day 15 production finding 必须有静态证明且无需人工确认")
+            raise ValueError("production finding 必须有静态证明且无需人工确认")
         return self
 
 
 class RuleScanResult(_StrictFrozenModel):
-    """Day 15 规则执行器的稳定、有序结果。"""
+    """规则执行器的稳定、有序结果。"""
 
     schema_version: Literal["1"] = "1"
     findings: tuple[Finding, ...]

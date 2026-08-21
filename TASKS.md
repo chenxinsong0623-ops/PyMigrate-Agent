@@ -5,15 +5,15 @@
 
 ## 1. 当前开发日与状态
 
-MigrationLens Day 15 — 前四类 Pydantic v1→v2 Production Rules
+MigrationLens Day 16 — 后四类 Pydantic v1→v2 Production Rules
 
 状态：`completed`
 
-计划与实际开发日期：2026-08-20。开发前 branch 为 `main`，HEAD 为
-`3e77fe7 feat: add Day 14 AST scanner registry`，`git status --short` 无输出；Day 14
-commit 已存在，Day 15 尚无 commit。Day 15 只实现 Config、validator、Settings 与
-root model 四类规则，并增量建立 candidate fixture。Day 16 后四类规则和 Day 17
-一跳 import 仍为 `planned`。
+实际开发日期：2026-08-20。开发前 branch 为 `main`，HEAD 为
+`3ae102d feat: add Day 15 deterministic migration rules`，`git status --short` 无输出；
+Day 15 已提交。Day 16 只增量实现 BaseModel methods、data loading、Field 与
+GenericModel，复用 Day 14 registry/runtime AST 和 Day 15 finding/binding 架构。
+Day 17 一跳 reverse import 仍为 `planned`。
 
 20 条 locked retrieval candidates 与未来 locked detection benchmark 继续保持
 `NOT RUN`。没有运行用户代码、用户测试、dependency 安装、LLM、Retriever、Agent、
@@ -22,22 +22,15 @@ root model 四类规则，并增量建立 candidate fixture。Day 16 后四类�
 ## 2. 开发前事实与基线
 
 - 指定解释器：`D:\conda_envs\pymigrate-agent\python.exe`；
-- Git branch/HEAD：`main` / `3e77fe7 feat: add Day 14 AST scanner registry`；
+- Git branch/HEAD：`main` / `3ae102d feat: add Day 15 deterministic migration rules`；
 - `git status --short`：无输出；
-- 首次完整 pytest 跑完测试主体后，在系统临时目录清理 `pytest-current` 时遇到
-  `PermissionError [WinError 5]`，退出码 1，因此没有记为通过；
-- 仅把本次 pytest 的 TEMP/TMP 隔离到工作区内、并在命令结束时清理后，同一完整集为
-  `504 passed, 2 warnings in 4.94s`；
+- 使用独立 `--basetemp var/tmp/day16-baseline` 的完整 pytest：
+  `547 passed, 2 warnings in 7.84s`；
 - warnings 是既有 Starlette TestClient deprecation 与 qdrant-client 无法取得 server
   version 的 compatibility warning；均未隐藏；
-- `python -m pip check`：`No broken requirements found.`；
-- Ruff check：`All checks passed!`；
-- Ruff format check：`68 files already formatted`；
-- `git diff --check`：退出码 0；
-- `docker compose config --quiet`：退出码 0，并输出两条既有 Docker
-  `config.json` Access denied warning。
+- Day 8 规则依据仍是仓库固定的 Pydantic `v2.13.4` migration snapshot；未联网替换。
 
-## 3. 真实公共调用链
+## 3. 公共调用链与 schema
 
 ```python
 from app.scanner import ASTScanner, RuleScanner
@@ -48,154 +41,154 @@ with ZipGuard(archive_path) as validated:
     rule_result = RuleScanner().scan(ast_result)
 ```
 
-`RuleScanner` 只消费 Day 14 的 `ASTScanResult.registry` 和对齐的 runtime
-`ast.Module`。它不重新读取或 parse 源文件、不递归发现文件、不调用网络/模型/检索，
-也不执行、导入或修改受分析代码。执行前重新计算每棵 runtime AST 的 deterministic
-dump hash，与 Day 14 `ast_sha256` 不一致时整体 fail closed。
+`RuleScanner` 仍只消费 Day 14 `ASTScanResult.registry` 和对齐的 runtime
+`ast.Module`。执行前复核每棵树的 deterministic dump hash；不重新读取或 parse 源码、
+不递归发现文件，也不执行、import 或修改待分析代码。
 
-## 4. Production finding schema
-
-公共 strict/frozen/extra-forbid Pydantic v2 schema v1 包含：
-
-- `RuleScanResult(schema_version="1", findings=...)`；
-- `Finding`：`rule_id`、`category`、canonical relative Python path、AST location、
-  `old_api`、`matched_construct`、排序且唯一的 typed evidence、confidence、severity 与
-  `requires_manual_review`；
-- `FindingLocation`：AST 的 line/end-line 与 UTF-8 byte column/end-column；
-- `EvidenceFact`：枚举 key 和不含源码正文的最小 value。
-
-四个长期 production ID：
+Day 15 schema version 保持为 `1`，以向后兼容方式增加四个长期 production ID：
 
 ```text
-pydantic_v1_config      category=config       severity=high
-pydantic_v1_validator   category=validator    severity=high
-pydantic_v1_settings    category=settings     severity=high
-pydantic_v1_root_model  category=root_model   severity=medium
+pydantic_v1_base_model_method  category=base_model_method  severity=medium
+pydantic_v1_data_loading       category=data_loading       severity=high
+pydantic_v1_field              category=field              severity=medium
+pydantic_v1_generic_model      category=generic_model      severity=medium
 ```
 
-Day 15 只发布具备静态 provenance 的 high-confidence finding，且
-`requires_manual_review=false`。证据不足、同名、其他库或 shadow/rebind 情况直接不报，
-不把 low-confidence 候选伪装成正式 finding。排序固定为 relative path、start line、
-start column、rule ID、construct、old API、evidence 和 end location；重复 finding 被 schema
-拒绝。
+四类仍只发布 `confidence=high`、`requires_manual_review=false` 的 finding。增加的 typed
+evidence 包括 receiver/type、Field keyword/kind 和 GenericModel import/reference；稳定
+排序与 duplicate rejection 没有改变。
 
-## 5. Config rule
+## 4. BaseModel methods
 
-只在 Day 14 已证明属于 Pydantic `BaseModel` 的类上检查直接 class body：
+依据固定 snapshot 与冻结 SPEC，支持：
 
-- 直接 `class Config` 产生一个 `config_class` finding；
-- `orm_mode`、`schema_extra`、`allow_population_by_field_name` 各自的直接赋值产生独立
-  `config_key` finding；
-- local inheritance、`BaseModel as BM` 与 `import pydantic as pd` 的模型证明均可消费；
-- 普通类的同名 Config、其他 key、方法/嵌套类中的赋值和非 Pydantic 同名 BaseModel
-  不报。
+```text
+construct, copy, dict, json, json_schema, parse_obj,
+schema, schema_json, update_forward_refs
+```
 
-每个 construct 独立成 finding，确保未来 evaluator 能用 `(file, start_line, rule_id)`
-对齐实际命中，而不是把整个类压成一个模糊结果。
+只有以下当前文件静态证据可以证明 receiver：
 
-## 6. Validator rule
+- Day 14 已证明的本地 BaseModel class reference；
+- 已证明 BaseModel 的简单参数 annotation clue；
+- annotated assignment clue；
+- 本地 BaseModel constructor assignment clue；
+- 已证明类或直接 `BaseModel` import 的 inline constructor；
+- `BaseModel` direct alias 或 `pydantic` module alias 本身。
 
-识别 `validator`、`root_validator` 与 `validate_arguments`：
+每个 name receiver 在使用点之前必须只有一个可证明的本地 binding；后续 rebind 会阻断
+后续调用。普通对象 `.dict()`、无 annotation 参数、未知 factory 返回值、普通 class、
+attribute chain、跨函数返回值和跨文件类型均不猜测，不产生 production finding。
 
-- `from pydantic import ...` 的直接名和 `as` alias；
-- `import pydantic as pd` 后的 `pd.<decorator>`；
-- 带参数和不带参数的 decorator AST 形式。
+## 5. Data loading
 
-解析使用 Day 14 import provenance 和 use-position binding。未导入的同名 decorator、
-其他库导入、函数参数/赋值/定义造成的 pre-use shadow，以及 alias rebind 后的使用不报。
-修复过一个真实实现缺陷：首轮实现把 direct alias 的本地名当成 canonical symbol，导致
-`v`/`va` 漏报；修改 resolver 输入而未放宽测试后通过。
+`parse_raw`、`parse_file`、`from_orm` 使用与 BaseModel methods 相同的 receiver proof，
+但独立进入 `pydantic_v1_data_loading` high-severity rule。普通 Loader 同名 classmethod、
+unknown factory、普通参数和 rebind 后调用不报。
 
-## 7. Settings rule
+## 6. Field
 
-- `from pydantic import BaseSettings [as X]` 在 import 位置产生
-  `settings_import` finding；
-- `import pydantic as pd` 后未被遮蔽的 `pd.BaseSettings` reference 产生
-  `settings_reference` finding；
-- direct import 即使之后重绑定，import 本身仍是已发生的旧 API 事实，但重绑定后的 use
-  不额外报告；
-- `pydantic_settings`、其他库 `BaseSettings`、裸同名和 module alias shadow 不报。
+只识别有 Pydantic provenance 且使用点未 shadow/rebind 的：
 
-## 8. Root model rule
+```python
+from pydantic import Field
+from pydantic import Field as F
+import pydantic as pd
+```
 
-只在 Day 14 已证明的 BaseModel class 的直接 class body 中识别 `Assign`/`AnnAssign`
-目标 `__root__`。普通类、方法局部、嵌套非模型类、相似名称和其他 attribute 不报。
-severity 固定为 medium；location 对齐 `__root__` target，而不是字符串搜索结果。
+`const`、`min_items`、`max_items`、`unique_items`、`allow_mutation`、`regex`、`final`
+各自形成独立 finding。显式且不属于固定 v2.13.4 Field public keyword allowlist 的 keyword
+按 snapshot 的 arbitrary JSON-schema-extra 迁移说明形成独立 finding；`json_schema_extra`
+和其他当前受支持 keyword 不报。动态 `Field(**options)` 不展开、不猜测。其他库 Field
+与 alias/module rebind 后的调用不报。
 
-## 9. Candidate fixture 与 gold
+## 7. GenericModel
 
-版本化 candidate artifact：`data/evaluation/detection/candidates.json`，schema version 1，
-status 必须为 `candidate`。五个项目各有一个 31–38 LOC 的 Python 文件：四个正例项目和
-一个集中负例项目；总计 5 files、14 positive labels、5 negative labels。
+只承认 canonical `pydantic.generics.GenericModel`：
 
-label 使用未来 evaluator 可消费的 `(fixture_id, file, start_line, rule_id)`，并记录
-category、severity、expected 和 exact official `gold_heading`。静态 loader 验证：
+- `from pydantic.generics import GenericModel [as ...]` 在 import 位置产生 finding；
+- direct alias、`import pydantic.generics [as ...]`、`import pydantic as ...` 和
+  `from pydantic import generics as ...` 的 class base reference 可产生 finding；
+- 参数化 base 的 symbol reference 同样可解析，但不扩展为完整泛型类型系统。
 
-- fixture 固定在 candidate root、每项目 1–4 个排序且唯一的 `.py`、每文件 30–200 LOC；
-- label 只能引用同 fixture 中存在的文件和有效行；匹配键唯一；
-- 四个 exact heading 必须存在于固定 Day 9 chunk artifact；
-- loader 不执行 scanner、不计算 Precision/Recall，也没有 locked entrypoint。
+direct import 是已发生的旧 API 事实，因此后续 rebind 不删除 import finding；rebind 后的
+class base 不再产生额外 finding。其他库、本地同名 class 与 module alias rebind 不报。
 
-四个 gold heading 为 `Migration guide > Changes to config`、
-`Migration guide > Changes to validators`、
-`Migration guide > BaseSettings has moved to pydantic-settings`（artifact 中保留反引号）和
-`Migration guide > Changes to pydantic.BaseModel`（artifact 中保留反引号）。
+## 8. Candidate fixture 与 gold
 
-## 10. 测试先行与缺陷修复
+Day 15 的 5 个 fixture、14 positive 和 5 negative label 未修改。Day 16 增量增加 4 个
+单文件 project，文件 38–41 LOC：
 
-生产实现前先建立 unit/integration tests 和 candidate 数据。第一次真实 collection 得到
-3 个错误，分别是不存在的 `app.scanner.rule_scanner`、`app.evaluation.detection` 和
-未导出的 `RuleId`，证明测试先于实现。
+- BaseModel methods：5 positive、4 negative；
+- data loading：3 positive、4 negative；
+- Field：8 positive、4 negative；
+- GenericModel：3 positive、3 negative。
 
-首轮实现后的隔离定向结果为 `3 failed, 35 passed in 0.54s`；三个失败都来自 direct
-validator alias 解析。修复 canonical target 与 local alias 分离后为
-`38 passed in 0.41s`。加入五个 candidate project 的 exact positive/negative 集成校验后，
-Day 15 最终定向集为 `43 passed in 0.49s`。
+本日净新增 4 files、19 positive、15 negative；candidate artifact 当前合计
+9 projects/files、33 positive、20 negative、6 个 exact official headings。状态仍为
+`candidate`，gold 继续由人工根据固定 snapshot/chunk heading 独立建立；没有从 scanner
+输出反推，也没有执行 detection metric 或 locked benchmark。
 
-覆盖包括四类各至少 3 个正例、2 个负例与边界例；direct/module alias、local inheritance、
-同名/其他库/shadow/rebind、精确 AST location、中文前缀下 UTF-8 byte column、稳定排序、
-strict/frozen schema、禁止二次 parse、AST identity mutation fail-closed 和完整候选 artifact
-关系校验。没有删除测试、放宽断言或抑制异常。
+## 9. 测试先行与真实缺陷/修复
 
-## 11. 真实 Day 13 → Day 15 integration smoke
+先新增 Day 16 单元、candidate 与真实 ZIP 集成断言。生产实现前定向集合真实得到
+`21 failed, 12 passed in 0.98s`；失败来自四类尚无 production rule/schema 和 candidate
+loader 仍只接受 Day 15 ID，证明测试先于实现。
 
-集成测试用标准库临时创建含 Python、README、`.venv` ignored Python 与 sentinel 代码的
-真实 ZIP，依次调用 `ZipGuard -> ASTScanner -> RuleScanner`。结果只分析 validated Python，
-四类规则各产生预期 finding；README 与 ignored Python 不进入 Scanner；sentinel 在
-context 内外均不存在，退出后 task root 被清理。
+实现后新 Day 16 单元为 `20 passed in 0.25s`；candidate/ZIP 集成为
+`13 passed in 0.49s`。扩展 inline constructor 与禁止二次 parse 回归后，Day 15/16
+共同定向集合为 `68 passed in 0.79s`。
 
-另一个集成测试把五个真实 candidate directory 分别打包为临时 ZIP，经同一完整调用链
-扫描，实际 finding key 与 14 个正例标签 exact equality，并与 5 个负例标签完全不相交。
-这是实现/数据 smoke，不是 detection accuracy、locked benchmark 或用户项目运行证据。
-两组集成 smoke 最终单独重跑为 `6 passed in 0.21s`。
+本日真实修复的实现问题包括：
 
-## 12. Artifact、Git 与未实现边界
+- Day 15 resolver 只支持单层 `pd.symbol`；GenericModel 需要 canonical import reference
+  解析，现可区分 direct import、module alias、完整 module path 与 `from pydantic import
+  generics`，同时保持其他库/rebind 阻断；
+- receiver 不能只消费“曾出现过”的 type clue；新增 use-position binding 对齐，任何额外
+  本地 rebind 都保守阻断 high-confidence finding；
+- arbitrary Field keyword 不能把当前合法 keyword 一并误报；加入固定 public keyword
+  allowlist，并明确跳过无法静态展开的 `**kwargs`。
 
-新增 production schema/rule runner、detection candidate schema、5 个 fixture、candidate
-gold、2 个 unit test 文件和 2 个 integration test 文件；更新 scanner public exports、
-README、学习日志、每日计划和当前任务，并向 append-only `DECISIONS.md` 追加 D-018。
+## 10. 集成与安全证据
 
-没有新增 dependency、配置、环境变量、Docker 或 runtime storage；`SPEC.md`、
-`AGENTS.md`、`pyproject.toml`、`THIRD_PARTY_NOTICES.md`、Day 8–14 artifacts/实现和部署文件
-保持不变。没有执行 `git add`、commit、push 或 tag。
+真实临时 ZIP 调用链现在覆盖八类 production rule，并包含 README、ignored `.venv`
+Python、写 sentinel 与抛异常语句。结果只消费 validated Python inventory；两次扫描
+deterministic 相同，sentinel 在 context 内外均不存在，task root 在退出后清理。
 
-未实现边界：Day 16 方法/数据加载/Field/GenericModel，Day 17 一跳反向 import，剩余
-candidate fixtures 的增量扩充与未来人工冻结，Agent、Citation Guard、分析 API、报告
-存储、完整 detection evaluator、locked evaluation 和真实用户 ZIP 分析。
+9 个 candidate project 也逐一经过 `ZipGuard -> ASTScanner -> RuleScanner`；实际 finding
+keys 与 33 个 positive exact equality，并与 20 个 negative 完全不相交。这是受控
+candidate integration evidence，不是 Precision/Recall、locked 或真实用户仓库结果。
 
-## 13. 最终共同门禁
+## 11. 修改范围与未实现边界
+
+核心修改：finding 枚举/metadata、RuleScanner、candidate loader、4 个 fixture、candidate
+gold、Day 16 单元/集成测试和项目文档；向 append-only `DECISIONS.md` 追加 D-019。
+
+没有新增 dependency、配置、环境变量、Docker、runtime storage 或网络来源；`SPEC.md`、
+`AGENTS.md`、`pyproject.toml`、Day 8 snapshot/chunks、Day 13 ZipGuard、Day 14 registry
+schema 和部署文件保持不变。
+
+明确未实现：Day 17 一跳 reverse import graph、跨文件 receiver/type inference、完整
+symbol/data-flow solver、递归 dependency/call graph、Agent、Citation Guard、分析 API、
+报告业务表、完整 detection evaluator、locked detection/retrieval benchmark 和自动源码
+修改。
+
+## 12. 最终共同门禁与 Git
 
 全部代码、candidate 数据和文档同步后的实际结果：
 
-- Day 15 定向：`43 passed in 0.49s`；
-- 完整 pytest：`547 passed, 2 warnings in 4.99s`；
+- Day 15/16 定向：`68 passed in 0.89s`；
+- 完整 pytest：`572 passed, 2 warnings in 5.22s`；
 - `python -m pip check`：`No broken requirements found.`；
 - `python -m ruff check .`：`All checks passed!`；
-- `python -m ruff format --check .`：`80 files already formatted`；
+- `python -m ruff format --check .`：`85 files already formatted`；
 - `git diff --check`：退出码 0；
-- `docker compose config --quiet`：退出码 0，输出两条既有 Docker
+- `docker compose config --quiet`：退出码 0，保留两条既有 Docker
   `C:\Users\Administrator\.docker\config.json` Access denied warning。
 
 两条 pytest warning 仍是既有 Starlette TestClient deprecation 与 qdrant-client
 server-version compatibility warning，没有过滤或升级 dependency。部署文件未修改，按范围
-没有运行 Docker build/up/health/down。最终 Git 与 artifact 审计在交接前单独执行。
+没有运行 Docker build/up/health/down。
+
+最终 `git status --short` 为 13 个 tracked modified 路径和 5 个 untracked 新路径；无
+staged 文件。没有执行 `git add`、commit、push 或 tag，所有修改留给人工检查。

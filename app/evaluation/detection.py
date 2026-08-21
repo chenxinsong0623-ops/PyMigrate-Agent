@@ -1,4 +1,4 @@
-"""Day 15 detection candidate fixture 的严格 schema 与只读静态校验。"""
+"""Day 15–16 detection candidate fixture 的严格 schema 与只读静态校验。"""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ _FIXTURE_ROOT = PurePosixPath("data/evaluation/detection/fixtures")
 
 
 class DetectionCandidateStatus(StrEnum):
-    """Day 15 数据只能是 candidate，不能冒充 locked。"""
+    """Detection 数据只能是 candidate，不能冒充 locked。"""
 
     CANDIDATE = "candidate"
 
@@ -40,7 +40,7 @@ class _DetectionModel(BaseModel):
 class DetectionFixture(_DetectionModel):
     """一个 1–4 个 Python 文件的小型 candidate project。"""
 
-    fixture_id: str = Field(pattern=r"^day15-[a-z0-9]+(?:-[a-z0-9]+)*$")
+    fixture_id: str = Field(pattern=r"^day1[56]-[a-z0-9]+(?:-[a-z0-9]+)*$")
     relative_directory: str
     python_files: tuple[str, ...] = Field(min_length=1, max_length=4)
 
@@ -49,7 +49,7 @@ class DetectionFixture(_DetectionModel):
     def validate_directory(cls, value: str) -> str:
         path = _validated_relative_path(value)
         if path.parent != _FIXTURE_ROOT:
-            raise ValueError("Day 15 fixture 必须位于固定 candidate 根目录下")
+            raise ValueError("fixture 必须位于固定 candidate 根目录下")
         return value
 
     @field_validator("python_files")
@@ -67,7 +67,7 @@ class DetectionFixture(_DetectionModel):
 class DetectionGoldLabel(_DetectionModel):
     """未来 `(file, line, rule_id)` evaluator 可直接消费的 candidate label。"""
 
-    fixture_id: str = Field(pattern=r"^day15-[a-z0-9]+(?:-[a-z0-9]+)*$")
+    fixture_id: str = Field(pattern=r"^day1[56]-[a-z0-9]+(?:-[a-z0-9]+)*$")
     file: str
     rule_id: RuleId
     rule_category: RuleCategory
@@ -104,6 +104,19 @@ class DetectionGoldLabel(_DetectionModel):
                 RuleCategory.ROOT_MODEL,
                 Severity.MEDIUM,
             ),
+            RuleId.PYDANTIC_V1_BASE_MODEL_METHOD: (
+                RuleCategory.BASE_MODEL_METHOD,
+                Severity.MEDIUM,
+            ),
+            RuleId.PYDANTIC_V1_DATA_LOADING: (
+                RuleCategory.DATA_LOADING,
+                Severity.HIGH,
+            ),
+            RuleId.PYDANTIC_V1_FIELD: (RuleCategory.FIELD, Severity.MEDIUM),
+            RuleId.PYDANTIC_V1_GENERIC_MODEL: (
+                RuleCategory.GENERIC_MODEL,
+                Severity.MEDIUM,
+            ),
         }[self.rule_id]
         if (self.rule_category, self.severity) != expected:
             raise ValueError("candidate label 的 rule metadata 不一致")
@@ -111,7 +124,7 @@ class DetectionGoldLabel(_DetectionModel):
 
 
 class DetectionCandidateArtifact(_DetectionModel):
-    """版本化、确定性且尚未冻结的 Day 15 candidate gold。"""
+    """版本化、确定性且尚未冻结的 candidate gold。"""
 
     schema_version: Literal[1] = DETECTION_CANDIDATE_SCHEMA_VERSION
     status: DetectionCandidateStatus

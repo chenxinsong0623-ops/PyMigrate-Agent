@@ -385,3 +385,44 @@
   artifact/测试以及 Day 16–24 的 evaluator、Agent 和报告消费方必须遵守本契约；不改变
   Day 13 ZIP Guard、Day 14 registry、Day 8–12 retrieval artifacts、locked policy 或
   冻结 P0 范围。
+
+## D-019 — Day 16 后四类 rule identity 与浅层 receiver 证明契约
+
+- 日期：2026-08-20
+- 状态：已接受
+- 决策：
+  - 后四类长期 production ID 固定为 `pydantic_v1_base_model_method`、
+    `pydantic_v1_data_loading`、`pydantic_v1_field` 与
+    `pydantic_v1_generic_model`；severity 依次为 medium、high、medium、medium。
+    Day 15 `RuleScanResult` schema version 保持 `1`，只以向后兼容方式扩展 enum、construct
+    与 typed evidence；
+  - BaseModel method 与 data-loading receiver 只消费当前文件内 Day 14 已证明的模型类、
+    parameter annotation、annotated assignment、local constructor clue，以及可证明的
+    BaseModel import/inline constructor。receiver clue 必须与 use-position binding 对齐；
+    多次 binding、普通 class、unknown factory、attribute chain、跨函数返回值和跨文件
+    类型不形成 production finding；
+  - 普通 method rule 固定覆盖 snapshot/SPEC 明确的 `construct`、`copy`、`dict`、`json`、
+    `json_schema`、`parse_obj`、`schema`、`schema_json`、`update_forward_refs`；
+    `parse_raw`、`parse_file`、`from_orm` 独立进入 high-severity data-loading rule；
+  - Field 只处理可 canonicalize 为 `pydantic.Field` 的 direct/module alias call。7 个明确
+    removed/changed keyword 各自形成 finding；显式未知 keyword 依据 snapshot 的 arbitrary
+    JSON-schema-extra 说明报告，并用固定 v2.13.4 public Field keyword allowlist 排除合法
+    keyword。动态 `**kwargs` 不展开；
+  - GenericModel 只处理 canonical `pydantic.generics.GenericModel`。direct import 本身和
+    class base reference 是两个可独立定位 construct；后续 rebind 不删除已发生的 import
+    finding，但阻断 rebind 后的 base finding。只解析 direct/alias/reasonable module path，
+    不建立完整泛型类型系统；
+  - Day 16 candidate 只做增量扩充且继续保持 `candidate`：新增 4 个单文件 project、
+    19 positive 和 15 negative，不修改 Day 15 gold，不执行 detection metric 或 locked
+    benchmark。
+- 原因：后四类同时包含高碰撞 method name、需要 receiver 类型证据的数据加载、同名
+  Field import 与多种 GenericModel module path。只做字符串/name match 会直接破坏 Day 15
+  precision-first 契约；将 canonical provenance、use-position binding 和 shallow type
+  clue 明确组合，才能让 production finding 可解释且可评测。
+- 替代方案：未采用任意 `.dict()` 报警、unknown factory 推断、完整 Python type checker、
+  跨文件 receiver、动态 kwargs 执行、所有同名 Field/GenericModel 报警、递归 import/call
+  graph、low-confidence guess 混入 production result，或从 scanner 输出反推 candidate gold。
+- 影响：`app/scanner/rule_models.py`、`app/scanner/rule_scanner.py`、detection candidate
+  schema/artifact 和 Day 16 测试。Day 17 可以消费八类稳定 finding 与 Day 14 module/import
+  registry，但仍须独立实现一跳 reverse import；不改变 Day 8 snapshot、Day 13 ZipGuard、
+  Day 14 registry schema、locked policy、冻结 SPEC 或部署契约。

@@ -444,8 +444,8 @@ Compose config 均通过，未运行未修改部署的 Docker runtime。
 
 Day 14 本身没有生成 production finding、confidence/severity、importer graph、Agent、
 分析 API 或 locked 指标。Day 15 已只读消费同一 context 内的 registry 与逐文件
-`ast.Module`，增量实现配置、验证器、Settings 与根模型规则；后四类和一跳 import 仍未
-开始。
+`ast.Module`，增量实现配置、验证器、Settings 与根模型规则；Day 16 又在同一契约补齐
+后四类。Day 17 一跳 import 仍未开始。
 
 ### 2.14 MigrationLens Day 15 实际完成边界
 
@@ -471,6 +471,25 @@ label 和 4 个逐字存在于固定 chunk artifact 的 official heading。artif
 `43 passed in 0.49s`。真实 smoke 经过 `ZipGuard -> ASTScanner -> RuleScanner`，sentinel
 未执行、ignored members 未扫描且 task root 完成 cleanup。最终共同门禁结果记录于
 `TASKS.md` 与 `LEARNING_LOG.md`。
+
+### 2.15 MigrationLens Day 16 实际完成边界
+
+Day 16 保持 `RuleScanResult.schema_version="1"`，增量增加
+`pydantic_v1_base_model_method`、`pydantic_v1_data_loading`、`pydantic_v1_field` 与
+`pydantic_v1_generic_model`。方法与 data loading 只有在 receiver 可由当前文件内的
+已证明模型类、parameter annotation、annotated assignment、local constructor 或直接
+BaseModel import 静态证明时才报告；普通 `.dict()`、unknown factory、普通 class、
+attribute/cross-function/cross-file 类型不猜测。
+
+Field 支持 direct/`as`/module alias，逐 keyword 报告 7 个 snapshot 明确旧参数和显式
+arbitrary schema-extra keyword；合法 v2.13.4 keyword、动态 `**kwargs`、其他库与 rebind
+后调用不报。GenericModel 只解析 canonical `pydantic.generics.GenericModel` 的 direct
+import 或 class base；支持合理 module alias，其他库、本地同名与 rebind 后 base 不报。
+
+Day 16 新增 4 个单文件 candidate project、19 positive 和 15 negative；artifact 总计
+9 projects/files、33 positive、20 negative、6 个固定 heading，仍为 candidate。测试先行
+红测为 `21 failed, 12 passed`；实现后 Day 15/16 共同定向为 `68 passed`，文档同步前完整
+回归为 `572 passed, 2 warnings`。最终共同门禁记录于 `TASKS.md` 和 Day 16 学习日志。
 
 ## 3. P0、P1 和不做范围
 
@@ -577,9 +596,9 @@ flowchart LR
 `app/storage/sqlite.py`、snapshot/chunk/dense index 所在的 `app/ingestion`、真实
 E5/Qdrant/BM25/Dense/Hybrid 所在的 `app/retrieval`，以及 dev evaluator 所在的
 `app/evaluation`、Day 13 ZIP Guard 所在的 `app/security`，以及 Day 14 AST/registry 与
-Day 15 前四类 production rules 所在的 `app/scanner`；尚无后四类规则、import graph、
-agent 或业务 reporting 实现。Day 12 的 `reports/retrieval_dev_*` 是项目评测 artifact，
-不是分析报告存储；Day 15 detection artifact 仍是 candidate，不是 locked 结果。
+Day 15–16 八类 production rules 所在的 `app/scanner`；尚无 import graph、agent 或业务
+reporting 实现。Day 12 的 `reports/retrieval_dev_*` 是项目评测 artifact，不是分析报告
+存储；Day 15–16 detection artifact 仍是 candidate，不是 locked 结果。
 
 ## 6. 数据与文档快照
 
@@ -979,7 +998,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 13 | 2026-08-18 | `completed` | ZIP Guard | 全部资源/路径/成员规则、有界实际读取、安全非 Python 忽略、selected Python 受控提取与 cleanup | 89 cases；真实 2/1/10 MiB、200/50k、ratio/path/type/encoding/lifecycle；临时 ZIP smoke；共同门禁 | 压缩包信任边界 | import/执行/修改代码、AST |
 | MigrationLens Day 14 | 计划 2026-08-19；实际 2026-08-18 | `completed` | AST 基础与符号表 | identity recheck、标准库 AST、module/import/BaseModel/type clue registry 与 runtime trees | 35 cases；真实 Day13→Day14 ZIP smoke；共同门禁 | AST 与确定性 schema | 八类规则、一跳 import、LLM |
 | MigrationLens Day 15 | 2026-08-20 | `completed` | 前四类规则 | Config、validator、Settings、root model；strict finding schema；5 个 candidate fixture/19 labels | 43 cases；真实 Day13→15 ZIP 与 5-project exact-label smoke；共同门禁 | import provenance、shadowing、确定性 finding | 后四类、完整/locked benchmark、Agent |
-| MigrationLens Day 16 | 2026-08-21 | `planned` | 后四类规则 | 方法、数据加载、Field、GenericModel 和浅层 receiver；继续增量建立候选 fixture | 正负/alias、普通 `.dict()` 不高置信、low 不成 finding；共同门禁 | 置信度与人工复核 | 一跳 import、一次性补齐全部 fixture、完整类型推断 |
+| MigrationLens Day 16 | 计划 2026-08-21；实际 2026-08-20 | `completed` | 后四类规则 | 方法、数据加载、Field、GenericModel、浅层 receiver；新增 4 个 candidate fixture/34 labels | Day15/16 定向 68 passed；完整 572 passed（文档前）；普通 `.dict()`/unknown factory 不报；真实 ZIP/candidate 集成 | 置信度、receiver proof 与 canonical provenance | 一跳 import、完整/跨文件类型推断、locked benchmark |
 | MigrationLens Day 17 | 2026-08-22 | `planned` | 一跳反向 import | 本地 import graph、一跳 importer；只增量增加与一跳关系直接相关的混合候选 | 相对/绝对/cycle/同名/仅一跳；共同门禁 | 模块影响而非调用图 | 递归图、在本日补齐 40 个候选、锁定评测 |
 | MigrationLens Day 18 | 2026-08-24 | `planned` | 五个只读 Agent 工具 | 类型化 I/O、白名单、timeout、上限、trace、路径隔离 | 每工具五类测试；无危险能力；共同门禁 | 工具契约与审计 | Agent 图、报告、API |
 | MigrationLens Day 19 | 2026-08-25 | `planned` | 有界 LangGraph Agent | AnalysisState、歧义编排、限制、FakeLLM 与无模型回退 | 正常/timeout/无 key/超步数/一次重试；共同门禁 | 确定性逻辑优先 | Citation/API、Agent 改代码 |

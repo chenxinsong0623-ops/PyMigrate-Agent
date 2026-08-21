@@ -20,7 +20,7 @@ def write_zip(path: Path, members: list[tuple[str, str]]) -> Path:
     return path
 
 
-def test_real_day13_to_day15_rule_chain_is_read_only_and_cleans_up(
+def test_real_day13_to_day16_rule_chain_is_read_only_and_cleans_up(
     tmp_path: Path,
 ) -> None:
     sentinel = tmp_path / "must-not-exist.txt"
@@ -57,6 +57,19 @@ def test_real_day13_to_day15_rule_chain_is_read_only_and_cleans_up(
                 "raise RuntimeError('must not execute')\n",
             ),
             (
+                "project/day16.py",
+                "from pydantic import BaseModel, Field\n"
+                "from pydantic.generics import GenericModel\n"
+                "class User(BaseModel):\n"
+                "    pass\n"
+                "def serialize(user: User):\n"
+                "    return user.dict()\n"
+                "User.parse_raw('{}')\n"
+                "value = Field(regex='x')\n"
+                "class Box(GenericModel):\n"
+                "    pass\n",
+            ),
+            (
                 "project/ordinary.py",
                 "from pathlib import Path\n"
                 f"Path({str(sentinel)!r}).write_text('executed')\n"
@@ -80,7 +93,7 @@ def test_real_day13_to_day15_rule_chain_is_read_only_and_cleans_up(
         first = RuleScanner().scan(ast_result)
         second = RuleScanner().scan(ast_result)
 
-        assert validated.python_file_count == 4
+        assert validated.python_file_count == 5
         assert validated.ignored_python_file_count == 1
         assert validated.ignored_non_python_file_count == 1
         assert first == second
@@ -89,6 +102,10 @@ def test_real_day13_to_day15_rule_chain_is_read_only_and_cleans_up(
             RuleId.PYDANTIC_V1_VALIDATOR: 2,
             RuleId.PYDANTIC_V1_SETTINGS: 1,
             RuleId.PYDANTIC_V1_ROOT_MODEL: 1,
+            RuleId.PYDANTIC_V1_BASE_MODEL_METHOD: 1,
+            RuleId.PYDANTIC_V1_DATA_LOADING: 1,
+            RuleId.PYDANTIC_V1_FIELD: 1,
+            RuleId.PYDANTIC_V1_GENERIC_MODEL: 2,
         }
         assert all(
             finding.relative_path != "project/ordinary.py" for finding in first.findings

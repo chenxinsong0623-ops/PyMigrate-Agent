@@ -2406,3 +2406,155 @@ locked run 或 Docker runtime。
 23. gold heading 为什么必须来自固定 chunk，且不能从 scanner 输出反推？
 24. sentinel smoke 实际证明什么，又不能证明什么？
 25. Day 16 可以复用哪些契约，又有哪些 Day 17/Agent 边界不能提前进入？
+
+## 2026-08-20：MigrationLens Day 16 — 后四类 Production Rules
+
+### 1. 开发起点与冻结依据
+
+开发前 branch=`main`、HEAD=`3ae102d feat: add Day 15 deterministic migration rules`，
+worktree clean。使用指定解释器和独立 basetemp 得到完整基线
+`547 passed, 2 warnings in 7.84s`。两条 warning 仍是既有 Starlette TestClient
+deprecation 与 qdrant-client compatibility warning，没有过滤。
+
+规则依据只使用仓库 Day 8 固定的 Pydantic `v2.13.4` migration snapshot 和冻结 SPEC；
+没有联网读取 latest 文档。Day 16 只实现 BaseModel methods、data loading、Field 与
+GenericModel；Day 17 reverse importer、Agent/API/report 和 locked benchmark 没有提前开始。
+
+### 2. 四个 production ID 与向后兼容 schema
+
+Day 15 `Finding`/`RuleScanResult` schema version 继续为 `1`，新增：
+
+```text
+pydantic_v1_base_model_method  medium
+pydantic_v1_data_loading       high
+pydantic_v1_field              medium
+pydantic_v1_generic_model      medium
+```
+
+新增 matched construct 和 typed evidence，但没有删除或改名 Day 15 字段/枚举。所有八类
+finding 仍要求 strict/frozen/extra-forbid、high confidence、无需人工确认、稳定排序和
+duplicate rejection。
+
+### 3. BaseModel receiver proof
+
+方法名本身不是 Pydantic provenance。`obj.dict()` 只有在 `obj` 能由当前文件静态证据
+证明为 BaseModel 才能进入 production finding。Day 16 消费 Day 14 的：
+
+- 已证明 BaseModel class；
+- parameter annotation clue；
+- annotated assignment clue；
+- local constructor assignment clue。
+
+同时支持已证明 class/direct BaseModel 的 inline constructor，以及 `BaseModel` direct alias
+和 `pydantic` module alias。receiver binding 与调用位置对齐：同一 scope 中必须只有一个
+调用前 binding，任何额外 rebind 都保守阻断。普通 class、unknown factory、无 annotation
+参数、attribute chain、return type、branch data flow、跨函数和跨文件类型不推断。
+
+这说明“high confidence”是当前证据成立，而不是 Scanner 完整理解 Python。unknown factory
+不生成 low finding，也不会为提高召回率把名称猜测塞入 production result。
+
+### 4. BaseModel methods 与 data loading 分离
+
+普通 method rule 支持固定 snapshot/SPEC 中的 `construct`、`copy`、`dict`、`json`、
+`json_schema`、`parse_obj`、`schema`、`schema_json`、`update_forward_refs`。
+
+`parse_raw`、`parse_file`、`from_orm` 复用同一 receiver proof，但进入独立 high-severity
+data-loading rule。这样报告和未来 evaluator 不会把删除/行为迁移的数据加载 API 混入普通
+rename。普通 Loader 同名 method 与 unknown receiver 均不报。
+
+### 5. Field provenance、keyword 粒度与动态边界
+
+Field call 必须由 canonical import provenance 证明为 `pydantic.Field`。direct import、
+`as` alias 和 `import pydantic as pd` 都支持；其他库同名、函数参数 shadow、赋值 rebind
+和 module alias rebind 都阻断。
+
+`const`、`min_items`、`max_items`、`unique_items`、`allow_mutation`、`regex`、`final`
+每个 keyword 各产生一个 finding。snapshot 还说明 arbitrary keyword 必须迁移到
+`json_schema_extra`；实现因此把固定 v2.13.4 public Field keyword 作为 deterministic
+allowlist，只有显式未知 keyword 才报告为 `arbitrary_schema_extra`。当前合法的 `pattern`、
+`min_length`、`frozen`、`json_schema_extra` 等不报；`Field(**options)` 因 key 不可静态
+证明而跳过。
+
+### 6. GenericModel canonical import resolution
+
+GenericModel 必须解析到 `pydantic.generics.GenericModel`。支持 direct import/alias、
+`import pydantic.generics [as ...]`、完整 module path、`import pydantic as ...` 和
+`from pydantic import generics as ...` 的 class base。参数化 base 只解开 symbol reference，
+不建立泛型类型系统。
+
+direct import 本身是旧 API 事实，因此在 import 位置报告；后续 rebind 不删除已发生的
+import finding，但 rebind 后的 class base 不再报告。其他库或本地同名 GenericModel 不报。
+
+### 7. 测试先行、真实红测和实现修复
+
+先加入 Day 16 单元、candidate 与真实 ZIP 集成测试。生产实现前定向结果为
+`21 failed, 12 passed in 0.98s`：四类输出为空、枚举不存在、candidate loader 仍只接受
+Day 15 ID。这是预期红测，不是通过证据。
+
+实现后 Day 16 单元为 `20 passed in 0.25s`，candidate/ZIP 集成为
+`13 passed in 0.49s`；增加 inline constructor 与 Day 16 禁止二次 parse 回归后，Day 15/16
+共同定向为 `68 passed in 0.79s`。
+
+开发中发现并修复三项真实设计缺口：
+
+1. Day 15 import resolver 只理解 direct name 和单层 `pd.symbol`，不能证明多段
+   GenericModel module path。改为从 binding record + reference 计算 canonical import，
+   同时保留 use-position shadow/rebind 检查。
+2. Day 14 type clue 只说明某处曾有类型证据，不能单独证明之后的 receiver。增加独立
+   receiver binding index，把 clue location 与 AST binding event 对齐；多次 binding
+   保守不报。
+3. 任意 Field keyword 规则若只有 removed-key set 会漏掉 snapshot 的 arbitrary extra，
+   若把所有未知语法都报又会污染动态 `**kwargs`。最终只处理可定位的显式 keyword，
+   并以固定 current-keyword allowlist 排除合法参数。
+
+### 8. Candidate 与真实集成链
+
+Day 15 的 5 projects、14 positive、5 negative 未修改。Day 16 增量增加 4 个 38–41 LOC
+单文件 project：BaseModel methods 5/4、data loading 3/4、Field 8/4、GenericModel 3/3
+（positive/negative）。净新增 19 positive、15 negative；总计 9 projects/files、
+33 positive、20 negative、6 exact official headings。
+
+9 个 project 分别打包为真实临时 ZIP，经过 `ZipGuard -> ASTScanner -> RuleScanner` 后，
+actual keys 与 33 positive exact equality，并与 20 negative 无交集。另一个八类 smoke
+包含 README、ignored `.venv` Python、sentinel write 和 raise；代码没有执行，task root
+完成 cleanup。以上是 candidate/smoke，不是 locked Precision/Recall。
+
+### 9. 质量门禁与未实现边界
+
+文档同步前完整回归为 `572 passed, 2 warnings in 6.30s`。全部文档同步后的最终完整
+回归为 `572 passed, 2 warnings in 5.22s`；pip check 无 broken requirements；Ruff check
+通过；format check 为 `85 files already formatted`；`git diff --check` 和
+`docker compose config --quiet` 均退出码 0。Compose 保留两条既有 Docker config Access
+denied warning。没有新增 dependency、配置、环境变量或部署修改，也没有运行 Docker
+build/up。
+
+当前仍未实现 Day 17 一跳 reverse import、跨文件 receiver/type inference、完整 Python
+symbol/data-flow solver、递归 dependency/call graph、Agent、Citation Guard、分析 API、
+报告业务表、完整 detection evaluator、locked benchmark 或自动修改用户源码。
+
+### Day 16 后应能回答的 24 个问题
+
+1. 为什么 `.dict()` 不能只按 method name 报告？
+2. parameter annotation clue 怎样成为 receiver proof？
+3. constructor assignment clue 与 unknown factory 有何区别？
+4. class reference 与 instance reference 的 evidence 有何不同？
+5. receiver rebind 为什么会阻断后续 finding？
+6. 当前为何不推断 function return type？
+7. BaseModel method rule 当前支持哪些 API？
+8. 为什么 parse_raw/parse_file/from_orm 是独立 rule？
+9. data loading severity 为什么是 high？
+10. Field direct alias 怎样解析回 canonical symbol？
+11. 为什么其他库 Field 不能按名称报告？
+12. 七个明确旧 Field keyword 是哪些？
+13. arbitrary schema keyword 怎样与合法 v2 keyword 区分？
+14. 为什么动态 `**kwargs` 不展开？
+15. 为什么每个 Field keyword 独立形成 finding？
+16. GenericModel 的 canonical module 是什么？
+17. direct import finding 与 class base finding 为何可以同时存在？
+18. GenericModel rebind 后保留什么、阻断什么？
+19. canonical import reference 解决了哪些 module alias 形式？
+20. Day 16 如何证明没有二次 parse？
+21. sentinel ZIP smoke 能证明什么，不能证明什么？
+22. candidate gold 与 scanner output 为什么不能互相生成？
+23. Day 16 明确没有实现哪些类型推断？
+24. Day 17 可以稳定消费哪些 Day 14–16 输入？

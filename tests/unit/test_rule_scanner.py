@@ -468,9 +468,12 @@ def test_rule_scanner_consumes_runtime_ast_without_reparse(
             tmp_path,
             {
                 "models.py": (
-                    "from pydantic import BaseModel\n"
+                    "from pydantic import BaseModel, Field\n"
                     "class User(BaseModel):\n"
                     "    __root__: str\n"
+                    "def serialize(user: User):\n"
+                    "    return user.dict()\n"
+                    "value = Field(regex='x')\n"
                 )
             },
         )
@@ -481,7 +484,7 @@ def test_rule_scanner_consumes_runtime_ast_without_reparse(
 
     monkeypatch.setattr(rule_scanner_module.ast, "parse", forbidden_parse)
 
-    assert len(RuleScanner().scan(ast_result).findings) == 1
+    assert len(RuleScanner().scan(ast_result).findings) == 3
 
 
 def test_rule_scanner_fails_closed_when_runtime_ast_no_longer_matches_registry(

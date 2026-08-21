@@ -34,6 +34,34 @@
         "validators.py"
       ],
       "relative_directory": "data/evaluation/detection/fixtures/day15_validator_positive"
+    },
+    {
+      "fixture_id": "day16-base-model-methods",
+      "python_files": [
+        "methods.py"
+      ],
+      "relative_directory": "data/evaluation/detection/fixtures/day16_base_model_methods"
+    },
+    {
+      "fixture_id": "day16-data-loading",
+      "python_files": [
+        "loading.py"
+      ],
+      "relative_directory": "data/evaluation/detection/fixtures/day16_data_loading"
+    },
+    {
+      "fixture_id": "day16-field",
+      "python_files": [
+        "fields.py"
+      ],
+      "relative_directory": "data/evaluation/detection/fixtures/day16_field"
+    },
+    {
+      "fixture_id": "day16-generic-model",
+      "python_files": [
+        "generics.py"
+      ],
+      "relative_directory": "data/evaluation/detection/fixtures/day16_generic_model"
     }
   ],
   "gold_source": "official_snapshot_heading_review",
@@ -284,6 +312,448 @@
       "rule_id": "pydantic_v1_validator",
       "severity": "high",
       "start_line": 33
+    },
+    {
+      "expected": true,
+      "file": "methods.py",
+      "fixture_id": "day16-base-model-methods",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "base_model_method",
+      "rule_id": "pydantic_v1_base_model_method",
+      "severity": "medium",
+      "start_line": 9
+    },
+    {
+      "expected": true,
+      "file": "methods.py",
+      "fixture_id": "day16-base-model-methods",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "base_model_method",
+      "rule_id": "pydantic_v1_base_model_method",
+      "severity": "medium",
+      "start_line": 14
+    },
+    {
+      "expected": true,
+      "file": "methods.py",
+      "fixture_id": "day16-base-model-methods",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "base_model_method",
+      "rule_id": "pydantic_v1_base_model_method",
+      "severity": "medium",
+      "start_line": 17
+    },
+    {
+      "expected": true,
+      "file": "methods.py",
+      "fixture_id": "day16-base-model-methods",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "base_model_method",
+      "rule_id": "pydantic_v1_base_model_method",
+      "severity": "medium",
+      "start_line": 18
+    },
+    {
+      "expected": true,
+      "file": "methods.py",
+      "fixture_id": "day16-base-model-methods",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "base_model_method",
+      "rule_id": "pydantic_v1_base_model_method",
+      "severity": "medium",
+      "start_line": 35
+    },
+    {
+      "expected": false,
+      "file": "methods.py",
+      "fixture_id": "day16-base-model-methods",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "base_model_method",
+      "rule_id": "pydantic_v1_base_model_method",
+      "severity": "medium",
+      "start_line": 22
+    },
+    {
+      "expected": false,
+      "file": "methods.py",
+      "fixture_id": "day16-base-model-methods",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "base_model_method",
+      "rule_id": "pydantic_v1_base_model_method",
+      "severity": "medium",
+      "start_line": 31
+    },
+    {
+      "expected": false,
+      "file": "methods.py",
+      "fixture_id": "day16-base-model-methods",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "base_model_method",
+      "rule_id": "pydantic_v1_base_model_method",
+      "severity": "medium",
+      "start_line": 37
+    },
+    {
+      "expected": false,
+      "file": "methods.py",
+      "fixture_id": "day16-base-model-methods",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "base_model_method",
+      "rule_id": "pydantic_v1_base_model_method",
+      "severity": "medium",
+      "start_line": 41
+    },
+    {
+      "expected": true,
+      "file": "loading.py",
+      "fixture_id": "day16-data-loading",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "data_loading",
+      "rule_id": "pydantic_v1_data_loading",
+      "severity": "high",
+      "start_line": 8
+    },
+    {
+      "expected": true,
+      "file": "loading.py",
+      "fixture_id": "day16-data-loading",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "data_loading",
+      "rule_id": "pydantic_v1_data_loading",
+      "severity": "high",
+      "start_line": 12
+    },
+    {
+      "expected": true,
+      "file": "loading.py",
+      "fixture_id": "day16-data-loading",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "data_loading",
+      "rule_id": "pydantic_v1_data_loading",
+      "severity": "high",
+      "start_line": 17
+    },
+    {
+      "expected": false,
+      "file": "loading.py",
+      "fixture_id": "day16-data-loading",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "data_loading",
+      "rule_id": "pydantic_v1_data_loading",
+      "severity": "high",
+      "start_line": 26
+    },
+    {
+      "expected": false,
+      "file": "loading.py",
+      "fixture_id": "day16-data-loading",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "data_loading",
+      "rule_id": "pydantic_v1_data_loading",
+      "severity": "high",
+      "start_line": 28
+    },
+    {
+      "expected": false,
+      "file": "loading.py",
+      "fixture_id": "day16-data-loading",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "data_loading",
+      "rule_id": "pydantic_v1_data_loading",
+      "severity": "high",
+      "start_line": 32
+    },
+    {
+      "expected": false,
+      "file": "loading.py",
+      "fixture_id": "day16-data-loading",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "data_loading",
+      "rule_id": "pydantic_v1_data_loading",
+      "severity": "high",
+      "start_line": 36
+    },
+    {
+      "expected": true,
+      "file": "fields.py",
+      "fixture_id": "day16-field",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "rule_category": "field",
+      "rule_id": "pydantic_v1_field",
+      "severity": "medium",
+      "start_line": 7
+    },
+    {
+      "expected": true,
+      "file": "fields.py",
+      "fixture_id": "day16-field",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "rule_category": "field",
+      "rule_id": "pydantic_v1_field",
+      "severity": "medium",
+      "start_line": 8
+    },
+    {
+      "expected": true,
+      "file": "fields.py",
+      "fixture_id": "day16-field",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "rule_category": "field",
+      "rule_id": "pydantic_v1_field",
+      "severity": "medium",
+      "start_line": 9
+    },
+    {
+      "expected": true,
+      "file": "fields.py",
+      "fixture_id": "day16-field",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "rule_category": "field",
+      "rule_id": "pydantic_v1_field",
+      "severity": "medium",
+      "start_line": 10
+    },
+    {
+      "expected": true,
+      "file": "fields.py",
+      "fixture_id": "day16-field",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "rule_category": "field",
+      "rule_id": "pydantic_v1_field",
+      "severity": "medium",
+      "start_line": 11
+    },
+    {
+      "expected": true,
+      "file": "fields.py",
+      "fixture_id": "day16-field",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "rule_category": "field",
+      "rule_id": "pydantic_v1_field",
+      "severity": "medium",
+      "start_line": 12
+    },
+    {
+      "expected": true,
+      "file": "fields.py",
+      "fixture_id": "day16-field",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "rule_category": "field",
+      "rule_id": "pydantic_v1_field",
+      "severity": "medium",
+      "start_line": 13
+    },
+    {
+      "expected": true,
+      "file": "fields.py",
+      "fixture_id": "day16-field",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "rule_category": "field",
+      "rule_id": "pydantic_v1_field",
+      "severity": "medium",
+      "start_line": 14
+    },
+    {
+      "expected": false,
+      "file": "fields.py",
+      "fixture_id": "day16-field",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "rule_category": "field",
+      "rule_id": "pydantic_v1_field",
+      "severity": "medium",
+      "start_line": 25
+    },
+    {
+      "expected": false,
+      "file": "fields.py",
+      "fixture_id": "day16-field",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "rule_category": "field",
+      "rule_id": "pydantic_v1_field",
+      "severity": "medium",
+      "start_line": 27
+    },
+    {
+      "expected": false,
+      "file": "fields.py",
+      "fixture_id": "day16-field",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "rule_category": "field",
+      "rule_id": "pydantic_v1_field",
+      "severity": "medium",
+      "start_line": 31
+    },
+    {
+      "expected": false,
+      "file": "fields.py",
+      "fixture_id": "day16-field",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "rule_category": "field",
+      "rule_id": "pydantic_v1_field",
+      "severity": "medium",
+      "start_line": 35
+    },
+    {
+      "expected": true,
+      "file": "generics.py",
+      "fixture_id": "day16-generic-model",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.generics.GenericModel`"
+      ],
+      "rule_category": "generic_model",
+      "rule_id": "pydantic_v1_generic_model",
+      "severity": "medium",
+      "start_line": 1
+    },
+    {
+      "expected": true,
+      "file": "generics.py",
+      "fixture_id": "day16-generic-model",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.generics.GenericModel`"
+      ],
+      "rule_category": "generic_model",
+      "rule_id": "pydantic_v1_generic_model",
+      "severity": "medium",
+      "start_line": 4
+    },
+    {
+      "expected": true,
+      "file": "generics.py",
+      "fixture_id": "day16-generic-model",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.generics.GenericModel`"
+      ],
+      "rule_category": "generic_model",
+      "rule_id": "pydantic_v1_generic_model",
+      "severity": "medium",
+      "start_line": 11
+    },
+    {
+      "expected": false,
+      "file": "generics.py",
+      "fixture_id": "day16-generic-model",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.generics.GenericModel`"
+      ],
+      "rule_category": "generic_model",
+      "rule_id": "pydantic_v1_generic_model",
+      "severity": "medium",
+      "start_line": 18
+    },
+    {
+      "expected": false,
+      "file": "generics.py",
+      "fixture_id": "day16-generic-model",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.generics.GenericModel`"
+      ],
+      "rule_category": "generic_model",
+      "rule_id": "pydantic_v1_generic_model",
+      "severity": "medium",
+      "start_line": 26
+    },
+    {
+      "expected": false,
+      "file": "generics.py",
+      "fixture_id": "day16-generic-model",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.generics.GenericModel`"
+      ],
+      "rule_category": "generic_model",
+      "rule_id": "pydantic_v1_generic_model",
+      "severity": "medium",
+      "start_line": 36
     }
   ],
   "schema_version": 1,

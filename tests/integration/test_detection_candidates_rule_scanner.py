@@ -23,6 +23,10 @@ from app.security import ZipGuard
         "day15-root-model-positive",
         "day15-settings-positive",
         "day15-validator-positive",
+        "day16-base-model-methods",
+        "day16-data-loading",
+        "day16-field",
+        "day16-generic-model",
     ],
 )
 def test_candidate_gold_matches_real_zip_ast_rule_chain(
