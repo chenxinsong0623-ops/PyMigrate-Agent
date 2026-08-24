@@ -2558,3 +2558,152 @@ symbol/data-flow solver、递归 dependency/call graph、Agent、Citation Guard�
 22. candidate gold 与 scanner output 为什么不能互相生成？
 23. Day 16 明确没有实现哪些类型推断？
 24. Day 17 可以稳定消费哪些 Day 14–16 输入？
+
+## 2026-08-24：MigrationLens Day 17 — 一跳反向 Local Import Graph
+
+### 1. 开发起点与范围锁
+
+开发前 branch=`main`、HEAD=`7298e1a feat(scanner): complete Day16 Pydantic migration rules`，
+worktree clean。指定解释器完整基线为 `572 passed, 2 warnings in 9.08s`；pip check、Ruff、
+85-file format 与 diff check 均通过。两条 warning 仍是既有 Starlette TestClient
+deprecation 与 qdrant-client compatibility warning，没有过滤或通过 dependency upgrade
+掩盖。
+
+冻结 SPEC 已明确 P0 需要“一跳反向本地 import”。本日只实现 Day 17 graph/impact 与直接
+相关 candidate 增量；没有进入 Day 18 Agent tools，没有运行 locked retrieval/detection，
+也没有修改 Day 14 registry 或 Day 15–16 finding schema。
+
+### 2. 为什么 edge 要固定方向
+
+公开 edge 固定为 `importer -> imported`。例如 `service.py` 中 `import project.models`，
+edge 是 `service -> models`；reverse lookup `get_importers(models.py)` 才返回 service。
+把方向写进 schema 与排序契约，可以避免调用者把“依赖谁”和“谁受它影响”混淆，也让未来
+`get_local_importers` 工具无需猜测字段语义。
+
+edge identity 保存 importer/imported 的 module 与相对 path。path 与 module 同时记录，既能
+面向报告返回文件，又能证明解析使用了 Day 14 canonical module identity；没有绝对 task
+root、cwd、mtime、UUID 或时间。重复 import/alias 只形成一条 edge。
+
+### 3. 为什么 graph 只消费 registry
+
+Day 14 已经完成受控源码读取、identity recheck、唯一 `ast.parse()` 和 import metadata
+提取。Day 17 若重新读源码、递归 `rglob` 或二次 parse，会破坏同一分析生命周期的证据链，
+也扩大 TOCTOU 与目录发现边界。因此 builder 只接收 `ScannerRegistry`；测试显式 monkeypatch
+`ast.parse` 与 `Path.rglob` 为失败函数，graph 仍能构建。
+
+这也意味着 Day 17 不执行 `importlib`、不修改 `sys.path`、不依赖已安装 package，不运行
+fixture 代码。它解析的是“当前 ZIP registry 内可证明的静态本地模块关系”，不是 Python
+runtime importer 的完整模拟。
+
+### 4. Absolute import 的保守解析
+
+`import x.y [as z]` 只在 `x.y` 精确存在于 module index 时建立 edge。`from x import y`
+优先尝试精确 child `x.y`；若 child 不存在，只有 x 是普通本地 module 时才把 symbol import
+视为对 x 的依赖。x 是 package 而 y 可能只是 attribute 时不猜测。`from x.y import Symbol`
+可映射到普通本地 module `x.y`，star import 也可映射到已证明 base。
+
+只按 basename 的 `import models` 不会误连到 `project.models`，外部 `external.models` 或
+`another_lib.models` 也不会因为末段同名而进入 graph。这个策略牺牲动态/隐式 re-export
+召回率，换取 P0 production impact 的可证明性。
+
+### 5. Relative import、package 与 level
+
+相对 import 只用 importer module、`is_package` 和 ImportRecord.level 计算 context。普通
+module `project.features.api` 的 package context 是 `project.features`；package
+`project.__init__.py` 的 context 则是 `project`。level=1 留在当前 package，level=2 上移
+一层，依此类推；超出根时跳过。
+
+`from . import service` 先尝试当前 package child；`from .. import service` 先上移再尝试
+child。root `__init__.py -> __init__` 没有可证明的真实 package context，因此 relative
+import 保守跳过。整个算法不看磁盘 cwd，也不拼接绝对路径。
+
+### 6. 一跳不是 transitive closure
+
+若 A 有直接 finding、B import A、C import B，则 impact 只记录
+`direct_file=A, importer_file=B`。C 与 A 之间没有一条直接 reverse edge，所以不能把 C
+写成 A 的一跳 importer。算法按每个 direct file 单独查 reverse index，不把刚发现的
+importer 重新入队，因此天然没有 BFS/DFS 或 transitive closure。
+
+cycle A↔B 不会无限循环，因为根本没有递归 walk。self edge 可以反映模块自己的 import
+metadata，但 reverse public lookup 与 impact 排除 self，避免“文件是自己的影响文件”。
+
+### 7. Direct finding 与 importer role 必须分离
+
+`OneHopImpactResult.direct_findings` 原样保存 RuleScanner 结果；`direct_files` 只做文件级
+数量/rule summary；`one_hop_importers` 只表达文件关系和固定 reason。importer 不获得 direct
+file 的 rule ID、source line、confidence 或 severity，也不会伪装成 RuleScanner finding。
+
+同一文件可以有自己的 direct finding，同时 import 另一个受影响文件。此时它同时出现在
+direct role 和 importer role 中，但两个集合不合并。这个分离对未来 JSON/Markdown 报告
+尤其重要：用户能区分“这里要迁移”和“这里可能受上游迁移影响”。
+
+### 8. Candidate schema 的向后兼容增量
+
+Day 15–16 的 33 positive、20 negative finding label 未改。Day 17 新增独立且可选的
+`one_hop_importer_labels`，因此旧 schema v1 artifact 在字段缺失时仍可加载；relation gold
+不挤进 `(file, line, rule_id)` finding identity，也不制造虚假 line/rule。
+
+新增 fixture 是一个四文件 mixed project：两个 direct findings，absolute/alias、package
+child、一级/多级 relative、cycle、duplicate、同 basename/external negative 和严格
+C→A→B 非递归关系。当前 artifact 为 10 projects、13 files、35 positive finding、
+20 negative finding、3 positive relation、1 negative relation，状态继续是 candidate；
+没有计算 metric 或运行 locked holdout。
+
+### 9. 测试先行与真实红绿过程
+
+测试在 production module 前建立。第一次定向 collection 为 `3 errors in 0.49s`，均是
+`ImportGraphBuilder` 尚未从 `app.scanner` 导出的预期 ImportError。首轮实现后为
+`1 failed, 29 passed in 1.21s`：集成测试按 importer-only 顺序写了错误期望，而公开模型
+按 `direct_file -> importer_file` 排序。production contract 保持不变，只修正测试期望；
+随后为 `30 passed in 0.54s`，格式化后复跑为 `30 passed in 0.66s`。
+
+Day 14–17 联合定向为 `121 passed in 1.80s`。文档同步前完整回归为
+`590 passed, 2 warnings in 6.98s`，相对 572-test 基线净增加 18 个 pytest node。最终共同
+门禁以 `TASKS.md` 记录为准。
+
+### 10. 真实 ZIP 安全链与证据边界
+
+集成测试真实构造临时 ZIP，并运行
+`ZipGuard -> ASTScanner -> RuleScanner -> ImportGraphBuilder -> OneHopImpactAnalyzer`。
+ZIP 包含 README、ignored `.venv` Python、sentinel write 与 raise；ignored member 不进入
+registry，sentinel 在 context 内外均不存在，task root 在退出后清理。两次 graph/impact
+JSON 完全一致。
+
+10 个 candidate project 也逐个通过同一真实临时 ZIP 链；35 个 positive finding exact
+match、20 个 negative 不相交，Day 17 relation gold 为 3 positive/1 negative exact match。
+这证明受控 fixture 与实现契约一致，不证明未知真实仓库 accuracy，也不是 locked evidence。
+
+### 11. 未实现边界
+
+Day 17 没有实现 transitive import closure、完整 importlib semantics、namespace package、
+动态 import、re-export solver、call graph、跨文件 receiver/type inference、完整 symbol/data
+flow、Agent tools、LangGraph、Citation Guard、分析 API、报告业务存储、locked evaluator 或
+自动修改源码。没有新增 dependency、配置、环境变量、网络来源或部署改动。
+
+### Day 17 后应能回答的 25 个问题
+
+1. `importer -> imported` 的 edge 方向具体表示什么？
+2. 为什么 reverse lookup 不能直接把 edge 字段反过来命名？
+3. edge identity 为什么同时保存 module 和 relative path？
+4. Day 17 为什么只能消费 ScannerRegistry，不能重新 parse？
+5. 禁止 `Path.rglob` 的测试保护了哪条信任边界？
+6. `import project.models as m` 如何解析为本地 target？
+7. `from project import models` 何时解析 child，何时跳过？
+8. `from project.models import User` 为什么可能映射到 base module？
+9. 为什么只按 basename 匹配会产生 false positive？
+10. relative import 的 package context 怎样从普通 module 计算？
+11. package `__init__.py` 的 context 与普通 module 有何区别？
+12. relative `level=2` 表示怎样的上移规则？
+13. root `__init__.py` 的 relative import 为什么保守跳过？
+14. duplicate import 为什么只形成一条 edge？
+15. graph 中存在 cycle 为什么不会导致无限循环？
+16. self edge 为什么不应进入 public importer impact？
+17. A←B←C 示例怎样证明结果严格只有一跳？
+18. 为什么 importer 不能复制 direct finding 的 severity？
+19. 一个文件同时是 direct file 和 importer 时应怎样表示？
+20. `direct_findings` 与 `direct_files` 分别服务什么用途？
+21. relation gold 为什么不能复用 finding 的 line/rule identity？
+22. schema v1 新增可选 relation 字段为什么仍是向后兼容？
+23. Day 17 candidate 的 3 positive/1 negative relation 分别验证什么？
+24. sentinel ZIP 测试能证明没有哪些执行行为，又不能证明什么？
+25. Day 18 可以消费 Day 17 的哪个稳定契约，哪些递归/跨文件边界仍不可提前实现？

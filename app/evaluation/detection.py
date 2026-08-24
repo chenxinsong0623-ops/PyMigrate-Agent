@@ -1,4 +1,4 @@
-"""Day 15–16 detection candidate fixture 的严格 schema 与只读静态校验。"""
+"""Day 15–17 detection candidate fixture 的严格 schema 与只读静态校验。"""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ class _DetectionModel(BaseModel):
 class DetectionFixture(_DetectionModel):
     """一个 1–4 个 Python 文件的小型 candidate project。"""
 
-    fixture_id: str = Field(pattern=r"^day1[56]-[a-z0-9]+(?:-[a-z0-9]+)*$")
+    fixture_id: str = Field(pattern=r"^day1[5-7]-[a-z0-9]+(?:-[a-z0-9]+)*$")
     relative_directory: str
     python_files: tuple[str, ...] = Field(min_length=1, max_length=4)
 
@@ -67,7 +67,7 @@ class DetectionFixture(_DetectionModel):
 class DetectionGoldLabel(_DetectionModel):
     """未来 `(file, line, rule_id)` evaluator 可直接消费的 candidate label。"""
 
-    fixture_id: str = Field(pattern=r"^day1[56]-[a-z0-9]+(?:-[a-z0-9]+)*$")
+    fixture_id: str = Field(pattern=r"^day1[5-7]-[a-z0-9]+(?:-[a-z0-9]+)*$")
     file: str
     rule_id: RuleId
     rule_category: RuleCategory
@@ -123,6 +123,31 @@ class DetectionGoldLabel(_DetectionModel):
         return self
 
 
+class OneHopImporterGoldLabel(_DetectionModel):
+    """与 Finding gold 分离的一跳 importer candidate label。"""
+
+    fixture_id: str = Field(pattern=r"^day17-[a-z0-9]+(?:-[a-z0-9]+)*$")
+    direct_file: str
+    importer_file: str
+    expected: bool
+
+    @field_validator("direct_file", "importer_file")
+    @classmethod
+    def validate_python_file(cls, value: str) -> str:
+        path = _validated_relative_path(value)
+        if path.suffix.casefold() != ".py":
+            raise ValueError("one-hop gold file 必须是 Python 相对路径")
+        return value
+
+    @model_validator(mode="after")
+    def reject_self_importer(self) -> Self:
+        if self.direct_file == self.importer_file:
+            raise ValueError(
+                "one-hop importer gold 不得把 direct file 作为自身 importer"
+            )
+        return self
+
+
 class DetectionCandidateArtifact(_DetectionModel):
     """版本化、确定性且尚未冻结的 candidate gold。"""
 
@@ -131,6 +156,7 @@ class DetectionCandidateArtifact(_DetectionModel):
     gold_source: Literal["official_snapshot_heading_review"]
     fixtures: tuple[DetectionFixture, ...] = Field(min_length=1)
     labels: tuple[DetectionGoldLabel, ...] = Field(min_length=1)
+    one_hop_importer_labels: tuple[OneHopImporterGoldLabel, ...] = ()
 
     @model_validator(mode="after")
     def validate_relations(self) -> Self:
@@ -149,6 +175,36 @@ class DetectionCandidateArtifact(_DetectionModel):
             if key in label_keys:
                 raise ValueError("candidate label 匹配键必须唯一")
             label_keys.add(key)
+
+        one_hop_keys: set[tuple[str, str, str]] = set()
+        positive_direct_files = {
+            (label.fixture_id, label.file) for label in self.labels if label.expected
+        }
+        for label in self.one_hop_importer_labels:
+            fixture = fixtures_by_id.get(label.fixture_id)
+            if fixture is None or not {
+                label.direct_file,
+                label.importer_file,
+            }.issubset(fixture.python_files):
+                raise ValueError("one-hop gold 引用了未知 fixture/file")
+            if (label.fixture_id, label.direct_file) not in positive_direct_files:
+                raise ValueError("one-hop direct file 必须含真实 positive finding gold")
+            key = (label.fixture_id, label.direct_file, label.importer_file)
+            if key in one_hop_keys:
+                raise ValueError("one-hop importer gold 匹配键必须唯一")
+            one_hop_keys.add(key)
+        expected_order = tuple(
+            sorted(
+                self.one_hop_importer_labels,
+                key=lambda item: (
+                    item.fixture_id,
+                    item.direct_file,
+                    item.importer_file,
+                ),
+            )
+        )
+        if self.one_hop_importer_labels != expected_order:
+            raise ValueError("one-hop importer gold 必须使用稳定排序")
         return self
 
 
@@ -159,6 +215,8 @@ class DetectionCandidateSummary(_DetectionModel):
     python_file_count: int = Field(ge=1)
     positive_label_count: int = Field(ge=1)
     negative_label_count: int = Field(ge=1)
+    one_hop_positive_label_count: int = Field(ge=0)
+    one_hop_negative_label_count: int = Field(ge=0)
     min_python_loc: int = Field(ge=1)
     max_python_loc: int = Field(ge=1)
     gold_heading_count: int = Field(ge=1)
@@ -238,6 +296,12 @@ def validate_detection_candidate_files(
         python_file_count=len(line_counts),
         positive_label_count=sum(label.expected for label in artifact.labels),
         negative_label_count=sum(not label.expected for label in artifact.labels),
+        one_hop_positive_label_count=sum(
+            label.expected for label in artifact.one_hop_importer_labels
+        ),
+        one_hop_negative_label_count=sum(
+            not label.expected for label in artifact.one_hop_importer_labels
+        ),
         min_python_loc=min(counts),
         max_python_loc=max(counts),
         gold_heading_count=len(gold_headings),

@@ -426,3 +426,38 @@
   schema/artifact 和 Day 16 测试。Day 17 可以消费八类稳定 finding 与 Day 14 module/import
   registry，但仍须独立实现一跳 reverse import；不改变 Day 8 snapshot、Day 13 ZipGuard、
   Day 14 registry schema、locked policy、冻结 SPEC 或部署契约。
+
+## D-020 — Day 17 本地 import edge 与一跳 impact 契约
+
+- 日期：2026-08-24
+- 状态：已接受
+- 决策：
+  - `ImportGraphBuilder` 只消费 Day 14 `ScannerRegistry` 的稳定 module/import metadata。
+    edge 方向固定为 `importer -> imported`，identity 包含 importer/imported 的 module 与
+    relative path；输出 schema version 为 `1`，strict/frozen、稳定排序并拒绝 duplicate；
+  - target 必须精确存在于当前 registry。绝对 import 支持 direct/alias、package child 和
+    本地 module 的 symbol import；相对 import 只由 importer module、`is_package` 与 level
+    推导。`from package import name` 优先解析精确 child module，否则只有 base 可证明为
+    普通 module 或 star import 时才解析 base；外部、同 basename、超出 package root 和
+    其他歧义均保守跳过；
+  - graph 构建不重新读取/parse/发现文件，不依赖 cwd、绝对 task root、环境、网络或运行时
+    import。重复语法只形成一条 edge；cycle 与 self edge 可以作为模块关系存在，但 reverse
+    lookup 排除 self；
+  - `OneHopImpactAnalyzer` 原样保留 Day 15–16 direct findings，并把 direct-file summary 与
+    `direct_file -> importer_file` impact 作为独立结果。reverse lookup 只走一条 edge；不做
+    transitive closure、cycle propagation、call graph 或跨文件类型推断，importer 也不伪装
+    成新的 finding；
+  - detection artifact 保持 schema version `1` 和 `candidate` 状态，以可选且独立的
+    `one_hop_importer_labels` 做向后兼容增量。Day 17 只新增一个四文件 mixed project、
+    2 个 positive finding、3 个 positive relation 和 1 个 negative relation；不修改既有
+    gold，不运行 metric 或 locked benchmark。
+- 原因：P0 报告需要区分“此文件有直接迁移事实”和“此文件直接依赖受影响模块”。稳定的
+  edge 方向、保守 local resolution 与严格一跳边界，使未来工具/报告可以解释影响来源，
+  又不会把 Python 动态 import、package attribute 或传递依赖误写成已证明事实。
+- 替代方案：未采用源码重读或二次 AST parse、`sys.path`/runtime import、仅按 basename
+  猜测、完整 Python import resolver、transitive closure、递归 cycle walk、call graph、
+  importer 复制 direct finding、schema breaking change，或一次性补齐/冻结完整 benchmark。
+- 影响：`app/scanner/import_graph.py`、`app/scanner/__init__.py`、detection candidate
+  schema/artifact、Day 17 fixture/测试以及未来 `get_local_importers` 和报告消费方必须遵守
+  本契约；不改变 Day 14 registry、Day 15–16 finding schema、locked policy、冻结 SPEC、
+  dependency 或部署契约。

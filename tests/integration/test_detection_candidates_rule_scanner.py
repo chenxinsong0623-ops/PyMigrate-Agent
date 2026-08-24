@@ -11,7 +11,12 @@ from app.evaluation.detection import (
     DetectionFixture,
     load_detection_candidate_artifact,
 )
-from app.scanner import ASTScanner, RuleScanner
+from app.scanner import (
+    ASTScanner,
+    ImportGraphBuilder,
+    OneHopImpactAnalyzer,
+    RuleScanner,
+)
 from app.security import ZipGuard
 
 
@@ -27,6 +32,7 @@ from app.security import ZipGuard
         "day16-data-loading",
         "day16-field",
         "day16-generic-model",
+        "day17-one-hop-mixed",
     ],
 )
 def test_candidate_gold_matches_real_zip_ast_rule_chain(
@@ -64,6 +70,44 @@ def test_candidate_gold_matches_real_zip_ast_rule_chain(
 
     assert actual_keys == positive_keys
     assert actual_keys.isdisjoint(negative_keys)
+
+
+def test_day17_candidate_importer_gold_matches_real_one_hop_chain(
+    tmp_path: Path,
+) -> None:
+    repo_root = Path(__file__).parents[2]
+    artifact = load_detection_candidate_artifact(
+        repo_root / DETECTION_CANDIDATE_ARTIFACT_PATH
+    )
+    fixture = next(
+        item for item in artifact.fixtures if item.fixture_id == "day17-one-hop-mixed"
+    )
+    archive = _zip_fixture(tmp_path / "day17-one-hop-mixed.zip", repo_root, fixture)
+
+    with ZipGuard(archive, temp_parent=tmp_path) as validated:
+        ast_result = ASTScanner().scan(validated)
+        rule_result = RuleScanner().scan(ast_result)
+        impact_result = OneHopImpactAnalyzer().analyze(
+            ImportGraphBuilder().build(ast_result.registry), rule_result
+        )
+
+    actual_pairs = {
+        (item.direct_relative_path, item.importer_relative_path)
+        for item in impact_result.one_hop_importers
+    }
+    expected_pairs = {
+        (label.direct_file, label.importer_file)
+        for label in artifact.one_hop_importer_labels
+        if label.fixture_id == fixture.fixture_id and label.expected
+    }
+    negative_pairs = {
+        (label.direct_file, label.importer_file)
+        for label in artifact.one_hop_importer_labels
+        if label.fixture_id == fixture.fixture_id and not label.expected
+    }
+
+    assert actual_pairs == expected_pairs
+    assert actual_pairs.isdisjoint(negative_pairs)
 
 
 def _zip_fixture(

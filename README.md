@@ -23,6 +23,7 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 14 | `completed` | 标准库 AST parse、文件/模块/alias/BaseModel/浅层类型 registry、source location、identity recheck 与安全失败 |
 | MigrationLens Day 15 | `completed` | Config、validator、Settings、root model 四类 production rule，严格 finding schema、import provenance/shadowing 与 5 个 candidate fixture |
 | MigrationLens Day 16 | `completed` | BaseModel methods、data loading、Field、GenericModel 四类 production rule，浅层 receiver proof 与 4 个增量 candidate fixture |
+| MigrationLens Day 17 | `completed` | 基于 Day 14 registry 的确定性本地 import graph、严格一跳 reverse importer impact 与 1 个四文件 mixed candidate fixture |
 
 当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite 仍只包含最小
 `system_metadata`，不能描述为已经运行的报告存储；Qdrant startup 仍只创建或校验
@@ -51,12 +52,12 @@ Day 14 只消费 Day 13 的显式 Python inventory，以 size/SHA256/LOC 重新�
 调用标准库 `ast.parse()`；输出 strict/frozen `ScannerRegistry` 和与其同序的运行时
 `ast.Module`。它不递归发现文件、不执行源码。Day 15 继续只读消费这两部分输入，已经
 实现前四类 production finding。Day 16 在同一调用链增量补齐后四类，并严格限制
-`.dict()` 等 receiver 证明；Day 17 一跳 import 仍未开始。
+`.dict()` 等 receiver 证明。Day 17 继续只消费 registry 与稳定 findings，现已实现本地
+absolute/relative import graph 和严格一跳 reverse importer；不做递归传播或 call graph。
 
 尚未实现：
 
 - GitHub Actions；
-- 一跳 import；
 - final locked retrieval evaluation；
 - LangGraph Agent、五个只读工具和 Citation Guard；
 - 分析 API、报告存储、benchmark、评测和负载测试；
@@ -481,10 +482,33 @@ loading severity 为 high，其余四类为 medium。普通 `obj.dict()`、unkno
 跨文件类型和无法展开的 `Field(**kwargs)` 不猜测。
 
 `data/evaluation/detection/candidates.json` 是 schema v1、status=`candidate` 的增量数据：
-9 个单文件项目共 33 个 positive 和 20 个 negative label，每个 label 使用
+10 个项目、13 个文件共 35 个 positive 和 20 个 negative finding label，每个 label 使用
 `(fixture_id, file, start_line, rule_id)`，gold heading 必须存在于固定官方 chunk artifact。
+另有 3 个 positive、1 个 negative one-hop relation label，与 finding gold 使用独立字段。
 loader 只做文件、LOC、关系和 heading 静态校验；它不运行 benchmark、不计算检测指标，
 也不是 locked holdout。
+
+## Local Import Graph 与一跳影响
+
+Day 17 在规则扫描后增加纯确定性阶段：
+
+```python
+from app.scanner import ImportGraphBuilder, OneHopImpactAnalyzer
+
+graph = ImportGraphBuilder().build(ast_result.registry)
+impact = OneHopImpactAnalyzer().analyze(graph, rule_result)
+```
+
+`ImportGraphBuilder` 只消费 Day 14 的 module/import metadata，不重新读取或 parse 源码、
+不递归发现文件，也不执行 runtime import。edge 方向固定为 `importer -> imported`；target
+必须精确存在于当前 registry，支持 absolute/alias、`from package import child`、一级与
+多级 relative import 和 package `__init__.py` identity。外部 module、仅 basename 相同、
+超出 package 根或无法静态证明的 package symbol 保守跳过；重复语法去重，结果稳定排序。
+
+`OneHopImpactAnalyzer` 原样保留 direct findings，并分开返回 direct-file summary 与
+`direct_file -> importer_file` 关系。reverse lookup 只走一条 edge、排除 self；cycle 不会
+递归展开。A 有直接 finding、B import A、C import B 时，只把 B 标记为 A 的一跳 importer，
+不会把 C 传播到 A。importer 不是新 finding，也不继承 direct finding 的行号或 severity。
 
 ## 本地运行
 
@@ -791,13 +815,26 @@ Day 16 candidate 净新增 4 projects/files、19 positive、15 negative；总计
 ignored members、sentinel 不执行、AST identity 与 cleanup。以上仍是 candidate/smoke，
 不是 locked detection metric。最终共同门禁结果以 `TASKS.md` 与 Day 16 学习日志为准。
 
+### Day 17 验证边界
+
+2026-08-24 先建立 import graph、impact、candidate 与真实 ZIP 集成断言；生产实现前首次
+collection 为 `3 errors`，均因 `ImportGraphBuilder` 尚未导出。首轮实现为
+`1 failed, 29 passed`，失败来自测试误写公开排序期望；保持 production 的
+`direct_file -> importer_file` 排序并修正测试后为 `30 passed`。Day 14–17 联合定向为
+`121 passed`，文档同步前完整回归为 `590 passed, 2 warnings`。
+
+Day 17 candidate 净新增 1 个四文件 mixed project、2 个 positive finding、3 个 positive
+与 1 个 negative one-hop relation；总计 10 projects、13 files、35/20 direct
+positive/negative。真实调用链覆盖 absolute/relative/package/cycle/strict-one-hop、ignored
+member、sentinel 不执行与 cleanup。以上仍是 candidate/integration evidence，不是 locked
+detection metric；最终共同门禁以 `TASKS.md` 与 Day 17 学习日志为准。
+
 ## 下一开发日
 
-MigrationLens Day 17 — 一跳反向 import 保持 `planned`，尚未开始。它可以稳定消费
-Day 14 module/import registry 与 Day 15–16 八类 `RuleScanResult`，但不能扩展成递归
-dependency/call graph，也不能提前开始 Agent、业务 API 或 locked benchmark。P0 不采用
-cross-encoder reranker；20 条 locked retrieval questions 与 detection candidate 都没有
-运行或冻结为最终 holdout。
+MigrationLens Day 18 — 五个只读 Agent 工具保持 `planned`，尚未开始。它可以消费 Day 17
+稳定的一跳 importer 结果，但不能扩展成递归 dependency/call graph，也不能提前开始
+LangGraph 编排、业务 API 或 locked benchmark。P0 不采用 cross-encoder reranker；20 条
+locked retrieval questions 与 detection candidate 都没有运行或冻结为最终 holdout。
 
 ## 项目文档
 
@@ -819,7 +856,8 @@ Day 10 已验证固定 revision 的真实模型与 62-point Qdrant index；Day 1
 artifact 上的 BM25 与真实 Dense + RRF hybrid 调用链；Day 12 已取得明确标注的 12 题
 dev 三路指标；Day 13 已验证 ZIP Guard；Day 14 已验证只读 AST/registry 调用链；Day 15
 已验证前四类，Day 16 已验证后四类确定性 production rules 和 candidate fixture 调用链。
-一跳 import、20 题 locked 评测、检测 locked benchmark、CI、样本量和负载测试等发布证据仍未完成，
-因此 MigrationLens 尚未达到可写入简历的发布门槛。不得把 FakeEmbedding、smoke、dev
+Day 17 已验证本地 graph 与严格一跳 reverse importer 调用链。20 题 locked 评测、检测
+locked benchmark、Agent、CI、样本量和负载测试等发布证据仍未完成，因此 MigrationLens
+尚未达到可写入简历的发布门槛。不得把 FakeEmbedding、smoke、dev
 指标、candidate label、目标阈值、计划数量或未运行命令描述为 locked 结果、生产检索
 质量、完整 detection accuracy、GPU 性能或发布证据。

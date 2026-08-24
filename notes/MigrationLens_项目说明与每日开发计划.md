@@ -1,6 +1,6 @@
 # MigrationLens 项目说明与每日开发计划
 
-更新时间：2026-08-20
+更新时间：2026-08-24
 产品：MigrationLens — Pydantic v1→v2 升级影响分析 Agent
 权威范围：`SPEC.md`
 
@@ -445,7 +445,8 @@ Compose config 均通过，未运行未修改部署的 Docker runtime。
 Day 14 本身没有生成 production finding、confidence/severity、importer graph、Agent、
 分析 API 或 locked 指标。Day 15 已只读消费同一 context 内的 registry 与逐文件
 `ast.Module`，增量实现配置、验证器、Settings 与根模型规则；Day 16 又在同一契约补齐
-后四类。Day 17 一跳 import 仍未开始。
+后四类。Day 17 已只读消费 registry 与稳定 findings，增加确定性本地 import graph 和
+严格一跳 reverse importer impact。
 
 ### 2.14 MigrationLens Day 15 实际完成边界
 
@@ -490,6 +491,31 @@ Day 16 新增 4 个单文件 candidate project、19 positive 和 15 negative；a
 9 projects/files、33 positive、20 negative、6 个固定 heading，仍为 candidate。测试先行
 红测为 `21 failed, 12 passed`；实现后 Day 15/16 共同定向为 `68 passed`，文档同步前完整
 回归为 `572 passed, 2 warnings`。最终共同门禁记录于 `TASKS.md` 和 Day 16 学习日志。
+
+### 2.16 MigrationLens Day 17 实际完成边界
+
+状态：`completed`
+原计划日期：2026-08-22
+实际开发日期：2026-08-24
+
+Day 17 新增 `ImportGraphBuilder.build(ScannerRegistry)`，只消费 Day 14 已记录的 module 与
+Import/ImportFrom metadata，不重新读取/parse/发现文件。edge 方向固定为
+`importer -> imported`，target 必须精确存在于当前 registry；支持 absolute/alias、
+`from package import child`、一级/多级 relative 与 package `__init__.py` identity。外部、
+同 basename、超出 package root 和无法证明的 package symbol 保守跳过；duplicate 去重，
+schema strict/frozen、排序确定。
+
+`OneHopImpactAnalyzer` 原样保留八类 direct findings，并分开形成 direct-file summary 与
+`direct_file -> importer_file` 关系。reverse lookup 排除 self 且只走一条 edge；cycle 不
+递归展开，A←B←C 时 C 不传播为 A 的 importer。importer 不复制 direct finding 的 rule、
+location、confidence 或 severity，也不做跨文件 receiver/type inference 或 call graph。
+
+Day 17 只增加 1 个四文件 mixed candidate project、2 个 positive finding、3 个 positive
+与 1 个 negative one-hop relation；artifact 总计 10 projects、13 files、35 positive
+finding、20 negative finding，仍为 schema v1 candidate。测试先行首次为 `3 errors`；
+首轮实现为 `1 failed, 29 passed`，修正测试排序期望后 Day 17 定向为 `30 passed`。
+Day 14–17 联合定向为 `121 passed`，文档同步前完整回归为
+`590 passed, 2 warnings`。最终共同门禁记录于 `TASKS.md` 和 Day 17 学习日志。
 
 ## 3. P0、P1 和不做范围
 
@@ -596,9 +622,10 @@ flowchart LR
 `app/storage/sqlite.py`、snapshot/chunk/dense index 所在的 `app/ingestion`、真实
 E5/Qdrant/BM25/Dense/Hybrid 所在的 `app/retrieval`，以及 dev evaluator 所在的
 `app/evaluation`、Day 13 ZIP Guard 所在的 `app/security`，以及 Day 14 AST/registry 与
-Day 15–16 八类 production rules 所在的 `app/scanner`；尚无 import graph、agent 或业务
-reporting 实现。Day 12 的 `reports/retrieval_dev_*` 是项目评测 artifact，不是分析报告
-存储；Day 15–16 detection artifact 仍是 candidate，不是 locked 结果。
+Day 15–16 八类 production rules、Day 17 local import graph/impact 所在的 `app/scanner`；
+尚无 agent 或业务 reporting 实现。Day 12 的 `reports/retrieval_dev_*` 是项目评测
+artifact，不是分析报告存储；Day 15–17 detection artifact 仍是 candidate，不是 locked
+结果。
 
 ## 6. 数据与文档快照
 
@@ -999,8 +1026,8 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 14 | 计划 2026-08-19；实际 2026-08-18 | `completed` | AST 基础与符号表 | identity recheck、标准库 AST、module/import/BaseModel/type clue registry 与 runtime trees | 35 cases；真实 Day13→Day14 ZIP smoke；共同门禁 | AST 与确定性 schema | 八类规则、一跳 import、LLM |
 | MigrationLens Day 15 | 2026-08-20 | `completed` | 前四类规则 | Config、validator、Settings、root model；strict finding schema；5 个 candidate fixture/19 labels | 43 cases；真实 Day13→15 ZIP 与 5-project exact-label smoke；共同门禁 | import provenance、shadowing、确定性 finding | 后四类、完整/locked benchmark、Agent |
 | MigrationLens Day 16 | 计划 2026-08-21；实际 2026-08-20 | `completed` | 后四类规则 | 方法、数据加载、Field、GenericModel、浅层 receiver；新增 4 个 candidate fixture/34 labels | Day15/16 定向 68 passed；完整 572 passed（文档前）；普通 `.dict()`/unknown factory 不报；真实 ZIP/candidate 集成 | 置信度、receiver proof 与 canonical provenance | 一跳 import、完整/跨文件类型推断、locked benchmark |
-| MigrationLens Day 17 | 2026-08-22 | `planned` | 一跳反向 import | 本地 import graph、一跳 importer；只增量增加与一跳关系直接相关的混合候选 | 相对/绝对/cycle/同名/仅一跳；共同门禁 | 模块影响而非调用图 | 递归图、在本日补齐 40 个候选、锁定评测 |
-| MigrationLens Day 18 | 2026-08-24 | `planned` | 五个只读 Agent 工具 | 类型化 I/O、白名单、timeout、上限、trace、路径隔离 | 每工具五类测试；无危险能力；共同门禁 | 工具契约与审计 | Agent 图、报告、API |
+| MigrationLens Day 17 | 计划 2026-08-22；实际 2026-08-24 | `completed` | 一跳反向 import | registry-only 本地 import graph、direct findings 分离的一跳 importer；新增 1 个四文件 mixed candidate | Day17 定向 30 passed；Day14–17 定向 121 passed；完整 590 passed（文档前）；真实 ZIP/candidate 集成 | 模块影响而非调用图 | 递归图、跨文件类型、在本日补齐 40 个候选、锁定评测 |
+| MigrationLens Day 18 | 原计划 2026-08-24；尚未开始 | `planned` | 五个只读 Agent 工具 | 类型化 I/O、白名单、timeout、上限、trace、路径隔离 | 每工具五类测试；无危险能力；共同门禁 | 工具契约与审计 | Agent 图、报告、API |
 | MigrationLens Day 19 | 2026-08-25 | `planned` | 有界 LangGraph Agent | AnalysisState、歧义编排、限制、FakeLLM 与无模型回退 | 正常/timeout/无 key/超步数/一次重试；共同门禁 | 确定性逻辑优先 | Citation/API、Agent 改代码 |
 | MigrationLens Day 20 | 2026-08-26 | `planned` | Citation Guard 与报告 | allowlist、来源校验、一次重试、模板回退、JSON/Markdown renderer | 伪造/空/跨任务拒绝，双格式一致；共同门禁 | validity 与 support | HTTP API、SQLite 报告表 |
 | MigrationLens Day 21 | 2026-08-27 | `planned` | 分析 API 与报告持久化 | 四个业务 API、analyses/reports、`zh-CN`、错误脱敏、ZIP 不落盘 | HTTPX 成功/非法/回退/重启读取/OpenAPI；共同门禁 | API/存储事务边界 | 队列、英文、认证、P1 |

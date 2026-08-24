@@ -62,6 +62,16 @@
         "generics.py"
       ],
       "relative_directory": "data/evaluation/detection/fixtures/day16_generic_model"
+    },
+    {
+      "fixture_id": "day17-one-hop-mixed",
+      "python_files": [
+        "project/__init__.py",
+        "project/features/api.py",
+        "project/models.py",
+        "project/service.py"
+      ],
+      "relative_directory": "data/evaluation/detection/fixtures/day17_one_hop_mixed"
     }
   ],
   "gold_source": "official_snapshot_heading_review",
@@ -754,6 +764,58 @@
       "rule_id": "pydantic_v1_generic_model",
       "severity": "medium",
       "start_line": 36
+    },
+    {
+      "expected": true,
+      "file": "project/models.py",
+      "fixture_id": "day17-one-hop-mixed",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.BaseModel`"
+      ],
+      "rule_category": "root_model",
+      "rule_id": "pydantic_v1_root_model",
+      "severity": "medium",
+      "start_line": 9
+    },
+    {
+      "expected": true,
+      "file": "project/service.py",
+      "fixture_id": "day17-one-hop-mixed",
+      "gold_heading": [
+        "Migration guide",
+        "Changes to `pydantic.Field`"
+      ],
+      "rule_category": "field",
+      "rule_id": "pydantic_v1_field",
+      "severity": "medium",
+      "start_line": 10
+    }
+  ],
+  "one_hop_importer_labels": [
+    {
+      "direct_file": "project/models.py",
+      "expected": false,
+      "fixture_id": "day17-one-hop-mixed",
+      "importer_file": "project/features/api.py"
+    },
+    {
+      "direct_file": "project/models.py",
+      "expected": true,
+      "fixture_id": "day17-one-hop-mixed",
+      "importer_file": "project/service.py"
+    },
+    {
+      "direct_file": "project/service.py",
+      "expected": true,
+      "fixture_id": "day17-one-hop-mixed",
+      "importer_file": "project/features/api.py"
+    },
+    {
+      "direct_file": "project/service.py",
+      "expected": true,
+      "fixture_id": "day17-one-hop-mixed",
+      "importer_file": "project/models.py"
     }
   ],
   "schema_version": 1,
