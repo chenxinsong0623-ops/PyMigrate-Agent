@@ -2890,3 +2890,157 @@ evaluation、recursive/call graph、跨文件完整类型推断或源码修改�
 22. trace 为什么连 raw query 和 relative source path 都不记录？
 23. 普通 pytest 如何在不启动 Qdrant/E5、也不联网的情况下覆盖 docs tool？
 24. Day 19 可以复用哪些稳定输入，又必须继续拒绝哪些危险能力？
+
+## MigrationLens Day 19 — 有界 LangGraph Agent（2026-08-25）
+
+### 1. 为什么先有 Day 18 tools，后有 Day 19 graph
+
+LangGraph 解决“哪个步骤接下来运行、状态如何更新、何时终止”，但它不会自动缩小工具
+权限。如果先建立通用 ReAct loop，再把 filesystem、Retriever client 或任意 function
+塞进去，Day 13–17 的静态分析安全边界会在 orchestration 层重新失效。Day 18 先把能力
+冻结为五个 typed、read-only、timeout/capped tools，Day 19 才能只负责有限编排。
+
+### 2. StateGraph、state、node 与 edge
+
+`StateGraph` 是 LangGraph 的低层图 API。state 是所有 node 共享并逐步更新的 typed 数据；
+node 是读取当前 state、返回部分更新的 async function；edge 决定下一个 node；compile 会
+先检查图结构并生成可 invoke 的 graph。本日显式构建：
+
+```text
+START -> prepare
+prepare -> llm_decide -> validate_action
+validate_action -> execute_tool | complete_group
+execute_tool | complete_group -> llm_decide | finalize
+finalize -> END
+```
+
+没有采用 deprecated `create_react_agent`，因为它的通用工具循环与本项目“一 finding 一次
+逻辑 review、总 tool calls 8、确定性 fallback”的产品契约不一致。也没有引入完整
+`langchain` agent stack；`langgraph==1.2.11` 的 low-level API 已足够。
+
+### 3. AnalysisState 为什么不是 `dict[str, Any]`
+
+内部 state 用完整 `TypedDict`，明确保存 analysis/repository、原始 findings、one-hop
+relations、groups、retrieved chunks、steps、draft、validation errors、degraded reason、
+pending decision、counters 和 shared deadline。这样 node 不能悄悄依赖未声明字段，IDE/
+Ruff/type review 可以追踪每次更新；公共 action/result 进一步使用 strict/frozen/
+extra-forbid Pydantic models。
+
+`started_monotonic/deadline_monotonic` 只属于一次 runtime state，不进入稳定 result。否则同一
+输入两次运行会因为时间不同而无法比较。Day 18 `ToolAuditEvent.duration_ms` 是运行审计；
+Day 19 `AgentRunResult` 是业务结果，二者职责不同。
+
+### 4. deterministic finding 永远高于 LLM
+
+当前 Finding schema 只允许 high confidence、无需人工复核的 production fact。Day 19 不把
+这些事实重新交给模型判断，而是为“证据选择/解释候选”准备 bounded group。Finding 先以
+canonical JSON SHA256 生成 identity；graph node 没有更新 findings 的路径；LLM decision
+schema 也没有 rule/path/location/evidence/confidence/severity 字段。run 结束还会把 state
+findings 与原始 `RuleScanResult.findings` 比较，result 再从原始 tuple 构建。
+
+Day 17 的 one-hop relation 同样是 deterministic fact。代码复核发现初版 result 只保留
+dependent count，随后把 typed `one_hop_importers` 加入 request/state/result，并增加有模型/
+无模型真实 ZIP exact-preservation 断言。importer 仍不会变成 Finding。
+
+### 5. ambiguous group 的真实含义与上限
+
+由于 scanner 当前没有 low-confidence production finding，`ambiguous_groups` 在 Day 19 中
+明确表示“待 Agent 做证据/解释编排的 deterministic group”，不是“AST 事实不确定”。按
+relative path、rule ID 与 finding identity 稳定排序；同一 path/rule 每组最多 100 findings，
+再固定分块；整个 run 最多 8 组。ID 不使用 UUID4、时间、mtime 或 Python `hash()`。
+
+8 组同时限制 LLM review surface、prompt/output 规模和最坏运行路径。超过 8 组的 finding
+不会消失，而是原样保留，并作为稳定 human-review item 交给 Day 20。zero finding 则自然
+走 zero-group terminal，不调用模型。
+
+### 6. typed AgentDecision 与 explicit dispatcher
+
+LLMResponse.content 只是字符串，不能直接执行。它必须先解析为 discriminated union：
+
+- `call_tool`；
+- `finish_group`；
+- `request_human_review`。
+
+`call_tool` 内部再按五个 tool name 区分五种 Day 18 request model。`run_shell`、`open_file`、
+`web_search`、额外 finding 字段或错误参数会在 strict validation 处失败。dispatcher 使用五个
+显式 `isinstance` 分支直接调用 public tool；不使用 `getattr(tools, model_string)`，所以模型
+不能构造 module、callable、Python expression、URL 或 shell command。
+
+### 7. product limit 与 recursion limit
+
+LangGraph recursion limit 只能防止图意外无限递归，不能表达产品语义。本日额外维护：
+
+- groups `<=8`；
+- tool calls `<=8`；
+- product steps `<=32`；
+- 每 finding 最多一次逻辑模型 review；
+- retry `<=1`；
+- LLM timeout `<=20s`；
+- 整次 Agent total timeout `<=45s`。
+
+测试注入的 `AgentRuntimeLimits` 只能收紧这些值，不能放宽。第 9 次 tool call 在 dispatch 前
+就被阻止；reviewed finding IDs 进入 state 后，同一 finding 再次进入 review 是 contract
+error。recursion limit 仍保留为第二层保险，但不能替代上述显式 counters。
+
+### 8. LLM timeout、total timeout 与 remaining deadline
+
+每次 run 用 `time.monotonic()` 计算唯一 deadline，外层 `asyncio.timeout(total)` 包住整个
+`graph.ainvoke()`。每次 LLM 前重新计算 remaining，实际调用 timeout 是
+`min(20s, remaining)`；tool dispatch 前再次检查 deadline。这意味着两次 20 秒 LLM 和一次
+10 秒 tool 不会简单相加跑到 50 秒：无论处在哪个 node，整次 run 都受同一个 45 秒 budget。
+
+测试使用 10–80 ms 的收紧 limit 与真正 `asyncio.Event().wait()`，不是 mock 掉 timeout
+逻辑；验证 LLM timeout、outer total timeout 和 timeout 后 finding 保留。
+
+### 9. 一次 retry 的精确定义
+
+retry 是同一 finding group 的同一次逻辑 review 内，最多再调用一次 LLM。可 retry：
+
+- malformed/invalid structured JSON；
+- typed schema 通过但 group ID 不匹配；
+- LLM timeout；
+- adapter 显式映射的 `AgentLLMError`。
+
+同一 group 的 `reviewed_finding_ids` 只记录一次，即使底层调用因 retry 发生两次。tool path/
+rule/source identity/safety error、deterministic contract violation、未知 programmer error、
+`BaseException` 和 Day 20 citation validity 都不 retry。一次 retry 后仍失败立即 deterministic
+fallback；未知 programmer exception 原样传播，避免用巨大 catch-all 隐藏代码缺陷。
+
+### 10. FakeLLM、no-model 与 degraded_reason
+
+普通 pytest 使用既有 `FakeLLM` 或最小 sequence/waiting test double；它可以证明 structured
+decision、state transition、timeout/limit/retry/fallback 和 tool integration，不能证明真实
+模型质量、token、latency 或 production behavior。
+
+`llm_client=None` 与 `llm_review=false` 都不让 deterministic analysis 失败。fallback 保留
+全部 findings 与 one-hop relations，不制造 explanation、citation validity 或“模型成功”；
+只增加稳定 human-review/degraded metadata。相同 no-model input 两次 result 完全相等。
+
+稳定 `degraded_reason` 区分 no model、review disabled、group/tool/step limit、LLM timeout/
+invalid/error、tool error 与 Agent total timeout。底层 exception message、raw LLM output、
+raw query、源码、source path、ZIP、secret 和 token 都不进入 state/result/log。
+
+### 11. AgentDraft 与 Day 20 起点
+
+Day 19 的 `AgentDraft` 只有 explanation candidates、`validated=false` 的 official-doc
+candidates 和 human-review items。它不包含 `citation_valid`、`citation_supported`、最终
+JSON/Markdown report 或 business report schema。Day 20 可直接消费：原始 findings、
+one-hop relations、retrieved chunks provenance、selected candidates、human-review items 与
+degraded reason，再独立执行 allowlist/manifest validity、citation retry 和 renderer。
+
+### 12. 测试先行、实际缺陷与证据边界
+
+生产 API 不存在时第一次定向 collection 为 `2 errors in 0.46s`，两个 import 均失败，是真实
+red。首轮实现后为 `1 failed, 24 passed`；失败来自合成 9-file test 的 repo summary 仍写
+2 files，strict production validation 正确拒绝。修正测试输入后通过，没有放宽 production
+assertion。
+
+复核时实际修正了 one-hop typed relation 遗漏，并为同 path/rule 超过 100 finding 增加固定
+分块。最终文档前定向为 `31 passed in 1.88s`，Day 13–19 相关联合为
+`203 passed in 4.80s`，文档前完整回归为 `673 passed, 2 warnings in 13.80s`。文档同步后
+定向为 `31 passed in 1.79s`，完整回归为 `673 passed, 2 warnings in 10.53s`；其余共同门禁
+与 Git 状态以 `TASKS.md` 的本次真实命令为准。
+
+真实 ZIP 集成只使用 injected FakeLLM/offline Retriever，验证 sentinel 不执行、source hash
+不变、ignored Python 不进入分析、findings/one-hop exact preserved 与 cleanup。它不是
+真实 LLM、Qdrant/E5、citation support、locked accuracy 或 release evidence。

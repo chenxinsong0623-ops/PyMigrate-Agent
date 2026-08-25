@@ -29,6 +29,22 @@ copyright holders identified by Pydantic in the preserved upstream license text.
 The package is installed as a direct runtime dependency. Its transitive dependencies
 retain their own upstream licenses and notices.
 
+## LangGraph
+
+- Component: `langgraph==1.2.11`
+- Upstream repository: https://github.com/langchain-ai/langgraph
+- Purpose: Build the bounded MigrationLens orchestration with the low-level
+  `StateGraph` API.
+- License: MIT
+- License source: https://github.com/langchain-ai/langgraph/blob/1.2.11/LICENSE
+
+MigrationLens uses the low-level graph API directly. It does not add the full
+`langchain` agent package as a direct dependency, configure LangSmith tracing, add a
+model provider SDK, or use the deprecated `langgraph.prebuilt.create_react_agent`
+helper. `langchain-core` and `langsmith` are present transitively in LangGraph's
+dependency chain; all transitive packages retain their own upstream licenses and
+notices.
+
 ## multilingual-e5-small
 
 - Component: `intfloat/multilingual-e5-small`

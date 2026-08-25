@@ -1,6 +1,6 @@
 # MigrationLens 项目说明与每日开发计划
 
-更新时间：2026-08-24
+更新时间：2026-08-25
 产品：MigrationLens — Pydantic v1→v2 升级影响分析 Agent
 权威范围：`SPEC.md`
 
@@ -550,8 +550,47 @@ Retriever，普通 pytest 离线。全部代码和文档同步后完整回归为
 `642 passed, 2 warnings in 7.26s`；pip check、Ruff、97-file format、diff check 与 Compose
 static config 均通过。最终共同门禁记录于 `TASKS.md` 和 Day 18 学习日志。
 
-Day 19 LangGraph Agent 与 Day 20 Citation Guard 均保持 `planned`。本日没有报告、业务 API、
-SQLite 业务表、locked evaluation、dependency、配置或部署变更。
+Day 19 LangGraph Agent 与 Day 20 Citation Guard 在 Day 18 结束时均保持 `planned`。本日没有
+报告、业务 API、SQLite 业务表、locked evaluation、dependency、配置或部署变更。
+
+### 2.18 MigrationLens Day 19 实际完成边界
+
+状态：`completed`
+原计划日期：2026-08-25
+实际开发日期：2026-08-25
+
+Day 19 在 Day 18 五个只读工具之上新增低层 `StateGraph`，没有采用高层 ReAct helper，
+也没有加入完整 LangChain Agent 栈。`AnalysisState` 显式承载 analysis identity、repo summary、
+deterministic findings、strict one-hop relations、bounded ambiguity groups、retrieved chunk metadata、
+agent steps、draft、validation errors、degraded reason、计数器和 deadline。图从 `START` 经
+prepare、LLM decision、typed validation、explicit dispatcher、group completion 到 finalize/`END`；
+所有图内提前结束路径都进入 finalize；外层 hard timeout 取消 graph 后由 runner 直接构造
+确定性 timeout result，未知 programmer error 则继续抛出。
+
+歧义分组是“证据选择歧义”，不改变 Day 15–17 确定性 finding 事实。组 key 固定为
+`path + rule_id`，同组每 100 条切块；稳定排序后最多处理 8 组，溢出 finding ID 原样进入
+人工复核。LLM 只能返回 strict discriminated decision：五类已知 `call_tool`、
+`finish_group` 或 `request_human_review`。调用在执行前先做 typed parse 和 group/finding identity
+校验，再由显式 `isinstance` dispatcher 路由；不存在任意函数名、`getattr`、shell、Python
+执行、写文件、Git、Web 或任意网络工具入口。
+
+运行上限默认固定为 8 组、8 次工具调用、32 个 graph steps、单次 LLM 20 秒、总分析
+45 秒、每个 finding 最多一次逻辑模型复核；request 只能收紧这些限制。总 deadline 由
+monotonic time 贯穿每个 await，`asyncio.timeout` 作为外层硬边界，LangGraph recursion limit
+仅作次级保险。只有 malformed/mismatched structured decision、明确的 `AgentLLMError` 或 LLM
+timeout 可在预算内重试一次；安全/参数/tool timeout 和未知程序错误不重试，后者继续抛出。
+无模型、显式禁用、预期模型失败、工具错误或预算终止都会生成确定性 degraded 结果；原始
+findings 和 one-hop relations 保持类型与 identity，不被 Agent 重写，文档候选在 Day 20
+Citation Guard 前一律标记 `validated=false`，不伪造 citation。
+
+测试先行首次为 `2 errors in 0.46s`，原因是 Day 19 graph models 尚不存在；首轮实现后为
+`1 failed, 24 passed`，暴露测试工厂的 synthetic affected-file 计数与 repo summary 不一致，
+修正测试输入而非放宽 production 校验。随后真实 ZIP 集成又发现结果只保留 one-hop count、
+没有保留 strict relation 的缺陷，已在 request/state/result 中补齐并加入 exact equality 断言；
+同 path/rule 超过 100 条也改为固定 100 条切块。Day 19 定向最终为 31 项，Day 13–19 相关
+联合回归为 203 项；完整回归和共同门禁的最终证据记录在 `TASKS.md` 与 Day 19 学习日志。
+本日没有实现 Citation Guard、正式 JSON/Markdown renderer、业务 API、SQLite 报告表、真实
+LLM/provider 或 locked evaluation；这些边界从 Day 20 起按计划继续。
 
 ## 3. P0、P1 和不做范围
 
@@ -631,7 +670,7 @@ flowchart LR
     A --> I["一跳 Import Graph"]
     A --> T["五个只读工具"]
     I --> T
-    T --> AG["LangGraph Agent（planned）"]
+    T --> AG["有界 LangGraph Agent"]
     AG --> R["Hybrid Retriever"]
     R --> B["BM25"]
     R --> Q["Qdrant / dense"]
@@ -648,7 +687,7 @@ flowchart LR
 - import graph：只报告一跳本地 importer；
 - hybrid retriever：从固定官方快照返回可追溯 chunk；
 - 五个只读工具：有界查询 findings/source/一跳 importer/官方 docs/rule metadata；
-- Agent：计划在 Day 19 对有限歧义项选择证据并组织报告，当前尚未实现；
+- Agent：以低层 StateGraph 对有限证据选择歧义执行有界编排，并提供确定性回退草稿；
 - Citation Guard：校验本次 allowlist 与来源元数据；
 - SQLite：保存摘要与报告，不保存上传 ZIP；
 - Qdrant：正式 dense backend；
@@ -661,8 +700,8 @@ flowchart LR
 E5/Qdrant/BM25/Dense/Hybrid 所在的 `app/retrieval`，以及 dev evaluator 所在的
 `app/evaluation`、Day 13 ZIP Guard 所在的 `app/security`，以及 Day 14 AST/registry 与
 Day 15–16 八类 production rules、Day 17 local import graph/impact 所在的 `app/scanner`，
-以及 Day 18 五个只读工具所在的 `app/agent`；尚无 LangGraph Agent 或业务 reporting
-实现。Day 12 的 `reports/retrieval_dev_*` 是项目评测
+以及 Day 18 五个只读工具和 Day 19 bounded StateGraph 所在的 `app/agent`；尚无业务
+reporting 实现。Day 12 的 `reports/retrieval_dev_*` 是项目评测
 artifact，不是分析报告存储；Day 15–17 detection artifact 仍是 candidate，不是 locked
 结果。
 
@@ -809,8 +848,8 @@ lookup_rule_spec(rule_id)
 隔离，并测试成功、超时、空结果、非法参数和异常。Day 18 已按 schema v1 完成：默认
 timeout 10 秒、最大 30 秒；findings 100、source radius 15/text 8192、importers 50、docs
 query 1000/top 5/chunk 2000/total 10000。source 只接受 validated inventory 中精确 path 并
-重新核验身份；docs 只查固定 HybridRetriever。Day 19 Agent 尚未实现，且不得获得 shell、
-写文件、代码执行、Web 搜索或任意网络工具。
+重新核验身份；docs 只查固定 HybridRetriever。Day 19 Agent 只通过显式 dispatcher 调用这
+五种类型化工具，且不得获得 shell、写文件、代码执行、Web 搜索或任意网络工具。
 
 ### 8.3 AnalysisState 与运行限制
 
@@ -837,6 +876,11 @@ degraded_reason
 - 引用失败最多重试一次；
 - Agent 总时间不超过 45 秒；
 - 没有 API key 或模型失败时生成确定性回退报告。
+
+Day 19 已实现上述 Agent 级限制，但“引用失败最多重试一次”仍属于 Day 20 Citation Guard；
+Day 19 的一次重试只覆盖 malformed/mismatched structured decision、明确的 LLM boundary error
+和 LLM timeout。安全/参数/tool timeout 不重试，未知程序错误不被伪装为 degraded success。
+所有完成与提前终止路径统一进入 finalize，文档候选在 Citation Guard 前保持未验证状态。
 
 ### 8.4 Citation Guard
 
@@ -1070,7 +1114,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 16 | 计划 2026-08-21；实际 2026-08-20 | `completed` | 后四类规则 | 方法、数据加载、Field、GenericModel、浅层 receiver；新增 4 个 candidate fixture/34 labels | Day15/16 定向 68 passed；完整 572 passed（文档前）；普通 `.dict()`/unknown factory 不报；真实 ZIP/candidate 集成 | 置信度、receiver proof 与 canonical provenance | 一跳 import、完整/跨文件类型推断、locked benchmark |
 | MigrationLens Day 17 | 计划 2026-08-22；实际 2026-08-24 | `completed` | 一跳反向 import | registry-only 本地 import graph、direct findings 分离的一跳 importer；新增 1 个四文件 mixed candidate | Day17 定向 30 passed；Day14–17 定向 121 passed；完整 590 passed（文档前）；真实 ZIP/candidate 集成 | 模块影响而非调用图 | 递归图、跨文件类型、在本日补齐 40 个候选、锁定评测 |
 | MigrationLens Day 18 | 2026-08-24 | `completed` | 五个只读 Agent 工具 | framework-neutral schema v1 tools；validated source identity、strict one-hop、full Hybrid results、single rule registry、timeout/caps/trace | Day18 定向 52 passed；Day13–18 定向 258 passed；最终完整 642 passed；真实 ZIP/offline fake docs；共同门禁通过 | 工具契约、最小权限与审计 | LangGraph Agent、Citation Guard、报告、API |
-| MigrationLens Day 19 | 2026-08-25 | `planned` | 有界 LangGraph Agent | AnalysisState、歧义编排、限制、FakeLLM 与无模型回退 | 正常/timeout/无 key/超步数/一次重试；共同门禁 | 确定性逻辑优先 | Citation/API、Agent 改代码 |
+| MigrationLens Day 19 | 2026-08-25 | `completed` | 有界 LangGraph Agent | low-level StateGraph、strict state/decision、显式五工具 dispatcher、deadline/caps、FakeLLM 与无模型回退 | test-first red 2 errors；Day19 定向 31 passed；Day13–19 相关 203 passed；完整回归与共同门禁见 `TASKS.md` | 确定性事实不由 LLM 重写；有界编排与明确降级 | Citation Guard/API、正式报告、真实 LLM、Agent 改代码 |
 | MigrationLens Day 20 | 2026-08-26 | `planned` | Citation Guard 与报告 | allowlist、来源校验、一次重试、模板回退、JSON/Markdown renderer | 伪造/空/跨任务拒绝，双格式一致；共同门禁 | validity 与 support | HTTP API、SQLite 报告表 |
 | MigrationLens Day 21 | 2026-08-27 | `planned` | 分析 API 与报告持久化 | 四个业务 API、analyses/reports、`zh-CN`、错误脱敏、ZIP 不落盘 | HTTPX 成功/非法/回退/重启读取/OpenAPI；共同门禁 | API/存储事务边界 | 队列、英文、认证、P1 |
 | MigrationLens Day 22 | 2026-08-28 | `planned` | benchmark 人工复核与冻结 | 12/28 fixture、12/20 检索题、模板族、独立 evaluator 版本、manifest/hash、eval lock 和 frozen commit SHA | 用户确认 gold、条数、类别、evaluator version 和 hash；记录 frozen commit SHA；本日不运行 locked | benchmark 独立性 | 看成绩、改 gold、调行为 |

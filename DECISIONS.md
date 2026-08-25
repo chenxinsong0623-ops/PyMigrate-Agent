@@ -506,3 +506,48 @@
   Day 19 Agent/Day 20 Citation Guard 必须遵守本决策。它不改变冻结 SPEC、Day 8–12
   snapshot/retrieval、Day 13 ZIP limits、Day 14 registry schema、Day 15–16 Finding schema、
   Day 17 graph schema、dependency、deployment 或 locked evaluation policy。
+
+## D-022 — Day 19 low-level StateGraph、typed action 与 deterministic fallback 契约
+
+- 日期：2026-08-25
+- 状态：已接受
+- 决策：
+  - Day 19 固定使用 `langgraph==1.2.11` 的 low-level `StateGraph`，以显式
+    `prepare -> llm_decide -> validate_action -> execute_tool/complete_group -> finalize`
+    nodes/edges 编排；不使用 deprecated `langgraph.prebuilt.create_react_agent`，也不新增
+    完整 `langchain` agent package、LangSmith tracing/configuration 或模型 provider SDK；
+  - graph mutable state 使用完整 `TypedDict`，公共 request/action/draft/result 使用 schema
+    version `1` 的 strict/frozen/extra-forbid Pydantic models。deterministic findings 与
+    Day 17 typed one-hop relations 原样进入结果；LLM schema 不提供修改 rule/path/location/
+    evidence/confidence/severity 或新增/删除 Finding 的字段；
+  - 每个 deterministic finding 先用 canonical JSON SHA256 生成稳定 identity，再按 relative
+    path/rule/identity 做 evidence-selection group；同一 path/rule 每组固定最多 100 个
+    finding，整个 run 最多 8 组。该 group 只表示证据/解释编排工作，不把 high-confidence
+    AST fact 重命名为不确定事实；overflow 原样进入 human review；
+  - model content 必须先解析为 `call_tool`、`finish_group` 或
+    `request_human_review` discriminated union。tool call 再以五种 strict request 做二级
+    discriminator，并使用显式 dispatcher；禁止 arbitrary `getattr`、shell、Web、URL、
+    callable、module path 或 Python expression；
+  - 产品 limit 固定为最多 8 tool calls、每 finding 一次逻辑模型审查、LLM timeout 20 秒、
+    Agent total timeout 45 秒、最多一次 orchestration retry 和最多 32 个显式 product steps。
+    `time.monotonic()` shared deadline 与外层 async timeout 是主限制，LangGraph recursion
+    limit 只作第二层保险；测试 limit 只能收紧；
+  - retry 只处理同一逻辑 review 的 malformed/invalid typed output、wrong group、LLM timeout
+    或 typed LLM boundary error。tool/safety error、source identity mismatch、deterministic
+    contract violation、programmer error、`BaseException` 与 Day 20 citation validity 不
+    retry。无模型、disabled、失败或超限后使用 typed deterministic fallback，保留全部
+    findings/one-hop，且不制造 explanation success 或 citation validity；
+  - Day 19 `AgentDraft` 只包含 explanation candidate、`validated=false` 的 official-doc
+    candidate 与 human-review item。Citation allowlist/manifest validity、support、citation
+    retry、最终 JSON/Markdown renderer 继续由 Day 20 独立实现。
+- 原因：冻结 SPEC 要求 LangGraph，但 MigrationLens 的 scanner facts、安全 capability 与
+  runtime limits 必须由 deterministic Python contract 控制。低层 graph、typed action、显式
+  dispatcher 和共享 deadline 可以证明终止、最小权限、错误语义与 fallback；通用 ReAct
+  helper 会重新引入 arbitrary tool loop，并模糊每 finding review 与产品上限。
+- 替代方案：未采用 deprecated prebuilt ReAct、完整 LangChain Agent stack、模型原生任意
+  function calling、模型决定 finding/group、module-level mutable state、UUID/time group、
+  graph recursion limit 作为唯一上限、tool/safety retry、citation logic 提前进入 Day 19，
+  或模型失败时丢弃 deterministic result。
+- 影响：`app/agent/graph.py`、`graph_models.py`、Day 19 测试、未来 Day 20 Citation Guard 和
+  Day 21 API 必须消费该 typed result/limit/fallback 契约；不改变 Day 18 tool schema/trace、
+  Day 15–17 finding/import contracts、冻结 SPEC、部署或 locked evaluation policy。

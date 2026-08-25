@@ -25,6 +25,7 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 16 | `completed` | BaseModel methods、data loading、Field、GenericModel 四类 production rule，浅层 receiver proof 与 4 个增量 candidate fixture |
 | MigrationLens Day 17 | `completed` | 基于 Day 14 registry 的确定性本地 import graph、严格一跳 reverse importer impact 与 1 个四文件 mixed candidate fixture |
 | MigrationLens Day 18 | `completed` | framework-neutral 的五个 typed read-only Agent tools、timeout/output caps、source isolation、safe errors 与脱敏 trace |
+| MigrationLens Day 19 | `completed` | low-level StateGraph、typed decision、显式五工具 dispatcher、shared deadline、hard limits、一次 LLM retry 与 deterministic fallback |
 
 当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite 仍只包含最小
 `system_metadata`，不能描述为已经运行的报告存储；Qdrant startup 仍只创建或校验
@@ -57,13 +58,15 @@ Day 14 只消费 Day 13 的显式 Python inventory，以 size/SHA256/LOC 重新�
 absolute/relative import graph 和严格一跳 reverse importer；不做递归传播或 call graph。
 Day 18 在这些稳定结果上新增五个 framework-neutral 只读工具。它们按单个 ZipGuard
 生命周期消费 validated inventory、findings、local graph 与固定官方文档 HybridRetriever；
-没有开始 LangGraph 编排，也不向未来 Agent 暴露 shell、文件写入、Web 或任意网络能力。
+Day 19 已在该边界上新增 low-level LangGraph 编排，并继续拒绝 shell、文件写入、Web、
+任意网络 capability、scanner/retriever internals 与 source root。普通测试使用 FakeLLM，
+没有把它写成真实模型证据。
 
 尚未实现：
 
 - GitHub Actions；
 - final locked retrieval evaluation；
-- LangGraph Agent 与 Citation Guard；
+- Citation Guard 与最终 JSON/Markdown report；
 - 分析 API、报告存储、benchmark、评测和负载测试；
 - 真实 LLM；
 - WDI-ClaimCheck 的任何业务代码。
@@ -115,6 +118,11 @@ Day 7 已把该 backend 接入 FastAPI。配置 URL 仍不等于服务可用；l
 Day 10 新增直接依赖 `sentence-transformers==5.6.1`；`transformers`、`torch` 和
 `huggingface-hub` 是该包的传递依赖，没有机械改成直接依赖。模型仓库声明 MIT，
 包声明 Apache-2.0，归属记录在 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
+Day 19 新增直接依赖 `langgraph==1.2.11`，Python 要求为 `>=3.10`、license 为 MIT。
+MigrationLens 只使用 low-level `StateGraph`；没有把完整 `langchain` package 加为直接依赖，
+也没有采用 deprecated `langgraph.prebuilt.create_react_agent`、LangSmith tracing/configuration
+或模型 provider SDK。`langchain-core` 与 `langsmith` 是 LangGraph 依赖链中的传递包，不被
+本日 production code 直接调用。
 
 ## Pydantic 官方文档快照
 
@@ -514,16 +522,18 @@ impact = OneHopImpactAnalyzer().analyze(graph, rule_result)
 递归展开。A 有直接 finding、B import A、C import B 时，只把 B 标记为 A 的一跳 importer，
 不会把 C 传播到 A。importer 不是新 finding，也不继承 direct finding 的行号或 severity。
 
-## 五个只读 Agent 工具
+## 五个只读 Agent 工具与有界 StateGraph
 
-Day 18 新增 `app.agent.AnalysisToolSet`，但没有建立 LangGraph Agent：
+Day 18 新增 `app.agent.AnalysisToolSet`，Day 19 只在该 capability boundary 上建立图：
 
 ```text
 Untrusted ZIP -> ZipGuard -> Validated Python Inventory
               -> ASTScanner -> RuleScanner -> RuleScanResult
               -> ImportGraphBuilder -> LocalImportGraph
               -> OneHopImpactAnalyzer -> AnalysisToolContext
-              -> 五个只读工具 -> Day 19 LangGraph Agent（尚未实现）
+              -> 五个只读工具 -> BoundedAnalysisAgent / StateGraph
+              -> AgentRunResult / deterministic fallback
+              -> Day 20 Citation Guard（planned）
 ```
 
 - `get_findings(rule_id?, severity?)` 只过滤当前稳定 findings；
@@ -546,6 +556,26 @@ characters/top 5/chunk 2000 characters/total 10000 characters。数量或文本�
 secret/token 或底层异常正文；耗时不进入 deterministic result。合法 empty 与 failure 分开，
 Retriever 真失败显式报错。tool boundary 没有 shell、subprocess、Git、Python execution、
 文件写入、Qdrant upsert/delete/rebuild、Web 或 arbitrary URL capability。
+
+Day 19 的 `BoundedAnalysisAgent` 接收 strict `AgentRunRequest`，原样保留
+`RuleScanResult.findings` 与 Day 17 typed one-hop relations，并返回无 timing 的 strict
+`AgentRunResult`。内部 `AnalysisState` 使用完整 `TypedDict`；模型 content 必须先解析为
+`call_tool`、`finish_group` 或 `request_human_review` typed decision。tool call 再按五种
+request discriminator 验证，并由显式 `isinstance` dispatcher 执行；任意 tool name、额外
+finding/severity 字段、shell/Web/URL/Python expression 均被拒绝。
+
+graph 使用明确 nodes/edges：`prepare -> llm_decide -> validate_action ->
+execute_tool/complete_group -> finalize`。确定性 evidence-selection groups 最多 8 个，每组
+最多 100 findings；tool calls 最多 8、每 finding 最多一次逻辑模型 review、LLM timeout
+20 秒、Agent shared total timeout 45 秒、retry 最多一次、product steps 最多 32。
+`time.monotonic()` deadline 与外层 async timeout 是主限制，LangGraph recursion limit 只作
+第二层保险。test limits 只能收紧这些值。
+
+无模型、`llm_review=false`、LLM invalid/timeout/error、tool error 或任一 limit 到达时，
+fallback 仍保留全部 deterministic findings/one-hop relations，只增加稳定 human-review、
+validation 与 degraded metadata，不制造 explanation/citation success。Day 19 draft 中的 docs
+candidate 明确为 `validated=false`；citation validity/support、allowlist、citation retry 与
+最终 renderer 仍属于 Day 20。
 
 ## 本地运行
 
@@ -882,13 +912,28 @@ integration evidence，不是真实 Qdrant/E5 smoke、Agent 质量或 locked ben
 和文档同步后的完整回归为 `642 passed, 2 warnings in 7.26s`；pip check、全仓 Ruff、
 97-file format、diff check 与 Compose static config 均通过，精确共同门禁见 `TASKS.md`。
 
+### Day 19 验证边界
+
+2026-08-25 先写 graph 与真实 ZIP tests；production public API 尚不存在时第一次 collection
+为 `2 errors in 0.46s`。首轮实现后 strict repo-summary 测试暴露一个测试输入错误，修正
+输入而非放宽 validation；代码复核另发现 one-hop relation 初版只保留 count，随后加入 typed
+input/state/result 与有模型/无模型 exact-preservation 断言，并为同 path/rule 大组增加固定
+100-finding 分块。
+
+文档前 Day 19 定向为 `31 passed in 1.88s`，Day 13–19 相关联合为
+`203 passed in 4.80s`，完整回归为 `673 passed, 2 warnings in 13.80s`；文档同步后的最终
+定向为 `31 passed in 1.79s`，完整回归为 `673 passed, 2 warnings in 10.53s`。普通测试实际
+运行 StateGraph async invoke、FakeLLM/sequence/waiting doubles、五工具与真实 ZIP，但没有
+运行真实 LLM、Qdrant/E5、Docker runtime 或 locked evaluation；其余共同门禁见 `TASKS.md`。
+
 ## 下一开发日
 
-MigrationLens Day 19 — 有界 LangGraph Agent 保持 `planned`，尚未开始。稳定输入是 Day 18
-五个 typed read-only tools、单分析 context、timeout/output caps、安全错误与脱敏 trace；
-Day 19 不得绕过工具取得 shell/write/Web/source-root 权限，也不能提前开始 Citation Guard、
-业务 API 或 locked benchmark。P0 不采用 cross-encoder reranker；20 条 locked retrieval
-questions 与 detection candidate 都没有运行或冻结为最终 holdout。
+MigrationLens Day 20 — Citation Guard 与报告保持 `planned`，尚未开始。稳定输入是 Day 19
+原样 findings/one-hop relations、retrieved chunks provenance、unvalidated doc candidates、
+human-review items 与 degraded reason。Day 20 才能实现 allowlist/manifest citation validity、
+一次 citation retry、确定性模板 fallback 和 JSON/Markdown renderer；不得提前开始业务 API
+或 locked benchmark。P0 不采用 cross-encoder reranker；20 条 locked retrieval questions
+与 detection candidate 都没有运行或冻结为最终 holdout。
 
 ## 项目文档
 
@@ -911,8 +956,9 @@ artifact 上的 BM25 与真实 Dense + RRF hybrid 调用链；Day 12 已取得�
 dev 三路指标；Day 13 已验证 ZIP Guard；Day 14 已验证只读 AST/registry 调用链；Day 15
 已验证前四类，Day 16 已验证后四类确定性 production rules 和 candidate fixture 调用链。
 Day 17 已验证本地 graph 与严格一跳 reverse importer 调用链；Day 18 已验证五个离线只读
-tool boundary 与 source isolation。20 题 locked 评测、检测 locked benchmark、LangGraph
-Agent、Citation Guard、CI、样本量和负载测试等发布证据仍未完成，因此 MigrationLens
+tool boundary 与 source isolation；Day 19 已验证 low-level StateGraph、FakeLLM orchestration、
+timeout/limit/retry/fallback 与真实 ZIP tool integration。20 题 locked 评测、检测 locked
+benchmark、真实 LLM、Citation Guard、CI、样本量和负载测试等发布证据仍未完成，因此 MigrationLens
 尚未达到可写入简历的发布门槛。不得把 FakeEmbedding、smoke、dev
 指标、candidate label、目标阈值、计划数量或未运行命令描述为 locked 结果、生产检索
 质量、完整 detection accuracy、GPU 性能或发布证据。
