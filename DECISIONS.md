@@ -461,3 +461,48 @@
   schema/artifact、Day 17 fixture/测试以及未来 `get_local_importers` 和报告消费方必须遵守
   本契约；不改变 Day 14 registry、Day 15–16 finding schema、locked policy、冻结 SPEC、
   dependency 或部署契约。
+
+## D-021 — Day 18 framework-neutral 只读 Agent tool 与审计契约
+
+- 日期：2026-08-24
+- 状态：已接受
+- 决策：
+  - Day 18 只提供五个 framework-neutral async Python tool：`get_findings`、
+    `get_source_context`、`get_local_importers`、`search_official_docs` 与
+    `lookup_rule_spec`。输入、输出、错误和 audit event 使用 schema version `1` 的
+    strict/frozen/extra-forbid Pydantic models；不为工具层引入 LangGraph/LangChain，Day 19
+    才能在其上建立有限状态编排；
+  - 每次分析使用独立 frozen `AnalysisToolContext`，只持有当前 validated inventory、
+    `RuleScanResult`、`LocalImportGraph`、只暴露 `search` 的 official-docs retriever 与
+    trace sink；不使用 module-level mutable analysis state，不把 task root 放入公共结果，
+    不延长 ZipGuard 生命周期或持久化用户源码；
+  - source path 必须是 inventory 中精确存在的 canonical POSIX relative `.py`。读取复用
+    Day 14 containment、regular/non-reparse、bounded read、size/SHA256/UTF-8/LOC identity
+    recheck；不做递归发现。importer 复用 Day 17 reverse lookup，保持
+    `importer -> imported` 与 strict one-hop；docs 只调用 Day 11 HybridRetriever 的完整
+    fused `results`，不重写 BM25、Dense、RRF、top-3 默认行为或 degraded policy；
+  - 八个 rule 的 category、severity、说明、scope 与 legacy API 由 immutable
+    `PRODUCTION_RULE_SPECS` 单一 registry 提供。Finding 自身校验和 RuleScanner 生成均消费
+    同一 registry；tool lookup 不从 README、网络或 LLM 建立第二套 metadata truth；
+  - 五工具统一经过 `asyncio.timeout`，默认 10 秒且只允许 `(0, 30]` 秒。固定 tool caps 为
+    findings 100、source radius 15/source text 8192 characters、importers 50、docs query
+    1000 characters/top 5/chunk text 2000 characters/total text 10000 characters；rule lookup
+    成功时恰好 1 条。截断必须公开 total/returned/truncated，不能静默丢弃；
+  - 每次调用写一个最小 typed trace：sequence、tool、status、稳定 error type、输入字符数、
+    返回数、truncation 与 duration。duration 不进入 deterministic business result；trace
+    不得记录 raw query、源码/source context、source path、宿主绝对路径、ZIP bytes、secret
+    或底层异常正文。合法 empty 与 failure 分开，Retriever failure 不伪装为空结果；已知
+    domain failure 映射为安全 `AgentToolError`，未知 programmer exception 不被 catch-all
+    吞掉，`BaseException` 不捕获。
+- 原因：Day 19 的 LLM/graph 只能在明确、最小且可审计的 capability boundary 上工作。
+  若 Agent 可直接访问 task root、任意 Retriever internals、shell/write/Web 或不受限输出，
+  即使 Day 13–17 的静态分析安全，也会在编排层重新引入路径逃逸、数据泄露、无限输出、
+  隐式 degraded result 与不可复现行为。先冻结 tools 再编排，可以离线独立验证每项能力。
+- 替代方案：未采用提前建立 LangGraph nodes、通用 function-calling framework、一个万能
+  source/retrieval tool、任意 host path、递归 importer、Web search、Qdrant write、重写 RRF、
+  复制 rule metadata、静默截断、raw query/source logging、无上限 timeout，或把所有异常
+  捕获后伪装成空结果。
+- 影响：`app/agent/`、`app/scanner/rule_models.py`、`rule_scanner.py`、Day 18 测试和未来
+  Day 19 Agent/Day 20 Citation Guard 必须遵守本决策。它不改变冻结 SPEC、Day 8–12
+  snapshot/retrieval、Day 13 ZIP limits、Day 14 registry schema、Day 15–16 Finding schema、
+  Day 17 graph schema、dependency、deployment 或 locked evaluation policy。

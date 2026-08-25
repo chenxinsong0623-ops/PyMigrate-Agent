@@ -5,169 +5,188 @@
 
 ## 1. 当前开发日与状态
 
-MigrationLens Day 17 — 一跳反向 Local Import Graph
+MigrationLens Day 18 — 五个只读 Agent 工具与安全审计边界
 
 状态：`completed`
 
 实际开发日期：2026-08-24。开发前 branch 为 `main`，HEAD 为
-`7298e1a feat(scanner): complete Day16 Pydantic migration rules`，
-`git status --short` 无输出。Day 17 只实现本地模块 import graph、一跳反向 importer
-影响和与该关系直接相关的 candidate 增量；MigrationLens Day 18 仍为 `planned`，没有进入
-其实现。
+`129cc08 feat(scanner): complete Day17 one-hop import graph`，worktree clean。Day 19
+LangGraph Agent 与 Day 20 Citation Guard 均保持 `planned`，没有开始。
 
-20 条 locked retrieval candidates 与未来 locked detection benchmark 继续保持
-`NOT RUN`。没有运行用户代码、用户测试、dependency 安装、LLM、Retriever、Agent、
-分析 API 或 Docker runtime。
+本日只交付 framework-neutral 的 typed tool/service boundary。没有新增 LangGraph 或
+LangChain dependency，没有建立 Agent graph、LLM decision loop、报告、业务 API、SQLite
+业务表、Web search、源码修改或 locked evaluation。
 
-## 2. 开发前事实与基线
+## 2. 开发前基线与测试先行
 
 - 指定解释器：`D:\conda_envs\pymigrate-agent\python.exe`；
-- Git branch/HEAD：`main` / `7298e1a feat(scanner): complete Day16 Pydantic migration rules`；
-- `git status --short`：无输出；
-- 使用独立 `--basetemp var/tmp/day17-baseline` 的完整 pytest：
-  `572 passed, 2 warnings in 9.08s`；
+- 原样完整 pytest 的 590 个测试主体运行到 100%，但清理系统
+  `pytest-current` 时触发既有 `WinError 5`，退出码 1，未记为通过；
+- 改用工作区独立 `--basetemp var/tmp/day18-baseline`：
+  `590 passed, 2 warnings in 5.64s`；
 - `python -m pip check`：`No broken requirements found.`；
-- Ruff check、85-file format check 与 `git diff --check` 均通过；
-- warnings 是既有 Starlette TestClient deprecation 与 qdrant-client 无法取得 server
-  version 的 compatibility warning；均未隐藏。
+- Ruff check、92-file format check、`git diff --check` 均通过；
+- `docker compose config --quiet` 退出码 0，并保留两条既有 Docker
+  `config.json` Access denied warning；
+- 两条 pytest warning 是既有 Starlette TestClient deprecation 与 qdrant-client
+  compatibility warning，没有过滤或升级 dependency。
 
-## 3. 公共调用链与 schema
+生产 package 尚不存在时，首次 Day 18 定向 collection 为 `2 errors in 0.33s`，均是
+`ModuleNotFoundError: No module named 'app.agent'`。测试先于实现，没有把预期行为写成
+虚假通过证据。
 
-```python
-from app.scanner import (
-    ASTScanner,
-    ImportGraphBuilder,
-    OneHopImpactAnalyzer,
-    RuleScanner,
-)
-from app.security import ZipGuard
+## 3. Agent tool package 与公共调用链
 
-with ZipGuard(archive_path) as validated:
-    ast_result = ASTScanner().scan(validated)
-    rule_result = RuleScanner().scan(ast_result)
-    graph = ImportGraphBuilder().build(ast_result.registry)
-    impact = OneHopImpactAnalyzer().analyze(graph, rule_result)
-```
-
-`ImportGraphBuilder` 只消费 Day 14 strict/frozen `ScannerRegistry` 中已经存在的 module 与
-import metadata；不读取源码、不调用 `ast.parse()`、不递归发现文件，也不执行或 import
-待分析代码。公开 schema version 为 `1`，结果均 strict/frozen/extra-forbid。
-
-边方向固定为 `importer -> imported`。`LocalImportGraph.get_importers(path)` 返回直接导入
-目标文件的一跳本地文件，结果按稳定键排序、去重并排除 self；不递归传播。
-
-## 4. 本地模块解析
-
-绝对 import 只接受 Day 14 registry 中精确存在的本地 module identity：
-
-- `import project.models` 与 alias 形式映射到同名本地模块；
-- `from project import models` 在 `project.models` 精确存在时映射到 child module；
-- `from project.models import User` 在 base 是普通本地 module 时映射到 base；
-- 外部模块、仅 basename 相同的模块和无法证明的 package symbol 均跳过。
-
-相对 import 使用 importer 的 module identity、`is_package` 和 `level` 计算 package context：
-
-- `.models`、`from . import models` 和多级 `..` 均确定性解析；
-- `__init__.py` 使用 package module identity，不依赖磁盘当前目录；
-- 超出 package 根、root `__init__.py` 的相对 import 和不存在的 target 保守跳过。
-
-同一 importer/target 的多个语法或 alias 只形成一条 edge。cycle 可以存在于 graph，但不会
-触发递归遍历或重复 importer。
-
-## 5. Finding 与 importer impact 分离
-
-`OneHopImpactAnalyzer` 原样保留并返回 Day 15–16 的 `direct_findings`，另行生成：
-
-- `direct_files`：按文件聚合的直接 finding 数量与 rule IDs；
-- `one_hop_importers`：`direct_file`、`importer_file` 和固定 reason
-  `direct_local_import`。
-
-importer 不是新的 finding，也不继承 direct file 的 rule、line、confidence 或 severity。
-一个文件可同时是直接受影响文件和另一个文件的 importer；角色不合并。若 A 直接受影响、
-B import A、C import B，则只返回 B 对 A 的一跳影响，不把 C 传播到 A。cycle 与 self edge
-同样不会扩大影响范围。
-
-## 6. Candidate fixture 与 gold
-
-Day 15–16 的 9 projects、33 positive finding 与 20 negative finding label 未修改。Day 17
-只增量增加一个四文件 mixed project：
-
-- 两个直接 positive finding：root model 与 Field `regex`；
-- 三个 positive one-hop relation：`service -> models`、`api -> service`、
-  `models -> service`；
-- 一个 negative relation：`api -> models`，用于证明 C→A→B 不递归传播；
-- 同一 fixture 覆盖 absolute/alias、`from package import child`、一级/多级 relative、
-  package `__init__`、cycle、duplicate import、external/same-name negative。
-
-candidate schema 仍为 version `1`、status=`candidate`，通过向后兼容的独立
-`one_hop_importer_labels` 字段记录关系 gold；finding label 与 importer relation 没有混为
-同一模型。当前总计 10 projects、13 files、35 positive finding、20 negative finding、
-3 positive one-hop relation、1 negative one-hop relation。没有计算 Precision/Recall，也没有
-运行 locked benchmark。
-
-## 7. 测试先行与真实缺陷/修复
-
-生产实现前，首次定向 collection 真实得到 `3 errors in 0.49s`，均为
-`ImportError: cannot import name 'ImportGraphBuilder' from 'app.scanner'`，证明测试先于
-实现。
-
-首轮实现后的定向结果为 `1 failed, 29 passed in 1.21s`。唯一失败是集成测试把公开结果
-误写成只按 importer 排序，而实现按 `direct_file -> importer_file` 的长期契约排序；修正
-测试期望而未放宽 production contract 后为 `30 passed in 0.54s`。Ruff 格式化后复跑为
-`30 passed in 0.66s`。
-
-Day 14–17 联合定向回归为 `121 passed in 1.80s`；文档同步前完整回归为
-`590 passed, 2 warnings in 6.98s`。
-
-## 8. 集成与安全证据
-
-真实临时 ZIP 集成调用链覆盖：
+新增最小 package：
 
 ```text
-ZipGuard -> ASTScanner -> RuleScanner
-         -> ImportGraphBuilder -> OneHopImpactAnalyzer
+app/agent/
+├── __init__.py
+├── tool_models.py
+└── tools.py
 ```
 
-测试包含绝对/相对 import、package、cycle、严格一跳、ignored Python、README、sentinel
-写入和抛异常语句。两次运行得到相同 graph/impact JSON；ignored Python 未进入 registry，
-sentinel 在 context 内外均不存在，context 退出后 task root 清理。
+`tool_models.py` 定义 schema version `1` 的 strict/frozen/extra-forbid request、result、
+error 与 audit models；`tools.py` 定义单分析生命周期的 `AnalysisToolContext`、五个 async
+public methods、统一 runner 和可注入只读 Retriever/audit protocols。没有 module-level
+mutable analysis state，也没有 framework wrapper。
 
-10 个 candidate project 也逐一经过真实临时 ZIP 调用链；35 个 direct positive key 与实际
-finding exact equality、20 个 negative 不相交，Day 17 的 3/1 个 relation gold 也与一跳
-输出精确匹配。以上是受控 candidate/integration evidence，不是 locked accuracy。
+真实数据链是：
 
-## 9. 修改范围与未实现边界
+```text
+ZipGuard -> ASTScanner -> RuleScanner -> ImportGraphBuilder
+         -> OneHopImpactAnalyzer -> AnalysisToolContext -> 五个只读工具
+```
 
-核心修改：新增 import graph/impact schema 与 builder/analyzer、公开 exports、candidate
-关系 schema、1 个四文件 mixed fixture、candidate gold、Day 17 单元/集成测试和项目文档；
-向 append-only `DECISIONS.md` 追加 D-020。
+`AnalysisToolContext` 持有当前 `ZipGuardResult`、`RuleScanResult`、`LocalImportGraph`、
+search-only official-docs retriever 与独立 trace sink。`OneHopImpactResult` 可在 context
+建立前产生，但五工具当前只需要 graph 和原始 findings；没有把 importer 伪装成 finding。
 
-没有新增 dependency、配置、环境变量、Docker、runtime storage 或网络来源；`SPEC.md`、
-`AGENTS.md`、`pyproject.toml`、Day 8 snapshot/chunks、Day 13 ZipGuard、Day 14 registry schema
-和 Day 15–16 finding schema 保持不变。
+## 4. 五个工具的真实边界
 
-明确未实现：递归/transitive import graph、call graph、跨文件 receiver/type inference、完整
-Python symbol/data-flow solver、Agent 及五个工具、Citation Guard、分析 API、报告业务表、
-完整 detection evaluator、locked detection/retrieval benchmark 和自动源码修改。
+1. `get_findings(rule_id?, severity?)` 只过滤当前 `RuleScanResult.findings`，不重跑
+   scanner、不读源码；保持 `finding_sort_key` 和 Finding 原字段，empty 合法。
+2. `get_source_context(path, line, radius<=15)` 只接受 validated inventory 中精确存在的
+   canonical POSIX relative `.py` path。它复用 Day 14 公共受控读取 helper，重新确认
+   containment、regular/non-reparse、bounded size、SHA256、UTF-8 和 LOC identity；不搜索
+   目录、不返回 task root。`line>=1`，超出 EOF 时 clamp 到最后一行，窗口自然 clamp 到
+   `1..LOC`；空文件返回 empty。
+3. `get_local_importers(path)` 重新验证当前 `LocalImportGraph` 后直接调用 Day 17
+   `get_importers(path)`。方向仍为 `importer -> imported`，只返回 direct one-hop，排除
+   self；不做 BFS/DFS、cycle propagation、call graph 或 transitive closure。
+4. `search_official_docs(query, top_k<=5)` 只调用注入对象的 `search(raw_query)`，复用 Day
+   11 `HybridRetriever` 完整 fused `results`，不改变 BM25/Dense top-8、RRF k 或既有
+   `top_results` top-3。返回保留 chunk、heading、URL/ref/hash、component ranks/scores 与
+   RRF provenance；没有 URL fetch、Web search、degraded mode 或 index write。
+5. `lookup_rule_spec(rule_id)` 只接受八个精确 `RuleId`。新增 immutable
+   `PRODUCTION_RULE_SPECS` 是 scanner、Finding 校验和工具共同使用的 metadata 单一真源；
+   未知 rule 显式失败，不让 LLM 或 README 字符串生成说明。
 
-## 10. 最终共同门禁与 Git
+## 5. Typed I/O、timeout 与输出上限
 
-全部代码、candidate 数据和文档同步后的实际结果：
+所有 request/result 均 strict、frozen、extra-forbid，公共结果使用 schema version `1`、
+稳定排序、去重和显式 count/truncation metadata。统一 timeout 默认 10 秒，调用方只能在
+`(0, 30]` 秒内收紧或设置；五个 async implementation 均经过同一真实
+`asyncio.timeout` runner。同步 bounded read 的取消点位于读取前后；读取本身仍依赖 Day
+13/14 已冻结的 1 MiB 单文件 hard limit，不能声称线程级抢占。
 
-- Day 14–17 定向：`121 passed in 1.45s`；
-- 完整 pytest：`590 passed, 2 warnings in 6.11s`；
+工具层固定上限：
+
+- findings：最多 100 条；
+- source：`radius<=15`、总返回文本最多 8192 characters；
+- local importers：最多 50 条，且上游仍受 ZIP 最多 200 个 Python 文件限制；
+- official docs：raw query 最多 1000 characters、最多 5 chunks、每 chunk 最多 2000
+  characters、总计最多 10000 characters；
+- rule lookup：成功时天然恰好 1 条；
+- timeout：默认 10 秒、最大 30 秒。
+
+任何数量或文本截断都设置 `truncated=true`，并返回 `total_count` 与
+`returned_count`；source/docs 另返回字符级 metadata，不静默丢数据。
+
+## 6. Trace、错误与只读能力
+
+每次调用记录一个 strict typed `ToolAuditEvent`：schema、单 context sequence、tool、
+success/empty/error/timeout status、稳定 error type、输入字符数、返回数、是否截断和
+runtime duration。duration 只属于 trace，不进入 deterministic business result。
+
+trace 不记录 raw query、relative/absolute source path、源码/source context、ZIP bytes、
+底层异常正文、secret/token/API key 或 Qdrant password。公共 `AgentToolError` 消息固定；
+错误类型区分 invalid argument、path not allowed、unknown path/rule、timeout、retrieval
+failure、source identity mismatch 和 infrastructure failure。合法 empty 不伪装成 failure，
+Retriever failure 也不伪装成 empty。expected domain errors安全映射；未知 programmer
+exception 只记脱敏 trace 后原样传播，不用 catch-all 吞掉，`BaseException` 未捕获。
+
+运行时防副作用测试把 subprocess、shell、socket/Web、Path write APIs 替换为失败函数，
+五个工具仍全部成功。真实 ZIP 集成同时比较调用前后 source SHA256，并用会写 sentinel/
+raise 的源码证明没有 import 或执行。工具没有 shell、Git、任意 Python、文件写入、Qdrant
+upsert/delete/rebuild 或任意网络能力；docs protocol 只暴露 `search`。
+
+## 7. 测试、缺陷与修复
+
+首轮实现曾暴露并修复三类真实问题：公共 `app.scanner` 未导出内部排序 helper，改为在
+tool model 内从定义模块导入；pytest 参数名误用保留 fixture 名 `request`，改为明确的
+`tool_request`；伪造损坏 context 的测试触发 Pydantic serializer warning，改为从字段
+重建并严格验证，不抑制 warning。Ruff 还发现导入排序、line-length、B009 与格式问题，
+均按规则修复，没有放宽测试或 production contract。
+
+当前真实测试证据：
+
+- Day 18 定向：`52 passed in 1.08s`；
+- Day 13–18 相关联合回归：`258 passed in 3.68s`；
+- 文档前完整回归：`641 passed, 2 warnings in 7.10s`（补入最后一项防副作用测试前）；
+- 最终全量与共同门禁见第 9 节。
+
+52 个 Day 18 pytest nodes 覆盖五工具 success/timeout/empty/invalid/exception 语义、8 类
+unsafe source path、bool/range/path identity、output caps、strict/frozen models、one-hop/
+cycle、full Hybrid top-5、offline fake failure、八规则 registry、trace 脱敏和防副作用。
+真实 Day 13→18 ZIP chain 覆盖 finding、source、importer、fake docs、rule lookup、ignored
+Python/non-Python、traversal、source hash、两次 deterministic JSON、sentinel 与 cleanup。
+
+## 8. 文件与架构变更
+
+- 新增 `app/agent/{__init__.py,tool_models.py,tools.py}`；
+- 新增 `tests/unit/test_agent_tools.py` 与
+  `tests/integration/test_zip_guard_agent_tools.py`；
+- 修改 `app/scanner/rule_models.py`、`rule_scanner.py` 与 `__init__.py`，把八规则 metadata
+  收敛到一个 production registry；
+- 修改 `app/scanner/ast_scanner.py`，公开复用既有 identity-safe bounded source reader；
+- 更新 `TASKS.md`、`LEARNING_LOG.md`、`README.md`、每日计划；
+- 向 append-only `DECISIONS.md` 追加 D-021。
+
+没有新增 dependency、配置、环境变量、数据 artifact、report artifact、Docker/Compose
+修改或外部来源。`SPEC.md` 与 `AGENTS.md` 已逐项审计；冻结范围未变化，因此不机械修改。
+
+## 9. 最终共同门禁与 Git
+
+最终代码、测试与文档同步后的精确门禁结果：
+
+- 完整 pytest：`642 passed, 2 warnings in 7.26s`；
 - `python -m pip check`：`No broken requirements found.`；
 - `python -m ruff check .`：`All checks passed!`；
-- `python -m ruff format --check .`：`92 files already formatted`；
-- candidate JSON round-trip syntax check：退出码 0；
+- `python -m ruff format --check .`：`97 files already formatted`；
 - `git diff --check`：退出码 0；
-- `docker compose config --quiet`：退出码 0，保留两条既有 Docker
+- `docker compose config --quiet`：退出码 0，保留两条既有
   `C:\Users\Administrator\.docker\config.json` Access denied warning。
 
-两条 pytest warning 仍是既有 Starlette TestClient deprecation 与 qdrant-client
-server-version compatibility warning，没有过滤或升级 dependency。部署文件未修改，因此
-没有运行 Docker build/up/health/down。
+两条 pytest warning 仍是既有 Starlette TestClient deprecation 和 qdrant-client server
+version compatibility warning，没有过滤。部署文件未修改，因此未运行 Docker
+build/up/health/down；未运行真实 Qdrant/E5 smoke，也没有把 offline fake Retriever 当成
+真实 backend 证据。20 条 locked retrieval candidates 与 detection locked benchmark
+继续 `NOT RUN`。
 
-最终 Git 审计为 10 个 tracked modified 路径、7 个 untracked 新文件，共 17 个路径；
-`git diff --cached --name-only` 无输出。没有执行 `git add`、commit、push 或 tag，所有修改
-保持 unstaged，留给人工检查。
+所有 Day 18 修改保持 unstaged。没有执行 `git add`、commit、push 或 tag；最终
+Git 审计为 9 个 tracked modified 路径和 5 个 untracked 新文件，cached diff 无输出。
+artifact/secret 扫描无命中；本轮 9 个已确认位于工作区 `var/tmp` 下的 `day18-*` pytest
+临时目录已删除，复查 remaining=0。最终 diff stat 保留在交接回复中，避免把自引用数字写
+回文件后再次改变该数字。
+
+## 10. 明确未实现与 Day 19 起点
+
+未实现：LangGraph graph、正式 `AnalysisState`、LLM decision loop、8-step runner/retry、
+Citation Guard/citation retry、JSON/Markdown 业务报告、分析 API、analyses/reports SQLite
+表、自动源码修改、recursive dependency/call graph、跨文件完整类型推断、locked evaluator
+运行、CI 与 Day 19 以后功能。
+
+Day 19 的稳定输入是 schema v1 的五个 typed read-only tools、当前分析 context、稳定错误、
+timeout/output caps 与脱敏 trace。Day 19 只应在这些能力上实现有界 LangGraph 编排；不得
+绕过工具直接给 Agent shell/write/Web/source-root 权限，也不得改变 Day 18 业务结果。

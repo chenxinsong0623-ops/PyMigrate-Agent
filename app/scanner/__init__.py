@@ -6,6 +6,7 @@ from app.scanner.ast_scanner import (
     ParsedPythonFile,
     ScannerError,
     ScannerErrorType,
+    read_validated_python_source,
 )
 from app.scanner.import_graph import (
     DirectAffectedFile,
@@ -32,6 +33,7 @@ from app.scanner.models import (
     SourceLocation,
 )
 from app.scanner.rule_models import (
+    PRODUCTION_RULE_SPECS,
     Confidence,
     EvidenceFact,
     EvidenceKey,
@@ -40,8 +42,12 @@ from app.scanner.rule_models import (
     MatchedConstruct,
     RuleCategory,
     RuleId,
+    RuleRegistryError,
     RuleScanResult,
+    RuleSpec,
     Severity,
+    get_rule_spec,
+    validate_rule_registry,
 )
 from app.scanner.rule_scanner import RuleScanError, RuleScanErrorType, RuleScanner
 
@@ -79,9 +85,15 @@ __all__ = [
     "SourceLocation",
     "RuleCategory",
     "RuleId",
+    "RuleRegistryError",
+    "RuleSpec",
     "RuleScanError",
     "RuleScanErrorType",
     "RuleScanResult",
     "RuleScanner",
     "Severity",
+    "PRODUCTION_RULE_SPECS",
+    "get_rule_spec",
+    "read_validated_python_source",
+    "validate_rule_registry",
 ]

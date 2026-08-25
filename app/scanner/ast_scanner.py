@@ -202,6 +202,22 @@ class ASTScanner:
         return ASTScanResult(registry=registry, parsed_files=tuple(parsed_files))
 
 
+def read_validated_python_source(
+    validated: ZipGuardResult,
+    inventory: ValidatedPythonFile,
+) -> str:
+    """复用 Scanner 的路径、类型、大小、hash、编码与 LOC 身份复核。"""
+    _validate_inventory_contract(validated)
+    if (
+        not isinstance(inventory, ValidatedPythonFile)
+        or inventory not in validated.python_files
+    ):
+        raise ScannerError(ScannerErrorType.INVALID_INVENTORY)
+    task_root = _resolve_task_root(validated.task_root)
+    _payload, source_text = _read_validated_source(task_root, inventory)
+    return source_text
+
+
 def _validate_inventory_contract(validated: ZipGuardResult) -> None:
     if not isinstance(validated, ZipGuardResult):
         raise ScannerError(ScannerErrorType.INVALID_INVENTORY)

@@ -517,6 +517,42 @@ finding、20 negative finding，仍为 schema v1 candidate。测试先行首次�
 Day 14–17 联合定向为 `121 passed`，文档同步前完整回归为
 `590 passed, 2 warnings`。最终共同门禁记录于 `TASKS.md` 和 Day 17 学习日志。
 
+### 2.17 MigrationLens Day 18 实际完成边界
+
+状态：`completed`
+原计划日期：2026-08-24
+实际开发日期：2026-08-24
+
+Day 18 新增 framework-neutral `app/agent` tool layer，没有建立 LangGraph graph。五个 async
+public tools 分别只过滤当前 `RuleScanResult`、读取 validated inventory 的局部 source、
+查询 Day 17 strict one-hop importer、调用固定官方索引 `HybridRetriever.search`、查询八规则
+production metadata。context 按单个 ZipGuard 生命周期隔离，不使用 module-level mutable
+analysis state；tool I/O、错误和 audit event 均为 schema v1 strict/frozen/extra-forbid。
+
+source path 必须是 inventory 中精确存在的 canonical POSIX relative `.py`，并复用 Day 14
+bounded read/containment/regular/non-reparse/size/SHA256/UTF-8/LOC identity recheck。docs tool
+只截取既有完整 fused `results` 的前 `top_k<=5`，不访问 Web，不改 BM25/Dense top-8、RRF
+或 top-3 默认结果。rule metadata 收敛为 scanner、Finding 校验和 tool 共用的 immutable
+registry，避免 category/severity duplicate truth。
+
+统一 timeout 默认 10 秒、最大 30 秒；输出 caps 为 findings 100、source radius 15/source
+text 8192 characters、importers 50、docs query 1000/top 5/chunk text 2000/total text 10000。
+截断显式返回 count/character metadata。trace 只记录 sequence、tool、status、稳定错误类型、
+输入字符数、返回数、truncation 与 duration，不记录 raw query、源码/source path、绝对路径、
+ZIP、secret 或底层异常原文。工具没有 shell/write/Git/code execution/Web/Qdrant write 能力。
+
+测试先行首次为 `2 errors in 0.33s`，均因 `app.agent` 尚不存在。实现和缺陷修复后 Day 18
+定向为 `52 passed in 1.08s`，Day 13–18 相关联合回归为
+`258 passed in 3.68s`；最后一项防副作用测试加入前，文档前完整回归为
+`641 passed, 2 warnings in 7.10s`。真实临时 ZIP 覆盖五工具、source hash、ignored path、
+traversal、strict one-hop、sentinel 不执行、deterministic result 与 cleanup；docs 使用 fake
+Retriever，普通 pytest 离线。全部代码和文档同步后完整回归为
+`642 passed, 2 warnings in 7.26s`；pip check、Ruff、97-file format、diff check 与 Compose
+static config 均通过。最终共同门禁记录于 `TASKS.md` 和 Day 18 学习日志。
+
+Day 19 LangGraph Agent 与 Day 20 Citation Guard 均保持 `planned`。本日没有报告、业务 API、
+SQLite 业务表、locked evaluation、dependency、配置或部署变更。
+
 ## 3. P0、P1 和不做范围
 
 ### 3.1 P0 必须完成
@@ -593,8 +629,9 @@ flowchart LR
     API --> Z["ZIP Guard"]
     Z --> A["AST Scanner"]
     A --> I["一跳 Import Graph"]
-    A --> AG["LangGraph Agent"]
-    I --> AG
+    A --> T["五个只读工具"]
+    I --> T
+    T --> AG["LangGraph Agent（planned）"]
     AG --> R["Hybrid Retriever"]
     R --> B["BM25"]
     R --> Q["Qdrant / dense"]
@@ -610,7 +647,8 @@ flowchart LR
   finding；
 - import graph：只报告一跳本地 importer；
 - hybrid retriever：从固定官方快照返回可追溯 chunk；
-- Agent：对有限歧义项选择证据并组织报告；
+- 五个只读工具：有界查询 findings/source/一跳 importer/官方 docs/rule metadata；
+- Agent：计划在 Day 19 对有限歧义项选择证据并组织报告，当前尚未实现；
 - Citation Guard：校验本次 allowlist 与来源元数据；
 - SQLite：保存摘要与报告，不保存上传 ZIP；
 - Qdrant：正式 dense backend；
@@ -622,8 +660,9 @@ flowchart LR
 `app/storage/sqlite.py`、snapshot/chunk/dense index 所在的 `app/ingestion`、真实
 E5/Qdrant/BM25/Dense/Hybrid 所在的 `app/retrieval`，以及 dev evaluator 所在的
 `app/evaluation`、Day 13 ZIP Guard 所在的 `app/security`，以及 Day 14 AST/registry 与
-Day 15–16 八类 production rules、Day 17 local import graph/impact 所在的 `app/scanner`；
-尚无 agent 或业务 reporting 实现。Day 12 的 `reports/retrieval_dev_*` 是项目评测
+Day 15–16 八类 production rules、Day 17 local import graph/impact 所在的 `app/scanner`，
+以及 Day 18 五个只读工具所在的 `app/agent`；尚无 LangGraph Agent 或业务 reporting
+实现。Day 12 的 `reports/retrieval_dev_*` 是项目评测
 artifact，不是分析报告存储；Day 15–17 detection artifact 仍是 candidate，不是 locked
 结果。
 
@@ -767,8 +806,11 @@ lookup_rule_spec(rule_id)
 ```
 
 每个工具必须使用类型化输入输出、timeout、最大输出长度、trace/audit event 和路径
-隔离，并测试成功、超时、空结果、非法参数和异常。Agent 没有 shell、写文件、代码
-执行、Web 搜索或任意网络工具。
+隔离，并测试成功、超时、空结果、非法参数和异常。Day 18 已按 schema v1 完成：默认
+timeout 10 秒、最大 30 秒；findings 100、source radius 15/text 8192、importers 50、docs
+query 1000/top 5/chunk 2000/total 10000。source 只接受 validated inventory 中精确 path 并
+重新核验身份；docs 只查固定 HybridRetriever。Day 19 Agent 尚未实现，且不得获得 shell、
+写文件、代码执行、Web 搜索或任意网络工具。
 
 ### 8.3 AnalysisState 与运行限制
 
@@ -1027,7 +1069,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 15 | 2026-08-20 | `completed` | 前四类规则 | Config、validator、Settings、root model；strict finding schema；5 个 candidate fixture/19 labels | 43 cases；真实 Day13→15 ZIP 与 5-project exact-label smoke；共同门禁 | import provenance、shadowing、确定性 finding | 后四类、完整/locked benchmark、Agent |
 | MigrationLens Day 16 | 计划 2026-08-21；实际 2026-08-20 | `completed` | 后四类规则 | 方法、数据加载、Field、GenericModel、浅层 receiver；新增 4 个 candidate fixture/34 labels | Day15/16 定向 68 passed；完整 572 passed（文档前）；普通 `.dict()`/unknown factory 不报；真实 ZIP/candidate 集成 | 置信度、receiver proof 与 canonical provenance | 一跳 import、完整/跨文件类型推断、locked benchmark |
 | MigrationLens Day 17 | 计划 2026-08-22；实际 2026-08-24 | `completed` | 一跳反向 import | registry-only 本地 import graph、direct findings 分离的一跳 importer；新增 1 个四文件 mixed candidate | Day17 定向 30 passed；Day14–17 定向 121 passed；完整 590 passed（文档前）；真实 ZIP/candidate 集成 | 模块影响而非调用图 | 递归图、跨文件类型、在本日补齐 40 个候选、锁定评测 |
-| MigrationLens Day 18 | 原计划 2026-08-24；尚未开始 | `planned` | 五个只读 Agent 工具 | 类型化 I/O、白名单、timeout、上限、trace、路径隔离 | 每工具五类测试；无危险能力；共同门禁 | 工具契约与审计 | Agent 图、报告、API |
+| MigrationLens Day 18 | 2026-08-24 | `completed` | 五个只读 Agent 工具 | framework-neutral schema v1 tools；validated source identity、strict one-hop、full Hybrid results、single rule registry、timeout/caps/trace | Day18 定向 52 passed；Day13–18 定向 258 passed；最终完整 642 passed；真实 ZIP/offline fake docs；共同门禁通过 | 工具契约、最小权限与审计 | LangGraph Agent、Citation Guard、报告、API |
 | MigrationLens Day 19 | 2026-08-25 | `planned` | 有界 LangGraph Agent | AnalysisState、歧义编排、限制、FakeLLM 与无模型回退 | 正常/timeout/无 key/超步数/一次重试；共同门禁 | 确定性逻辑优先 | Citation/API、Agent 改代码 |
 | MigrationLens Day 20 | 2026-08-26 | `planned` | Citation Guard 与报告 | allowlist、来源校验、一次重试、模板回退、JSON/Markdown renderer | 伪造/空/跨任务拒绝，双格式一致；共同门禁 | validity 与 support | HTTP API、SQLite 报告表 |
 | MigrationLens Day 21 | 2026-08-27 | `planned` | 分析 API 与报告持久化 | 四个业务 API、analyses/reports、`zh-CN`、错误脱敏、ZIP 不落盘 | HTTPX 成功/非法/回退/重启读取/OpenAPI；共同门禁 | API/存储事务边界 | 队列、英文、认证、P1 |

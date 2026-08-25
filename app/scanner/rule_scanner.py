@@ -25,11 +25,10 @@ from app.scanner.rule_models import (
     Finding,
     FindingLocation,
     MatchedConstruct,
-    RuleCategory,
     RuleId,
     RuleScanResult,
-    Severity,
     finding_sort_key,
+    get_rule_spec,
 )
 
 _PYDANTIC_MODULE: Final = "pydantic"
@@ -609,7 +608,6 @@ class _FileRuleVisitor(ast.NodeVisitor):
                 self.findings.append(
                     _finding(
                         rule_id=RuleId.PYDANTIC_V1_SETTINGS,
-                        category=RuleCategory.SETTINGS,
                         relative_path=self.relative_path,
                         node=node,
                         old_api="BaseSettings",
@@ -619,7 +617,6 @@ class _FileRuleVisitor(ast.NodeVisitor):
                             import_symbol="BaseSettings",
                             reference_symbol=proof.reference,
                         ),
-                        severity=Severity.HIGH,
                     )
                 )
         self.generic_visit(node)
@@ -635,24 +632,18 @@ class _FileRuleVisitor(ast.NodeVisitor):
             return
         if old_api in _DATA_LOADING_METHODS:
             rule_id = RuleId.PYDANTIC_V1_DATA_LOADING
-            category = RuleCategory.DATA_LOADING
             construct = MatchedConstruct.DATA_LOADING_CALL
-            severity = Severity.HIGH
         else:
             rule_id = RuleId.PYDANTIC_V1_BASE_MODEL_METHOD
-            category = RuleCategory.BASE_MODEL_METHOD
             construct = MatchedConstruct.BASE_MODEL_METHOD_CALL
-            severity = Severity.MEDIUM
         self.findings.append(
             _finding(
                 rule_id=rule_id,
-                category=category,
                 relative_path=self.relative_path,
                 node=node.func,
                 old_api=old_api,
                 matched_construct=construct,
                 evidence=_evidence(dict(receiver_proof.evidence)),
-                severity=severity,
             )
         )
 
@@ -717,13 +708,11 @@ class _FileRuleVisitor(ast.NodeVisitor):
             self.findings.append(
                 _finding(
                     rule_id=RuleId.PYDANTIC_V1_FIELD,
-                    category=RuleCategory.FIELD,
                     relative_path=self.relative_path,
                     node=keyword,
                     old_api=keyword.arg,
                     matched_construct=MatchedConstruct.FIELD_KEYWORD,
                     evidence=_evidence(values),
-                    severity=Severity.MEDIUM,
                 )
             )
 
@@ -740,7 +729,6 @@ class _FileRuleVisitor(ast.NodeVisitor):
             self.findings.append(
                 _finding(
                     rule_id=RuleId.PYDANTIC_V1_GENERIC_MODEL,
-                    category=RuleCategory.GENERIC_MODEL,
                     relative_path=self.relative_path,
                     node=_symbol_reference_node(base),
                     old_api="GenericModel",
@@ -751,7 +739,6 @@ class _FileRuleVisitor(ast.NodeVisitor):
                         import_symbol="GenericModel",
                         reference_symbol=proof.reference,
                     ),
-                    severity=Severity.MEDIUM,
                 )
             )
 
@@ -786,7 +773,6 @@ class _FileRuleVisitor(ast.NodeVisitor):
             self.findings.append(
                 _finding(
                     rule_id=RuleId.PYDANTIC_V1_VALIDATOR,
-                    category=RuleCategory.VALIDATOR,
                     relative_path=self.relative_path,
                     node=decorator,
                     old_api=old_api,
@@ -796,7 +782,6 @@ class _FileRuleVisitor(ast.NodeVisitor):
                         import_symbol=old_api,
                         decorator_symbol=proof.reference,
                     ),
-                    severity=Severity.HIGH,
                 )
             )
 
@@ -814,13 +799,11 @@ class _FileRuleVisitor(ast.NodeVisitor):
                 self.findings.append(
                     _finding(
                         rule_id=RuleId.PYDANTIC_V1_CONFIG,
-                        category=RuleCategory.CONFIG,
                         relative_path=self.relative_path,
                         node=statement,
                         old_api="Config",
                         matched_construct=MatchedConstruct.CONFIG_CLASS,
                         evidence=_evidence(model_evidence),
-                        severity=Severity.HIGH,
                     )
                 )
                 for config_statement in statement.body:
@@ -830,7 +813,6 @@ class _FileRuleVisitor(ast.NodeVisitor):
                         self.findings.append(
                             _finding(
                                 rule_id=RuleId.PYDANTIC_V1_CONFIG,
-                                category=RuleCategory.CONFIG,
                                 relative_path=self.relative_path,
                                 node=target,
                                 old_api=target.id,
@@ -841,7 +823,6 @@ class _FileRuleVisitor(ast.NodeVisitor):
                                         EvidenceKey.CONFIG_KEY: target.id,
                                     }
                                 ),
-                                severity=Severity.HIGH,
                             )
                         )
             for target in _assignment_name_targets(statement):
@@ -850,13 +831,11 @@ class _FileRuleVisitor(ast.NodeVisitor):
                 self.findings.append(
                     _finding(
                         rule_id=RuleId.PYDANTIC_V1_ROOT_MODEL,
-                        category=RuleCategory.ROOT_MODEL,
                         relative_path=self.relative_path,
                         node=target,
                         old_api="__root__",
                         matched_construct=MatchedConstruct.ROOT_FIELD,
                         evidence=_evidence(model_evidence),
-                        severity=Severity.MEDIUM,
                     )
                 )
 
@@ -878,13 +857,11 @@ def _settings_import_findings(
         findings.append(
             _finding_from_location(
                 rule_id=RuleId.PYDANTIC_V1_SETTINGS,
-                category=RuleCategory.SETTINGS,
                 relative_path=relative_path,
                 location=item.location,
                 old_api="BaseSettings",
                 matched_construct=MatchedConstruct.SETTINGS_IMPORT,
                 evidence=_import_evidence(proof, import_symbol="BaseSettings"),
-                severity=Severity.HIGH,
             )
         )
     return tuple(findings)
@@ -907,7 +884,6 @@ def _generic_model_import_findings(
         findings.append(
             _finding_from_location(
                 rule_id=RuleId.PYDANTIC_V1_GENERIC_MODEL,
-                category=RuleCategory.GENERIC_MODEL,
                 relative_path=relative_path,
                 location=item.location,
                 old_api="GenericModel",
@@ -917,7 +893,6 @@ def _generic_model_import_findings(
                     import_module=_PYDANTIC_GENERICS_MODULE,
                     import_symbol="GenericModel",
                 ),
-                severity=Severity.MEDIUM,
             )
         )
     return tuple(findings)
@@ -969,24 +944,23 @@ def _receiver_proof(
 def _finding(
     *,
     rule_id: RuleId,
-    category: RuleCategory,
     relative_path: str,
     node: ast.AST,
     old_api: str,
     matched_construct: MatchedConstruct,
     evidence: tuple[EvidenceFact, ...],
-    severity: Severity,
 ) -> Finding:
+    rule_spec = get_rule_spec(rule_id)
     return Finding(
         rule_id=rule_id,
-        category=category,
+        category=rule_spec.category,
         relative_path=relative_path,
         location=_ast_location(node),
         old_api=old_api,
         matched_construct=matched_construct,
         evidence=evidence,
         confidence=Confidence.HIGH,
-        severity=severity,
+        severity=rule_spec.severity,
         requires_manual_review=False,
     )
 
@@ -994,17 +968,16 @@ def _finding(
 def _finding_from_location(
     *,
     rule_id: RuleId,
-    category: RuleCategory,
     relative_path: str,
     location: SourceLocation,
     old_api: str,
     matched_construct: MatchedConstruct,
     evidence: tuple[EvidenceFact, ...],
-    severity: Severity,
 ) -> Finding:
+    rule_spec = get_rule_spec(rule_id)
     return Finding(
         rule_id=rule_id,
-        category=category,
+        category=rule_spec.category,
         relative_path=relative_path,
         location=FindingLocation(
             start_line=location.line,
@@ -1016,7 +989,7 @@ def _finding_from_location(
         matched_construct=matched_construct,
         evidence=evidence,
         confidence=Confidence.HIGH,
-        severity=severity,
+        severity=rule_spec.severity,
         requires_manual_review=False,
     )
 

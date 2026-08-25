@@ -73,6 +73,164 @@ class MatchedConstruct(StrEnum):
     GENERIC_MODEL_BASE = "generic_model_base"
 
 
+class RuleRegistryError(RuntimeError):
+    """Production rule metadata registry 的内部一致性失败。"""
+
+
+class RuleSpec(_StrictFrozenModel):
+    """供 scanner、Agent tool 与未来报告共同消费的规则元数据。"""
+
+    rule_id: RuleId
+    category: RuleCategory
+    severity: Severity
+    summary: str = Field(min_length=1, max_length=256)
+    scope: str = Field(min_length=1, max_length=512)
+    old_apis: tuple[str, ...] = Field(min_length=1, max_length=32)
+
+    @field_validator("summary", "scope")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        if value != value.strip():
+            raise ValueError("rule metadata 文本不得包含首尾空白")
+        return value
+
+    @field_validator("old_apis")
+    @classmethod
+    def validate_old_apis(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not item or item != item.strip() for item in value):
+            raise ValueError("rule old APIs 必须是无首尾空白的非空字符串")
+        if value != tuple(sorted(value)) or len(set(value)) != len(value):
+            raise ValueError("rule old APIs 必须稳定排序且唯一")
+        return value
+
+
+PRODUCTION_RULE_SPECS: tuple[RuleSpec, ...] = (
+    RuleSpec(
+        rule_id=RuleId.PYDANTIC_V1_CONFIG,
+        category=RuleCategory.CONFIG,
+        severity=Severity.HIGH,
+        summary="检测 BaseModel 类中的 Pydantic v1 配置类和旧配置键。",
+        scope="仅处理当前文件内已证明的 BaseModel 类直接 Config 体及冻结旧键。",
+        old_apis=tuple(
+            sorted(
+                {
+                    "Config",
+                    "allow_population_by_field_name",
+                    "orm_mode",
+                    "schema_extra",
+                }
+            )
+        ),
+    ),
+    RuleSpec(
+        rule_id=RuleId.PYDANTIC_V1_VALIDATOR,
+        category=RuleCategory.VALIDATOR,
+        severity=Severity.HIGH,
+        summary="检测具有 Pydantic import provenance 的 v1 验证器装饰器。",
+        scope="仅处理当前文件内未被遮蔽或重绑定的 decorator reference。",
+        old_apis=tuple(sorted({"root_validator", "validate_arguments", "validator"})),
+    ),
+    RuleSpec(
+        rule_id=RuleId.PYDANTIC_V1_SETTINGS,
+        category=RuleCategory.SETTINGS,
+        severity=Severity.HIGH,
+        summary="检测仍从 pydantic 使用 BaseSettings 的 v1 路径。",
+        scope="仅处理可证明的 direct import 或未遮蔽 module reference。",
+        old_apis=("BaseSettings",),
+    ),
+    RuleSpec(
+        rule_id=RuleId.PYDANTIC_V1_ROOT_MODEL,
+        category=RuleCategory.ROOT_MODEL,
+        severity=Severity.MEDIUM,
+        summary="检测 BaseModel 类直接类体中的 v1 __root__ 字段。",
+        scope="仅处理当前文件内已证明 BaseModel 类的直接 Name target。",
+        old_apis=("__root__",),
+    ),
+    RuleSpec(
+        rule_id=RuleId.PYDANTIC_V1_BASE_MODEL_METHOD,
+        category=RuleCategory.BASE_MODEL_METHOD,
+        severity=Severity.MEDIUM,
+        summary="检测接收者可静态证明为 BaseModel 的 v1 方法调用。",
+        scope="只使用当前文件浅层 receiver proof；不猜测未知 factory 或跨文件类型。",
+        old_apis=tuple(
+            sorted(
+                {
+                    "construct",
+                    "copy",
+                    "dict",
+                    "json",
+                    "json_schema",
+                    "parse_obj",
+                    "schema",
+                    "schema_json",
+                    "update_forward_refs",
+                }
+            )
+        ),
+    ),
+    RuleSpec(
+        rule_id=RuleId.PYDANTIC_V1_DATA_LOADING,
+        category=RuleCategory.DATA_LOADING,
+        severity=Severity.HIGH,
+        summary="检测接收者可证明为 BaseModel 的 v1 数据加载调用。",
+        scope="只处理 parse_raw、parse_file、from_orm 的当前文件浅层 receiver proof。",
+        old_apis=tuple(sorted({"from_orm", "parse_file", "parse_raw"})),
+    ),
+    RuleSpec(
+        rule_id=RuleId.PYDANTIC_V1_FIELD,
+        category=RuleCategory.FIELD,
+        severity=Severity.MEDIUM,
+        summary="检测具有 Pydantic provenance 的旧 Field 关键字参数。",
+        scope="逐个处理冻结旧关键字和显式 schema-extra；不展开动态 **kwargs。",
+        old_apis=tuple(
+            sorted(
+                {
+                    "allow_mutation",
+                    "const",
+                    "final",
+                    "max_items",
+                    "min_items",
+                    "regex",
+                    "unique_items",
+                }
+            )
+        ),
+    ),
+    RuleSpec(
+        rule_id=RuleId.PYDANTIC_V1_GENERIC_MODEL,
+        category=RuleCategory.GENERIC_MODEL,
+        severity=Severity.MEDIUM,
+        summary="检测 canonical pydantic.generics.GenericModel 使用。",
+        scope="仅处理可证明的 direct import 或 class base，不建立完整泛型类型系统。",
+        old_apis=("GenericModel",),
+    ),
+)
+
+
+def get_rule_spec(rule_id: RuleId) -> RuleSpec:
+    """按 typed RuleId 返回唯一 production metadata。"""
+    if not isinstance(rule_id, RuleId):
+        raise TypeError("rule_id 必须是 RuleId")
+    matches = tuple(
+        rule_spec for rule_spec in PRODUCTION_RULE_SPECS if rule_spec.rule_id is rule_id
+    )
+    if len(matches) != 1:
+        raise RuleRegistryError("production rule registry is inconsistent")
+    return matches[0]
+
+
+def validate_rule_registry() -> None:
+    """确保八类 enum 与 metadata registry 精确一一对应。"""
+    rule_ids = tuple(rule_spec.rule_id for rule_spec in PRODUCTION_RULE_SPECS)
+    if len(rule_ids) != len(RuleId) or set(rule_ids) != set(RuleId):
+        raise RuleRegistryError("production rule registry is incomplete")
+    if len(set(rule_ids)) != len(rule_ids):
+        raise RuleRegistryError("production rule registry contains duplicates")
+
+
+validate_rule_registry()
+
+
 class EvidenceKey(StrEnum):
     """不复制源码的最小结构化证明字段。"""
 
@@ -169,32 +327,11 @@ class Finding(_StrictFrozenModel):
 
     @model_validator(mode="after")
     def validate_rule_contract(self) -> Self:
-        expected = {
-            RuleId.PYDANTIC_V1_CONFIG: (RuleCategory.CONFIG, Severity.HIGH),
-            RuleId.PYDANTIC_V1_VALIDATOR: (
-                RuleCategory.VALIDATOR,
-                Severity.HIGH,
-            ),
-            RuleId.PYDANTIC_V1_SETTINGS: (RuleCategory.SETTINGS, Severity.HIGH),
-            RuleId.PYDANTIC_V1_ROOT_MODEL: (
-                RuleCategory.ROOT_MODEL,
-                Severity.MEDIUM,
-            ),
-            RuleId.PYDANTIC_V1_BASE_MODEL_METHOD: (
-                RuleCategory.BASE_MODEL_METHOD,
-                Severity.MEDIUM,
-            ),
-            RuleId.PYDANTIC_V1_DATA_LOADING: (
-                RuleCategory.DATA_LOADING,
-                Severity.HIGH,
-            ),
-            RuleId.PYDANTIC_V1_FIELD: (RuleCategory.FIELD, Severity.MEDIUM),
-            RuleId.PYDANTIC_V1_GENERIC_MODEL: (
-                RuleCategory.GENERIC_MODEL,
-                Severity.MEDIUM,
-            ),
-        }[self.rule_id]
-        if (self.category, self.severity) != expected:
+        rule_spec = get_rule_spec(self.rule_id)
+        if (self.category, self.severity) != (
+            rule_spec.category,
+            rule_spec.severity,
+        ):
             raise ValueError("rule_id、category 与 severity 不一致")
         if self.confidence is not Confidence.HIGH or self.requires_manual_review:
             raise ValueError("production finding 必须有静态证明且无需人工确认")

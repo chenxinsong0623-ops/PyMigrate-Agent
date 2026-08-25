@@ -2707,3 +2707,186 @@ flow、Agent tools、LangGraph、Citation Guard、分析 API、报告业务存�
 23. Day 17 candidate 的 3 positive/1 negative relation 分别验证什么？
 24. sentinel ZIP 测试能证明没有哪些执行行为，又不能证明什么？
 25. Day 18 可以消费 Day 17 的哪个稳定契约，哪些递归/跨文件边界仍不可提前实现？
+
+## 2026-08-24：MigrationLens Day 18 — 五个只读 Agent 工具与安全审计边界
+
+### 1. 开发起点与为什么先做 tool
+
+开发前 branch=`main`、HEAD=
+`129cc08 feat(scanner): complete Day17 one-hop import graph`、worktree clean。指定解释器用
+独立 basetemp 的完整基线为 `590 passed, 2 warnings in 5.64s`；pip check、Ruff、92-file
+format、diff check 与 Compose static config 均通过。原样 pytest 的测试主体虽然运行到
+100%，却在清理系统 `pytest-current` 时因既有 `WinError 5` 退出 1，因此没有伪写为通过。
+
+Agent tool 是未来 LLM/graph 可以调用的、具名且受契约约束的 capability boundary。普通
+Python function 可能只是内部实现；tool 还必须有可暴露的 typed schema、参数白名单、
+timeout、输出上限、稳定错误、trace 与最小权限。Day 18 先把五项能力独立冻结并离线验证，
+Day 19 才让 LangGraph 编排它们，这样 graph bug 与 capability bug 可以分开定位，也避免
+为了接五个函数提前引入 framework dependency。
+
+### 2. Typed I/O 与 read-only capability
+
+所有 request/result、rule spec 和 audit event 都使用 strict/frozen/extra-forbid Pydantic v2
+model，业务结果 schema version 为 `1`。strict 拒绝 bool 冒充 int、字符串冒充数字等隐式
+coercion；extra-forbid 防止调用者以未审计字段偷偷扩大能力；frozen 防止结果交给 Agent 后
+被原地改写。稳定排序、去重和显式 count 让相同 context/input 得到相同业务 JSON。
+
+read-only 不是函数名里写“get”就成立，而是依赖面也必须最小：context 只给 validated
+inventory、RuleScanResult、LocalImportGraph、search-only retriever 和 trace sink。没有 shell、
+subprocess、Git、任意 Python、write/delete/rename/chmod、Web/URL fetch 或 Qdrant
+upsert/delete/rebuild 接口。这体现 principle of least privilege：只授予完成当前动作所需的
+最少对象和方法，即便 Day 19 的模型输出错误，也没有可调用的危险能力。
+
+### 3. `get_findings` 与 empty 语义
+
+`get_findings(rule_id?, severity?)` 只过滤当前 `RuleScanResult.findings`。它不重跑
+RuleScanner、不重新 parse/read 源码、不让 LLM 创建 Finding。结果保持原
+`finding_sort_key`，不改变 rule/location/evidence/confidence/severity；最多返回 100 条。
+
+过滤没有命中时是合法 empty：typed result 的 counts 都为 0，trace status=`empty`，没有
+error type。损坏 RuleScanResult、非法参数或 timeout 才是 failure。把 empty 与 failure
+分开很关键，否则“仓库没有这种问题”和“扫描/基础设施坏了”会在报告里变成同一个结论。
+
+### 4. `get_source_context` 与 path isolation
+
+source context 是安全风险最高的能力。输入必须是 canonical POSIX relative `.py`，并精确
+存在于当前 `ZipGuardResult.python_files`；absolute、drive、UNC、反斜杠、`..`、NUL、非
+Python 和 unknown inventory path 都不能借此读取 host 文件。实现不调用 rglob/os.walk/
+glob 搜索任务目录，也不把 task root 或绝对路径放进公共结果。
+
+读取复用 Day 14 抽出的 `read_validated_python_source`：再次确认 task-root containment、
+regular/non-reparse、bounded size、SHA256、严格 UTF-8-sig 与 LOC identity。它防止验证后
+替换、context 过期或路径逃逸。`line>=1`、`0<=radius<=15`；目标 line 超出 EOF 时 clamp 到
+最后一行，窗口再自然 clamp 到 `1..LOC`。空文件合法返回 empty；最大 source text 为 8192
+characters，超出时逐行有序截断并公开字符/count metadata。
+
+### 5. `get_local_importers` 为什么仍严格 one-hop
+
+工具重新构造并验证当前 `LocalImportGraph`，然后直接调用 Day 17
+`get_importers(path)`。它回答“谁直接 import 目标模块”，edge 方向仍为
+`importer -> imported`。若 C import A、A import B，查询 B 只返回 A，不返回 C；cycle 不
+递归，self 排除，最多 50 条。
+
+tool boundary 不应该偷偷把 Day 17 一跳契约升级成 BFS/DFS/transitive closure。那会把没有
+直接静态证据的文件写成已受影响，也会让 cycle、输出规模和解释来源变复杂。importer
+仍不是 Finding，不复制 direct file 的 line/severity。
+
+### 6. `search_official_docs` 不是 Web search
+
+工具只接受 raw query 和 `1<=top_k<=5`，query 最多 1000 characters，并调用注入
+Retriever 的唯一 `search` method。production 接线复用 Day 11 HybridRetriever；工具从其
+完整 fused `results` 取前 N 条，因此可以返回第 4/5 条，但没有改变原有 consumer
+`top_results` top-3、BM25/Dense top-8、embedding prefix、RRF k 或 dev evaluator 语义。
+
+返回继续保留 chunk ID、heading、text、URL、ref/commit、content/source hashes、component
+ranks/scores 与 RRF score，供 Day 20 Citation Guard 使用。每 chunk text 最多 2000、总计
+最多 10000 characters。真正没有命中是 empty；Qdrant/E5/Hybrid domain failure 显式成为
+retrieval failure，不引入 degraded hybrid。普通测试注入 fake search-only retriever，
+完全离线；没有 requests/httpx、官网/GitHub latest、搜索引擎或 arbitrary URL capability。
+
+### 7. `lookup_rule_spec` 与 single source of truth
+
+八个 RuleId 的 category、severity、短说明、production scope 和 legacy API 现在由 immutable
+`PRODUCTION_RULE_SPECS` 一一绑定。RuleScanner 生成 Finding 时从 registry 取 category/
+severity，Finding model 也用同一 registry 校验，tool lookup 再返回同一 `RuleSpec`。
+
+这比在 scanner、tool 和 README 各维护一份 dict 更安全：修改一个规则时不会出现扫描器报
+high、工具却解释为 medium 的漂移。未知 ID 明确 `unknown_rule`，不做 fuzzy guess、不让
+LLM 或网络生成规则定义。
+
+### 8. Timeout、output cap 与 truncation
+
+五个 public async methods 共用一个 `asyncio.timeout` runner，默认 10 秒，只允许
+`(0, 30]`。timeout 有独立 `timeout` error/status 并写 trace；KeyboardInterrupt、
+SystemExit 等 BaseException 不捕获。每个 implementation 的 timeout 都用真正等待的 async
+stub 验证。同步 source read 前后提供 cancellation checkpoint，读取本身仍由 Day 13/14
+1 MiB hard limit 约束；这不是线程级强制中断，文档不夸大。
+
+输出上限保护 Agent context、序列化和日志预算。findings 100、source radius 15/text 8192、
+importers 50、docs top 5/chunk 2000/total 10000、rule spec 1。截断不能静默发生：result 必须
+返回 `truncated=true`、`total_count`、`returned_count`，source/docs 还公开完整窗口或 chunk
+文本长度与实际返回字符数。
+
+### 9. Deterministic result、runtime trace 与 safe errors
+
+business result 不含 UUID4、timestamp 或 duration；相同 input/context 可以比较 JSON。
+runtime trace 则记录 sequence、tool、status、稳定 error type、input character count、output
+count、truncation 和 duration_ms，用于审计一次真实调用。两者分开后，既能复现业务结果，
+也能排查 timeout/空结果。
+
+trace 不记录 raw query、source path、源码/source context、宿主绝对路径、ZIP bytes、
+secret/token/API key、Qdrant password或底层异常 message。`AgentToolError` 公共 message 固定，
+稳定 types 区分 invalid argument、path not allowed、unknown path/rule、timeout、retrieval
+failure、source identity mismatch 和 infrastructure failure。已知 domain errors 脱敏映射；
+未知 programmer exception 记脱敏 trace 后继续传播，不用一个巨大 catch-all 隐藏缺陷。
+
+### 10. 测试先行与真实修复
+
+先写 Day 18 单元与集成测试，production package 尚不存在时首次定向 collection 为
+`2 errors in 0.33s`，两个都是 `ModuleNotFoundError: No module named 'app.agent'`。这是真实
+red evidence。
+
+首轮实现暴露三项工程问题：tool model 从 `app.scanner` 错误导入未公开的
+`finding_sort_key`；参数化测试使用 pytest 保留 fixture 名 `request`；损坏 context 测试用
+`model_construct` 后整体 dump，产生 Pydantic serializer warning。修复方式分别是从定义
+模块导入内部排序函数、重命名参数、在 production boundary 从字段重建 strict model。
+没有删除测试、放宽断言或过滤 warning。Ruff 随后定位 import order、line length、B009 与
+format 问题并正常修正。
+
+Day 18 定向最终为 `52 passed in 1.08s`；Day 13–18 相关联合回归为
+`258 passed in 3.68s`。最后一项防副作用测试加入前，文档前完整回归为
+`641 passed, 2 warnings in 7.10s`。全部代码和文档同步后的完整回归为
+`642 passed, 2 warnings in 7.26s`；pip check、Ruff、97-file format、diff check 与 Compose
+static config 均通过，最终共同门禁以 `TASKS.md` 为准。
+
+### 11. 真实 ZIP、离线与无副作用证据
+
+集成测试构造真实临时 ZIP 并运行
+`ZipGuard -> ASTScanner -> RuleScanner -> ImportGraphBuilder -> OneHopImpactAnalyzer ->
+AnalysisToolContext -> 五工具`。ZIP 含多个 Python、真实 Finding、one-hop importer、README、
+ignored directory Python，以及若被执行就 write sentinel/raise 的代码。五类工具都在该
+生命周期调用；traversal/ignored path 拒绝，两次业务输出相同，调用前后 source SHA256
+相同，sentinel 在 context 内外均不存在，退出后 task root 清理且 source 再读失败。
+
+另一项防副作用测试把 subprocess/Popen、os.system、socket/URL open、Path write APIs
+monkeypatch 为立即失败，五工具仍成功。它与生产依赖审计共同证明既有路径没有使用这些
+能力；它不能证明未来未审查代码永远不会新增危险调用，因此 Ruff、code review 与回归仍
+是必需门禁。真实 Qdrant/E5 smoke 未运行，offline fake 不能替代真实 backend 证据。
+
+### 12. Day 19 可直接复用什么、仍未实现什么
+
+Day 19 可以直接消费：五个稳定 public method、schema v1 typed I/O、单分析 context、固定
+caps、统一 timeout、safe error types 与脱敏 audit events。Agent 不需要知道 task root、
+graph internals 或 Retriever component API，也不能绕过 tools 获取更大权限。
+
+Day 18 明确未实现 LangGraph、正式 AnalysisState、LLM loop、8-step/retry runner、Citation
+Guard、citation retry、JSON/Markdown 业务报告、分析 API、analyses/reports tables、locked
+evaluation、recursive/call graph、跨文件完整类型推断或源码修改。实现五个 Agent tools 不
+等于 Agent 已实现。
+
+### Day 18 后应能回答的 24 个问题
+
+1. Agent Tool 与普通内部 Python function 的契约差异是什么？
+2. 为什么 Day 18 先冻结 tools、Day 19 才建立 LangGraph？
+3. principle of least privilege 在 `AnalysisToolContext` 中如何体现？
+4. 为什么 read-only 必须同时限制依赖对象，而不只是禁止 `write_text`？
+5. strict/frozen/extra-forbid 分别阻止什么问题？
+6. empty result 与 tool failure 为什么必须有不同 trace status？
+7. `get_findings` 为什么不能重新运行 RuleScanner？
+8. source path 为什么必须精确来自 validated inventory？
+9. canonical relative path 校验之外，为什么还要重新核验文件 identity？
+10. `line` 超出 EOF 与空文件分别怎样返回？
+11. `radius<=15` 和 8192-character cap 各保护什么边界？
+12. `get_local_importers` 为什么不能把 C→A→B 展开为 C→B？
+13. cycle 为什么不会让 one-hop lookup 无限运行？
+14. `search_official_docs` 为什么不是 Web search？
+15. 为什么 top_k=5 要读取 Hybrid 完整 `results` 而不是重写 RRF？
+16. docs provenance 为什么必须一直保留到 tool result？
+17. Retriever failure 为什么不能返回普通 empty list？
+18. `lookup_rule_spec` 的 single source of truth 如何约束 RuleScanner？
+19. 为什么每个工具都需要真实 timeout，即使大部分操作在内存中？
+20. truncation metadata 为什么至少要包含 total、returned 与 flag？
+21. deterministic result 为什么不能混入 duration，而 trace 可以？
+22. trace 为什么连 raw query 和 relative source path 都不记录？
+23. 普通 pytest 如何在不启动 Qdrant/E5、也不联网的情况下覆盖 docs tool？
+24. Day 19 可以复用哪些稳定输入，又必须继续拒绝哪些危险能力？
