@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import codecs
 import hashlib
+import io
 import logging
 import stat
 import struct
@@ -47,6 +48,18 @@ def write_zip(
                 info.external_attr = 0x10
             archive.writestr(info, payload)
     return path
+
+
+def zip_bytes(members: list[tuple[str, bytes]]) -> bytes:
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w") as archive:
+        for name, payload in members:
+            info = zipfile.ZipInfo(name)
+            info.create_system = 3
+            info.compress_type = zipfile.ZIP_STORED
+            info.external_attr = (stat.S_IFREG | 0o644) << 16
+            archive.writestr(info, payload)
+    return stream.getvalue()
 
 
 def limits(**changes: int) -> ZipGuardLimits:
@@ -161,6 +174,35 @@ def test_normal_zip_extracts_only_python_with_deterministic_inventory(
         assert not (task_root / "data.json").exists()
 
     assert not task_root.exists()
+
+
+def test_zip_guard_accepts_bounded_in_memory_archive_without_changing_path_api(
+    tmp_path: Path,
+) -> None:
+    payload = zip_bytes([("pkg/model.py", b"value = 1\n")])
+
+    with ZipGuard(payload, temp_parent=tmp_path) as result:
+        assert [item.relative_path for item in result.python_files] == ["pkg/model.py"]
+        assert result.python_total_lines == 1
+
+    archive = write_zip(tmp_path / "path-still-supported.zip", [("a.py", b"x=1\n")])
+    with ZipGuard(archive, temp_parent=tmp_path) as result:
+        assert result.python_file_count == 1
+
+
+def test_zip_guard_rechecks_in_memory_archive_size_before_parsing(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ZipGuardError) as captured:
+        with ZipGuard(
+            b"x" * 17,
+            limits=limits(max_upload_bytes=16),
+            temp_parent=tmp_path,
+        ):
+            pass
+
+    assert captured.value.error_type is ZipGuardErrorType.ARCHIVE_TOO_LARGE
+    assert task_directories(tmp_path) == ()
 
 
 @pytest.mark.parametrize(

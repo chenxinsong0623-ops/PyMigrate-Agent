@@ -551,3 +551,46 @@
 - 影响：`app/agent/graph.py`、`graph_models.py`、Day 19 测试、未来 Day 20 Citation Guard 和
   Day 21 API 必须消费该 typed result/limit/fallback 契约；不改变 Day 18 tool schema/trace、
   Day 15–17 finding/import contracts、冻结 SPEC、部署或 locked evaluation policy。
+
+## D-023 — Day 21 同步分析 API、schema v2 与历史报告不可覆盖契约
+
+- 日期：2026-08-26
+- 状态：已接受
+- 决策：
+  - P0 business prefix 固定为 `/v1`。`POST /v1/analyses` 成功返回 `201 Created`；三个历史
+    读取 endpoint 分别返回已保存的 API JSON、Day 20 canonical JSON 与 Markdown；
+    `GET /v1/rules` 只公开既有八类 production metadata 和 ZIP/Agent 硬上限。health 路由
+    与既有 live/ready 语义不变；
+  - POST 只接受 `multipart/form-data`、ZIP MIME、`report_language=zh-CN` 与精确文本
+    `llm_review=true|false`。ASGI 层先限制整个请求为 2 MiB ZIP 加 64 KiB multipart 开销；
+    endpoint 再以 `MAX_UPLOAD_BYTES + 1` 有界读取并关闭 `UploadFile`，ZipGuard 复核文件上限。
+    Starlette 的 1 MiB `SpooledTemporaryFile` 阈值可能导致受限系统临时 spool，但 ZIP、源码、
+    task root、raw query/model output 都不作为业务数据持久化；
+  - 应用级 `AnalysisService` 是四个 business API 的唯一 orchestration boundary。它逐次创建
+    analysis identity 和 request-scoped timing wrapper，调用现有 ZipGuard→scanner→rules→
+    graph→one-hop→tools→bounded Agent→Citation Guard→FinalReport 链；不复制 Finding、
+    one-hop、citation 或 human-review 业务逻辑。BM25/E5/Hybrid adapter 只在真实 doc search
+    时延迟构造，依赖 builder 不执行网络或模型加载；
+  - API envelope schema version 固定为 `1`，独立于 Day 20 `FinalReport` schema。`model` 只
+    来自最终合法 agent explanation 的唯一 identity；无合法模型解释或 FakeLLM typed output
+    无效时写 `deterministic-fallback`。`retrieve`/`llm` timing 没有调用时严格为 0，发生
+    调用时至少为 1 ms；runtime metadata 不反向修改 Day 20 report；
+  - SQLite schema 从 `1` 事务迁移到 `2`，新增 `analyses` 与 `reports`，以 foreign key 和
+    CHECK 约束保护 identity/status/language。新库直接初始化到 v2；未知未来版本、不完整 v2
+    或迁移失败 fail closed 并 rollback。analysis envelope、canonical JSON 与 Markdown 在
+    `BEGIN IMMEDIATE` 单一事务中提交；任一 insert 失败全部 rollback；重复 analysis ID
+    永不覆盖历史；GET 只读保存文本，不重跑 Agent、retrieval、renderer 或 citation；
+  - HTTP 错误固定为 typed `error.code/message`，并区分 request、multipart、MIME、ZIP、
+    upload size、analysis/report not-found、storage 与 internal failure。客户端响应和日志都
+    不包含底层异常正文、绝对路径、SQL、traceback、raw source、secret 或 API key。
+- 原因：同步 P0 API 必须把已验证的 Day 13–20 链变成可重启读取的产品行为，同时维持上传
+  信任边界、历史不可变性和 deterministic facts 优先。事务迁移与同事务双格式保存可避免
+  JSON/Markdown 漂移或半条历史；独立 API envelope 可记录运行元数据而不污染 Day 20 真源。
+- 替代方案：未采用 200 success、`/api/v1` 双路别名、先落盘 ZIP、永久 upload 文件、
+  Base64 ZIP、把报告存文件系统、覆盖同 ID、分别提交两种报告、GET 重跑分析、在 endpoint
+  复制 scanner/report 逻辑、eager 模型加载、伪造零耗时、把 FakeLLM 标成真实模型、通用
+  traceback/detail 响应、异步队列、认证、Redis/Celery、Web fetch 或新的 Agent capability。
+- 影响：`SPEC.md` 修订为 0.1.1；`app/application`、`app/api`、`app/storage/sqlite.py`、
+  `app/core/dependencies.py`、`app/main.py`、`pyproject.toml`、第三方 notice 与 Day 21 测试
+  遵守本契约。Day 22 benchmark 冻结、locked evaluation、真实 LLM、CI、Locust、Docker
+  runtime 与发布流程均不在本日范围。

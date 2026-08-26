@@ -57,7 +57,7 @@ def _json_records(stream: io.StringIO) -> list[dict[str, Any]]:
 
 
 @pytest.mark.asyncio
-async def test_initialize_creates_only_minimal_metadata_and_ping_works(
+async def test_initialize_creates_v2_schema_metadata_and_ping_works(
     tmp_path: Path,
 ) -> None:
     database_path = tmp_path / "nested" / "migrationlens.sqlite3"
@@ -68,16 +68,20 @@ async def test_initialize_creates_only_minimal_metadata_and_ping_works(
     assert database.initialization_state is SQLiteInitializationState.INITIALIZED
     assert database.initialization_error_type is None
     assert await database.ping() is True
-    assert await database.read_metadata("schema_version") == "1"
+    assert await database.read_metadata("schema_version") == "2"
     assert await database.read_metadata("document_index_status") == "not_built"
     assert await database.read_metadata("unknown_key") is None
 
     assert await database.initialize() is True
-    assert await _table_names(database_path) == {"system_metadata"}
+    assert await _table_names(database_path) == {
+        "analyses",
+        "reports",
+        "system_metadata",
+    }
     first_rows = await _metadata_rows(database_path)
     assert first_rows.keys() == {"document_index_status", "schema_version"}
     assert first_rows["document_index_status"][0] == "not_built"
-    assert first_rows["schema_version"][0] == "1"
+    assert first_rows["schema_version"][0] == "2"
     assert all(updated_at for _, updated_at in first_rows.values())
 
     await database.close()
@@ -218,10 +222,30 @@ async def test_close_only_closes_initialized_connection_once(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    table_cursor = SimpleNamespace(
+        fetchone=AsyncMock(return_value=None),
+        close=AsyncMock(),
+    )
+    metadata_cursor = SimpleNamespace(
+        fetchone=AsyncMock(return_value=None),
+        close=AsyncMock(),
+    )
     connection = SimpleNamespace(
-        execute=AsyncMock(),
+        execute=AsyncMock(
+            side_effect=(
+                None,
+                None,
+                None,
+                table_cursor,
+                None,
+                metadata_cursor,
+                None,
+                None,
+            )
+        ),
         executemany=AsyncMock(),
         commit=AsyncMock(),
+        rollback=AsyncMock(),
         close=AsyncMock(),
     )
 

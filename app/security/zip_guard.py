@@ -244,12 +244,16 @@ class ZipGuard(AbstractContextManager[ZipGuardResult]):
 
     def __init__(
         self,
-        archive_path: Path,
+        archive_source: Path | bytes,
         *,
         limits: ZipGuardLimits | None = None,
         temp_parent: Path | None = None,
     ) -> None:
-        self._archive_path = Path(archive_path)
+        self._archive_source = (
+            archive_source
+            if isinstance(archive_source, bytes)
+            else Path(archive_source)
+        )
         self._limits = limits or ZipGuardLimits()
         self._temp_parent = Path(temp_parent) if temp_parent is not None else None
         self._task_root: Path | None = None
@@ -263,7 +267,7 @@ class ZipGuard(AbstractContextManager[ZipGuardResult]):
         self._entered = True
 
         try:
-            archive_bytes = _read_archive_bytes(self._archive_path, self._limits)
+            archive_bytes = _read_archive_bytes(self._archive_source, self._limits)
             validated = _validate_archive(archive_bytes, self._limits)
             self._task_root = self._create_task_root()
             _extract_python_payloads(self._task_root, validated.payloads)
@@ -342,12 +346,17 @@ class ZipGuard(AbstractContextManager[ZipGuardResult]):
             self.cleanup()
 
 
-def _read_archive_bytes(archive_path: Path, limits: ZipGuardLimits) -> bytes:
+def _read_archive_bytes(archive_source: Path | bytes, limits: ZipGuardLimits) -> bytes:
     """只把受 2 MiB 硬上限约束的压缩输入读入内存，避免路径 TOCTOU。"""
+    if isinstance(archive_source, bytes):
+        if len(archive_source) > limits.max_upload_bytes:
+            raise ZipGuardError(ZipGuardErrorType.ARCHIVE_TOO_LARGE)
+        return archive_source
+
     chunks: list[bytes] = []
     total = 0
     try:
-        with archive_path.open("rb") as stream:
+        with archive_source.open("rb") as stream:
             while True:
                 chunk = stream.read(
                     min(_READ_CHUNK_BYTES, limits.max_upload_bytes - total + 1)

@@ -27,11 +27,13 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 18 | `completed` | framework-neutral 的五个 typed read-only Agent tools、timeout/output caps、source isolation、safe errors 与脱敏 trace |
 | MigrationLens Day 19 | `completed` | low-level StateGraph、typed decision、显式五工具 dispatcher、shared deadline、hard limits、一次 LLM retry 与 deterministic fallback |
 | MigrationLens Day 20 | `completed` | current-analysis Citation Guard、可信 provenance、独立单次 citation retry、确定性模板与同源 typed JSON/Markdown 报告 |
+| MigrationLens Day 21 | `completed` | `/v1` 同步分析 API、schema v2 事务迁移、analysis + 双格式报告原子持久化、历史读取、typed error 与 upload request hard limit |
 
-当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite 仍只包含最小
-`system_metadata`，不能描述为已经运行的报告存储；Qdrant startup 仍只创建或校验
-384 维 Cosine collection，不在启动期下载模型或自动建库。Day 10 新增显式 index
-命令和独立 dense query 边界；同一环境完成构建后，文档索引可以成为 `ready`。
+当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite schema version `2` 包含
+`system_metadata`、`analyses` 与 `reports`，支持 v1→v2 事务迁移以及 API envelope、Day 20
+canonical JSON 和 Markdown 的单事务保存；Qdrant startup 仍只创建或校验 384 维 Cosine
+collection，不在启动期下载模型或自动建库。Day 10 的显式 index 命令完成构建后，文档
+索引可以成为 `ready`。
 
 Day 5 的 `FakeEmbedding` 只验证接口、prefix、维度、batch、输入校验、timeout 参数
 和确定性，不代表真实语义相似度、检索质量、模型速度或 GPU 性能。Day 6 的
@@ -63,13 +65,15 @@ Day 19 已在该边界上新增 low-level LangGraph 编排，并继续拒绝 she
 任意网络 capability、scanner/retriever internals 与 source root。Day 20 现在在 graph 之后
 建立 current-analysis citation allowlist，并用固定 snapshot/manifest/chunk artifact 重新核验
 来源，再从同一 strict typed report 生成 `zh-CN` JSON 与 Markdown。普通测试使用 FakeLLM，
-没有把它写成真实模型或引用语义质量证据。
+没有把它写成真实模型或引用语义质量证据。Day 21 的 application service 现已把 Day 13–20
+真实调用链接入 `/v1/analyses`，并在成功响应前原子保存 API JSON 与两种 Day 20 renderer
+输出；历史 GET 只读取已保存文本，不重跑 Agent、retrieval 或 renderer。
 
 尚未实现：
 
 - GitHub Actions；
 - final locked retrieval evaluation；
-- 分析 API、报告存储、benchmark、评测和负载测试；
+- benchmark、locked 评测和负载测试；
 - 真实 LLM；
 - WDI-ClaimCheck 的任何业务代码。
 
@@ -125,6 +129,42 @@ MigrationLens 只使用 low-level `StateGraph`；没有把完整 `langchain` pac
 也没有采用 deprecated `langgraph.prebuilt.create_react_agent`、LangSmith tracing/configuration
 或模型 provider SDK。`langchain-core` 与 `langsmith` 是 LangGraph 依赖链中的传递包，不被
 本日 production code 直接调用。
+Day 21 新增直接依赖 `python-multipart==0.0.32`，用于 FastAPI multipart form parser；
+当前环境与 2026-08-26 的 PyPI 项目元数据都验证其版本为 0.0.32、Python 要求 `>=3.10`、
+license 为 Apache-2.0。MigrationLens 仍在 ASGI 层限制整请求、在 endpoint 层有界读取并由
+ZipGuard 独立复核；依赖用途和许可证记录在
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
+
+## 同步分析 API
+
+Day 21 提供以下 P0 business endpoints：
+
+- `POST /v1/analyses`：multipart 字段 `file`、`report_language=zh-CN`、
+  `llm_review=true|false`；成功为 `201 Created`；
+- `GET /v1/analyses/{analysis_id}`：已保存 API JSON；
+- `GET /v1/analyses/{analysis_id}/report.json`：已保存 Day 20 canonical JSON；
+- `GET /v1/analyses/{analysis_id}/report.md`：已保存 Markdown；
+- `GET /v1/rules`：八类 production rules、支持语言和 ZIP/Agent hard limits。
+
+示例：
+
+```powershell
+curl.exe -X POST http://127.0.0.1:8000/v1/analyses `
+  -F "file=@repository.zip;type=application/zip" `
+  -F "report_language=zh-CN" `
+  -F "llm_review=false"
+```
+
+API envelope 独立于 Day 20 report schema，增加 `scanner_version`、固定文档 ref、诚实的
+model identity、repository/summary 和 `extract/scan/retrieve/llm/total` timing。未调用
+retrieval/LLM 时对应 timing 固定为 0；没有合法模型解释时 `model` 为
+`deterministic-fallback`。GET 返回历史内容，不代表重新执行了扫描或模型。
+
+上传 ZIP 最大 2 MiB；multipart 整请求额外只允许 64 KiB framing 开销。Starlette 0.49.1
+实际使用 1 MiB `SpooledTemporaryFile` 阈值，因此较大的合法上传可能在解析期间短暂写入系统
+临时区；ASGI hard limit 约束它的最大规模，endpoint 总是关闭 UploadFile，ZipGuard context
+总是清理随机 task root。ZIP、抽取源码、raw query/model output、异常原文和宿主绝对路径
+均不进入业务表。
 
 ## Pydantic 官方文档快照
 
@@ -960,14 +1000,27 @@ Day 13–20 相关联合为 `376 passed in 12.03s`，最终完整回归为
 formal local artifacts、FakeLLM/test doubles 与 offline Retriever；没有运行真实 LLM、
 真实 Qdrant/E5、Docker runtime、locked evaluation 或人工 citation support。
 
+### Day 21 验证边界
+
+2026-08-26 先写 bytes-ZIP、schema migration/storage 和 HTTP/OpenAPI tests；生产存储类型尚未
+存在时，首轮定向 pytest 因 `AnalysisAlreadyExistsError` 与 `AnalysisStorageError` 无法导入而
+得到 2 个 collection errors。底层存储实现后专项先取得 `8 passed`，随后完整 API/ZIP/存储
+定向取得 `111 passed`；全量第一次运行暴露两个旧 SQLite 测试仍假定 schema v1 与不具备
+transaction cursor 的旧 mock，更新为 v2 语义和真实 rollback 能力后通过。
+
+实际集成测试通过 FastAPI `TestClient` 调用完整生产 service，而不是在 endpoint 伪造 findings。
+它验证 0-finding、FakeLLM disabled/invalid-output fallback、one-hop、Day 20 两种 renderer、原子
+rollback、foreign key、duplicate ID、防 raw source 持久化、重启 GET、distinct 404、413/415/
+422/500/503 typed errors、OpenAPI multipart schema，以及整请求在 parser/spool 前有界。完整
+共同门禁和精确最终数字见 [`TASKS.md`](TASKS.md)。普通测试没有运行真实 LLM、真实 E5/
+Qdrant query、locked evaluation、Docker runtime、Locust 或 CI。
+
 ## 下一开发日
 
-MigrationLens Day 21 — 分析 API 与报告持久化保持 `planned`，尚未开始。稳定输入是 Day 20
-`FinalReport`、同源 JSON/Markdown renderer、typed citation validation/human-review/degraded
-metadata。Day 21 才能实现同步 business API 与 SQLite `analyses/reports`；当前仍没有 multipart
-分析 endpoint、报告 HTTP endpoint 或业务持久化。P0 不采用 cross-encoder reranker；20 条
-locked retrieval questions、detection/Agent locked evaluation 与人工 citation support 都
-没有提前运行。
+MigrationLens Day 22 — benchmark 人工复核与冻结保持 `planned`，尚未开始。Day 21 已完成
+同步 business API 与 SQLite 报告持久化，但没有查看或运行 locked 结果。Day 22 的硬目标是
+由用户确认 gold、条数、类别、独立 evaluator version 与 hash，并产生 frozen commit SHA；
+本轮没有自动 commit/push/tag，也没有提前开始 Day 22。
 
 ## 项目文档
 
@@ -992,7 +1045,9 @@ dev 三路指标；Day 13 已验证 ZIP Guard；Day 14 已验证只读 AST/regis
 Day 17 已验证本地 graph 与严格一跳 reverse importer 调用链；Day 18 已验证五个离线只读
 tool boundary 与 source isolation；Day 19 已验证 low-level StateGraph、FakeLLM orchestration、
 timeout/limit/retry/fallback 与真实 ZIP tool integration；Day 20 已验证本地 Citation Guard、
-current-analysis isolation、typed fallback report 和同源 JSON/Markdown。20 题 locked 评测、
+current-analysis isolation、typed fallback report 和同源 JSON/Markdown；Day 21 已验证同步
+multipart API、完整 Day 13–20 service chain、v1→v2 migration、双报告原子提交、重启历史读取、
+OpenAPI 与错误脱敏。20 题 locked 评测、
 检测/Agent locked benchmark、人工 citation support、真实 LLM、CI、样本量和负载测试等发布证据仍未完成，因此 MigrationLens
 尚未达到可写入简历的发布门槛。不得把 FakeEmbedding、smoke、dev
 指标、candidate label、目标阈值、计划数量或未运行命令描述为 locked 结果、生产检索

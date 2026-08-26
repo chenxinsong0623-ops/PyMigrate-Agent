@@ -3181,3 +3181,189 @@ zero/one/multi report 与真实 ZIP tests。文档前 Day 20/Day 19/chunker 定�
 Day 21 的稳定起点是 `FinalReport`、JSON/Markdown renderer、typed validation/retry/
 human-review/degraded metadata。Day 21 才能建立同步 API 与 SQLite `analyses/reports`；Day 20
 没有 HTTP business endpoint、报告持久化、locked evaluation、真实 LLM 或人工 support 证据。
+
+## 2026-08-26：MigrationLens Day 21 — 分析 API 与报告持久化
+
+### 1. 为什么 API 不应直接拼装 scanner 和 report
+
+HTTP endpoint 的职责是验证 transport、把安全输入交给 application use case、映射稳定错误，
+而不是重新实现业务。若 endpoint 自己调用若干 scanner 并拼 JSON，它很容易漏掉 Day 17
+one-hop、Day 19 fallback 或 Day 20 citation/human-review 语义。本日新增 `AnalysisService`，
+唯一真实链为：
+
+```text
+ZipGuard(bytes) -> ASTScanner -> RuleScanner -> ImportGraphBuilder
+-> OneHopImpactAnalyzer -> AnalysisToolSet -> BoundedAnalysisAgent
+-> CitationGuard -> FinalReport -> JSON/Markdown -> SQLite transaction
+```
+
+API envelope 只投影 `FinalReport`，所以模型仍不能改写 deterministic Finding。
+
+### 2. 同步 API 与异步队列的边界
+
+同步 API 是请求在同一 HTTP 生命周期内等待完整结果并返回 201；异步队列则需要 job 状态、
+worker、重试、幂等消费和结果轮询。P0 明确要求同步，本日没有引入 Redis/Celery、后台任务或
+202 Accepted。Agent 自己的 45 秒 hard deadline 继续约束分析；HTTP transport 没有扩张成
+新的 workflow system。
+
+### 3. multipart、form field 与二进制 JSON 的区别
+
+multipart 可以同时传二进制 ZIP 和独立的 `report_language`/`llm_review` 字段，且 FastAPI
+能在 OpenAPI 中描述 file/form schema。把 ZIP Base64 放进 JSON 会增加约三分之一体积、复制
+更多内存，还会模糊 MIME 和文件边界。本日因此引入已核验的
+`python-multipart==0.0.32`，但 parser 之后仍做独立 MIME、size 和 ZipGuard 校验。
+
+### 4. 为什么 endpoint 的 bounded read 还不够
+
+FastAPI 在调用 endpoint 前已经解析 multipart。实际 Starlette 0.49.1 使用 1 MiB
+`SpooledTemporaryFile` threshold；若只在 endpoint 调 `read(2 MiB + 1)`，攻击者仍可能让
+parser 先接收更大的 body。本日额外用纯 ASGI middleware 在 parser 前限制整个 POST body 为
+2 MiB ZIP 加 64 KiB framing，并保留 endpoint 的 `max+1` 和 ZipGuard 三层复核。大于 1 MiB
+的合法上传可能短暂 spool 到系统 temp，但规模有硬上限、UploadFile 总是关闭、内容不进入
+业务表。
+
+### 5. 201、200 与本日选择
+
+POST 成功会新建不可覆盖的 analysis resource，并可由后续 GET 读取，因此 D-023 固定为
+201 Created。GET 与 rules 返回 200。没有使用 202，因为没有队列；没有用 200 模糊“新建并
+持久化”事实。Day 21 tests 与 OpenAPI 都冻结这一状态码。
+
+### 6. typed error 为什么不能返回 FastAPI 默认 detail
+
+默认 validation/HTTP exception 的结构和英文正文随 framework path 变化，也可能把内部细节
+传给客户端。本日统一成 `{"error":{"code","message"}}`，区分 request、multipart、MIME、
+archive、size、not-found、storage 与 internal。unexpected exception 日志只保留稳定
+`error_type`，响应不含异常原文、绝对路径、SQL、traceback、raw source 或 secret。
+
+### 7. OpenAPI 是契约证据，不是 endpoint 存在的替代品
+
+OpenAPI test 验证 POST requestBody 是 multipart、201/413/422 response 被声明、
+`AnalysisResponse` 与 `ApiErrorResponse` 可发现，并检查文档无宿主绝对路径。但 OpenAPI
+schema 通过不等于业务链通过，所以另有真实 TestClient POST、renderer、SQLite、restart
+集成测试。
+
+### 8. schema migration 与普通 CREATE TABLE 的区别
+
+新库直接建立 v2；旧库必须先读取 metadata 中的版本，再按明确 `1 -> 2` 路径修改。任意
+future version `999` 不能“尽力运行”，因为旧代码无法理解未来语义。已声明 v2 但缺表也不是
+可静默修复的正常状态。本日两者均 `SQLiteSchemaVersionError` fail closed。
+
+### 9. 为什么 migration DDL 也要在 transaction 中
+
+SQLite 的 schema 变更可以事务化。`BEGIN IMMEDIATE` 后创建两表、更新 metadata，任何 SQL
+失败都 rollback；测试注入无效 reports DDL，确认 `analyses` DDL 和 version update 都没有
+半升级残留。若 DDL 与 version 分开 commit，重启时可能看到“version=2 但表不存在”。
+
+### 10. atomic persistence 的精确定义
+
+一次成功请求需要三个历史事实同时存在：API envelope、Day 20 canonical JSON、Markdown。
+本日先 insert `analyses`，再 insert `reports`，最后一次 commit；trigger 强制 report insert
+失败时，测试确认 analysis row 也回滚。两个 renderer 仍来自同一个 `FinalReport`，不是分别
+重算业务。
+
+### 11. foreign key 与 application check 的职责
+
+application transaction 防止正常路径产生 orphan；database foreign key 则是最后一道数据
+完整性约束。`reports.analysis_id -> analyses.analysis_id` 拒绝孤立报告。两者不重复：一个保护
+use-case 原子性，一个保护任何 SQL writer 的关系一致性。
+
+### 12. idempotence 与 duplicate ID 为什么不是 overwrite
+
+schema initialization/reopen 可重复且不改变已有 metadata/report；但分析 resource 本身不是
+“同 ID 覆盖更新”。重复 ID 明确抛 `AnalysisAlreadyExistsError`，事务 rollback，原始 JSON
+仍 byte-exact。随机 ID 让正常冲突极小，防覆盖契约仍必须由数据库和测试证明。
+
+### 13. restart retrieval 为什么不能重跑 Agent
+
+历史结果是当时 scanner version、document ref、model path 和 timing 的证据。GET 若重新执行，
+文档/模型/规则或环境变化会让同一 ID 漂移。本日保存 exact compact API JSON 及 Day 20 两种
+renderer 文本；新 app instance 只查询 SQLite，并返回原样内容。
+
+### 14. API schema 与 FinalReport schema 为什么分开
+
+Day 20 report 是稳定业务真源，不含 runtime timing。API 需要 scanner version、固定文档 ref、
+model identity、created time 和阶段耗时。若把这些字段塞回 FinalReport，会让 renderer schema
+与既有稳定性测试发生无关变化。本日独立 `AnalysisResponse` schema v1，只以 typed projection
+消费 FinalReport。
+
+### 15. model identity 如何保持诚实
+
+只有最终 `ReportExplanationSource.AGENT_CANDIDATE` 的 model 才能成为 response model identity；
+没有候选、LLM disabled、FakeLLM 返回非法 typed decision 或 fallback 时都写
+`deterministic-fallback`。多个不一致 model identity 是内部 contract failure，不能任选一个。
+FakeLLM 的调用不等于真实 provider 或真实模型质量。
+
+### 16. timing 为零和非零的含义
+
+`extract` 与 `scan` 每次都会发生；retrieval/LLM 由 request-scoped wrapper 在实际方法调用时
+累加。没有调用严格为 0；发生调用即至少记录 1 ms，避免快速 fake call 被取整成伪造的 0。
+`total` 覆盖同步业务编排到 response 构造，并至少不小于已四舍五入阶段之和；SQLite commit
+overhead 不反写已冻结 JSON。本日数字是工程 telemetry，不是性能 benchmark。
+
+### 17. 0-finding 为什么仍是成功业务结果
+
+安全 ZIP 没有 Pydantic v1 finding 不是错误。测试验证 repository/finding/one-hop/severity/
+human-review 全为零或空集合，仍产生 analysis ID、报告和可重启读取的历史。不能把“无发现”
+与 scanner failure、invalid ZIP 或 storage failure混在一起。
+
+### 18. raw source 不持久化如何验证
+
+测试在无关 Python 注释中放入唯一 secret，完成真实 POST 后检查 API JSON、Day 20 JSON、
+Markdown 以及关闭后的 SQLite bytes 都不含该 secret。Finding 只保存 relative path、AST location、
+rule、old API 和 typed evidence；source context/tool trace/task root 都不会进入 StoredAnalysis。
+
+### 19. 依赖 builder 为什么要 lazy
+
+`build_application_dependencies()` 只组装 app-owned SQLite、Qdrant、FakeLLM 与 service，不加载
+E5、不执行 network。BM25/E5/Dense/Hybrid 在 Agent 真正调用 official-doc search 时才创建；
+Citation Guard/manifest 也在首次分析时读取并缓存可信本地 artifact。普通 app import 因此不会
+偷偷下载模型或建立第二个 Qdrant lifecycle。
+
+### 20. 测试先行暴露了什么
+
+第一次定向 collection 是 2 个 import errors，证明 tests 先于 storage types。storage 专项先为
+8 passed，完整 Day 21 首轮定向为 111 passed。第一次全量是
+`2 failed, 748 passed, 3 warnings`：旧测试还声称 schema v1/只有 metadata，并用无法表达新
+transaction 的 mock。修复是升级测试事实与 mock capability，不是放宽 production behavior。
+补齐 0-finding、无 Content-Length request-limit、序列化 identity 和 unexpected rollback 后，
+最终定向为 `117 passed, 2 warnings in 2.67s`，完整回归为
+`756 passed, 2 warnings in 10.49s`。
+
+### Day 21 后应能回答的 24 个问题
+
+1. 为什么 `/v1/analyses` endpoint 不直接拼装 Finding？
+2. 同步 201 与异步 202 的产品语义差异是什么？
+3. multipart 为什么比 Base64 JSON 更适合 ZIP + form fields？
+4. FastAPI 在 endpoint 之前对 UploadFile 做了什么？
+5. 1 MiB spool threshold 是否等于 2 MiB ZIP limit？
+6. 为什么需要 ASGI request limit、endpoint `max+1` 和 ZipGuard 三层？
+7. 为什么 `report_language` 只接受 `zh-CN`？
+8. 为什么 `llm_review` 只接受精确 `true|false` 而不是 yes/1？
+9. 201、200、202 在本项目分别意味着什么？
+10. typed error code 与底层 exception message 为什么必须分开？
+11. OpenAPI test 能证明什么，不能证明什么？
+12. 新库直建 v2 与 v1→v2 migration 有什么不同？
+13. 为什么未来 schema version 必须 fail closed？
+14. migration 中 DDL 与 metadata update 为什么同事务？
+15. analysis、JSON、Markdown 的 atomic commit 如何证明？
+16. foreign key 解决了哪类 application check 无法完全覆盖的问题？
+17. duplicate ID 为什么不能做 upsert？
+18. restart GET 为什么不允许重跑 Agent/renderer？
+19. API envelope 为什么不修改 Day 20 FinalReport schema？
+20. response `model` 如何从最终 explanation 得出？
+21. 哪些 timing 可以为 0，为什么？
+22. 0-finding、invalid ZIP 与 internal failure 如何区分？
+23. 如何证明 raw source 没进入报告和 SQLite？
+24. 哪些 Day 22/locked/真实模型/Docker 证据在本日明确没有运行？
+
+### 实际门禁与未实现边界
+
+开发前完整基线为 `728 passed, 2 warnings in 10.25s`。最终 Day 21 定向为
+`117 passed, 2 warnings in 2.67s`，完整 pytest 为
+`756 passed, 2 warnings in 10.49s`；`pip check`、全仓 Ruff、121-file format check、
+`git diff --check` 与 Compose static config 均通过。Compose 仍只有既有 Docker config
+Access denied warnings；部署文件未修改，未运行 build/up/down。
+
+明确未运行真实 LLM/provider、真实 E5/Qdrant query、locked retrieval/detection/Agent eval、
+人工 citation support、Day 22 freeze、Locust、CI、clean clone 与 Docker runtime。没有执行
+git add/commit/push/tag；精确命令和最终工作树状态以 `TASKS.md` 为准。

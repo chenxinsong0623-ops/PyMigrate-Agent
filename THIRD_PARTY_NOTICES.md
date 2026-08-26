@@ -45,6 +45,19 @@ helper. `langchain-core` and `langsmith` are present transitively in LangGraph's
 dependency chain; all transitive packages retain their own upstream licenses and
 notices.
 
+## python-multipart
+
+- Component: `python-multipart==0.0.32`
+- Upstream repository: https://github.com/Kludex/python-multipart
+- Purpose: Parse the bounded `multipart/form-data` ZIP upload accepted by the
+  FastAPI analysis endpoint.
+- License: Apache-2.0
+- License source: https://github.com/Kludex/python-multipart/blob/0.0.32/LICENSE.txt
+
+The package is a direct runtime dependency because FastAPI file/form parameters use
+its streaming multipart parser. MigrationLens still performs an independent bounded
+read, MIME check, and ZipGuard validation before analysis.
+
 ## multilingual-e5-small
 
 - Component: `intfloat/multilingual-e5-small`

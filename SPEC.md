@@ -1,8 +1,9 @@
 # MigrationLens MVP 规格说明
 
-版本：0.1.0  
+版本：0.1.1
 状态：P0 范围已冻结，可开始实施  
 冻结日期：2026-08-04  
+最新修订：2026-08-26（D-023；只落实既有 P0 API/存储范围）
 产品：MigrationLens — Pydantic v1→v2 升级影响分析 Agent
 
 ## 范围来源
@@ -205,17 +206,30 @@ chunk 按 Markdown H2/H3 标题切分，保持代码块完整，目标长度为 
 测试必须覆盖路径穿越、解压后大小限制、压缩比、成员数限制、非 UTF-8 Python
 文件和符号链接。
 
-## API 契约
+## API 与持久化契约
 
-- `POST /api/v1/analyses`：使用 `report_language=zh-CN` 和
-  `llm_review=true|false` 进行同步 multipart ZIP 分析。
-- `GET /api/v1/analyses/{analysis_id}`：获取已保存的 JSON 报告。
-- `GET /api/v1/analyses/{analysis_id}/report.md`：获取 Markdown 报告。
-- `GET /api/v1/rules`：获取受支持的规则和限制。
+- `POST /v1/analyses`：使用 `report_language=zh-CN` 和
+  `llm_review=true|false` 进行同步 multipart ZIP 分析，成功返回 `201 Created`。
+- `GET /v1/analyses/{analysis_id}`：获取原样保存的 API JSON 业务结果。
+- `GET /v1/analyses/{analysis_id}/report.json`：获取原样保存的 Day 20 canonical
+  JSON report。
+- `GET /v1/analyses/{analysis_id}/report.md`：获取原样保存的 Day 20 Markdown report。
+- `GET /v1/rules`：获取受支持的规则、报告语言和 ZIP/Agent 限制。
 - `GET /health/live`：仅检查 API 进程存活状态。
 - `GET /health/ready`：检查 SQLite、文档索引和已配置的检索后端。
 
 就绪检查必须检查实际配置的后端；正式记录后端变更后，不得继续声称使用 Qdrant。
+业务 endpoint 使用稳定 typed error envelope；不向客户端返回绝对路径、异常原文、
+traceback、SQL、raw model output、raw query 或用户源码正文。`model` 必须是实际进入最终
+解释的模型 identity；没有合法模型解释时固定为 `deterministic-fallback`。timing 只记录
+`extract/scan/retrieve/llm/total`，没有实际 retrieval/LLM 调用时对应值必须为 0。
+
+SQLite schema version `2` 包含 `system_metadata`、`analyses` 和 `reports`。新库直接建立
+v2；v1→v2 在单一事务中迁移；未知未来版本或不完整 v2 fail closed。每个成功请求必须在
+单一事务中写入 analysis envelope、Day 20 canonical JSON 与 Markdown，任何一步失败都不得
+留下半条记录。`analysis_id` 已存在时不得覆盖。ZIP 与抽取源码不进入业务表；multipart
+parser 可能在受限系统临时区短暂 spool，但整个分析请求和 ZIP 文件均受硬字节上限约束，
+endpoint 返回前必须关闭 spool，ZipGuard context 结束必须清理 task root。
 
 ## 评测契约
 

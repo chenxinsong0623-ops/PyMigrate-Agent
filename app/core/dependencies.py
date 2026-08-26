@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
+from app.application import AnalysisService, LazyOfficialDocsRetriever
 from app.core.config import Settings
+from app.core.llm import FakeLLM
 from app.core.readiness import (
     ReadinessService,
     RetrieverReadinessProbe,
@@ -46,6 +49,7 @@ class ApplicationDependencies:
     sqlite: SQLiteLifecycle
     retriever_backend: RetrieverLifecycle
     readiness: ReadinessService
+    analysis_service: AnalysisService | None = None
 
 
 def build_application_dependencies(settings: Settings) -> ApplicationDependencies:
@@ -55,6 +59,20 @@ def build_application_dependencies(settings: Settings) -> ApplicationDependencie
         timeout_seconds=settings.sqlite_timeout_seconds,
     )
     retriever_backend = build_qdrant_backend(settings)
+    repository_root = Path(__file__).resolve().parents[2]
+    analysis_service = AnalysisService(
+        storage=sqlite,
+        official_docs_retriever=LazyOfficialDocsRetriever(
+            repository_root=repository_root,
+            qdrant_backend=retriever_backend,
+            embedding_cache_path=settings.embedding_cache_path,
+            embedding_batch_size=settings.embedding_batch_size,
+            embedding_timeout_seconds=settings.embedding_timeout_seconds,
+            rrf_k=settings.rrf_k,
+        ),
+        llm_client=FakeLLM(),
+        repository_root=repository_root,
+    )
     return ApplicationDependencies(
         sqlite=sqlite,
         retriever_backend=retriever_backend,
@@ -63,4 +81,5 @@ def build_application_dependencies(settings: Settings) -> ApplicationDependencie
             retriever_backend=retriever_backend,
             timeout_seconds=settings.readiness_timeout_seconds,
         ),
+        analysis_service=analysis_service,
     )

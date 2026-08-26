@@ -634,8 +634,42 @@ manifest/snapshot/artifact 完整性复核。文档前 Day 20/Day 19/chunker 定
 真实 ZIP 集成验证 sentinel 不执行、source hash 不变、findings/one-hop
 exact preservation、allowlist/citation isolation、双 renderer 一致与 cleanup。
 
-本日没有实现业务 API、SQLite `analyses/reports`、真实 LLM/provider、locked evaluation、
-人工 citation support、CI、Locust 或 Docker runtime；Day 21 继续保持 `planned`。
+Day 20 当日没有实现业务 API、SQLite `analyses/reports`、真实 LLM/provider、locked
+evaluation、人工 citation support、CI、Locust 或 Docker runtime；当时 Day 21 仍为
+`planned`，其后续实际完成边界记录如下。
+
+### 2.20 MigrationLens Day 21 实际完成边界
+
+状态：`completed`
+原计划日期：2026-08-27
+实际开发日期：2026-08-26
+
+Day 21 新增应用级 `AnalysisService`，成为 HTTP 与既有 Day 13–20 production components
+之间的唯一同步 orchestration boundary：内存 ZIP→ZipGuard→ASTScanner→RuleScanner→
+ImportGraphBuilder→OneHopImpactAnalyzer→AnalysisToolSet→BoundedAnalysisAgent→CitationGuard→
+FinalReport→JSON/Markdown→SQLite。endpoint 不复制 Finding、one-hop、citation 或 renderer
+逻辑；official docs retriever 与 E5 adapter 只在 Agent 真实请求文档时延迟构造。
+
+P0 business prefix 固定为 `/v1`。POST 只接受 ZIP、`zh-CN` 和精确 `true|false`，成功为
+201；三个历史 GET 分别原样读取 API envelope、Day 20 JSON 和 Markdown；rules endpoint
+公开同一 production registry 和代码硬上限。API envelope schema v1 与 FinalReport schema
+独立，运行元数据不会污染 Day 20 真源。没有最终合法模型 explanation 时 model identity
+固定为 `deterministic-fallback`；没有 retrieval/LLM 调用时对应 timing 严格为 0。
+
+SQLite schema version 升到 2。新库直接建立 `system_metadata/analyses/reports`；旧 v1 在
+`BEGIN IMMEDIATE` 中迁移；未知未来版本、不完整 v2 和失败 migration fail closed/rollback。
+analysis envelope、canonical JSON 与 Markdown 在单一事务中提交，foreign key 绑定 report，
+重复 ID 不覆盖。GET 只读保存文本，不重新执行分析。
+
+Starlette multipart parser 的实际 spool threshold 为 1 MiB，所以较大合法上传可能短暂写入
+系统临时区。ASGI 层先限制整请求为 2 MiB ZIP 加 64 KiB framing，endpoint 再有界读取
+`MAX_UPLOAD_BYTES+1`、检查 MIME 并关闭 UploadFile，ZipGuard 复核 ZIP 自身上限与全部成员。
+业务表不保存 ZIP、源码、raw query/model output、异常原文、traceback 或绝对路径。
+
+测试先行首轮为 2 个 collection errors；原因是 Day 21 存储类型尚不存在。存储专项随后
+8 项通过，完整 API/ZIP/storage 定向 111 项通过；首次全量只暴露两个仍断言 v1 的旧 SQLite
+测试，按 v2/事务语义更新后通过。最终共同门禁以 `TASKS.md` 为准。没有运行真实 LLM、
+真实 E5/Qdrant query、locked evaluation、Docker runtime、CI 或 Locust；Day 22 未开始。
 
 ## 3. P0、P1 和不做范围
 
@@ -954,10 +988,11 @@ Day 20 已按本节实现 production boundary；本节仍是后续 API 与评测
 
 ### 9.1 API
 
-- `POST /api/v1/analyses`：同步 multipart ZIP 分析，仅 `zh-CN`；
-- `GET /api/v1/analyses/{analysis_id}`：保存的 JSON；
-- `GET /api/v1/analyses/{analysis_id}/report.md`：Markdown；
-- `GET /api/v1/rules`：规则和限制；
+- `POST /v1/analyses`：同步 multipart ZIP 分析，仅 `zh-CN`，成功返回 201；
+- `GET /v1/analyses/{analysis_id}`：原样保存的 API JSON；
+- `GET /v1/analyses/{analysis_id}/report.json`：Day 20 canonical JSON；
+- `GET /v1/analyses/{analysis_id}/report.md`：Markdown；
+- `GET /v1/rules`：规则、语言和限制；
 - `GET /health/live`：只检查 API 进程；
 - `GET /health/ready`：检查 SQLite、文档索引和实际配置的 retriever backend。
 
@@ -975,7 +1010,8 @@ P0 响应中的说明性文本只使用 `zh-CN`。同步分析响应至少遵守
   "model": "<actual-model-or-deterministic-fallback>",
   "repository": {
     "python_files": 18,
-    "loc": 1460,
+    "python_loc": 1460,
+    "direct_finding_count": 5,
     "directly_affected_files": 4,
     "one_hop_dependent_files": 3
   },
@@ -1001,14 +1037,15 @@ P0 响应中的说明性文本只使用 `zh-CN`。同步分析响应至少遵守
 
 ### 9.2 SQLite 与 Qdrant
 
-当前 SQLite 只有 `system_metadata`，已在 Day 3 接入 lifespan。P0 后续才增加分析
-摘要和报告存储。Qdrant lifecycle 已在 Day 7 接入应用，startup 只创建或校验
-384 维 Cosine collection；尚未写入来源 payload，也没有 search/upsert。两个客户端
-均可注入、有 timeout、生命周期关闭和故障测试。
+SQLite 已在 Day 21 升级为 schema v2：`system_metadata`、`analyses` 与 `reports`。v1→v2
+迁移和每次 analysis/report 保存分别使用独立单事务，未知版本 fail closed，历史 ID 不覆盖，
+GET 跨重启读取原样保存内容。Qdrant lifecycle 已在 Day 7 接入应用，startup 只创建或校验
+384 维 Cosine collection；Day 10 的显式 build 才 upsert 正式 payload。两个客户端均可注入、
+有 timeout、生命周期关闭和故障测试。
 
 ### 9.3 ZIP 安全
 
-Day 13 已按 D-016 实现并验证以下边界；该实现尚未接入未来业务分析 API：
+Day 13 已按 D-016 实现并验证以下边界，并由 Day 21 business API 原样复用：
 
 - 压缩文件最大 2 MiB；
 - 成员最多 200；
@@ -1163,7 +1200,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 18 | 2026-08-24 | `completed` | 五个只读 Agent 工具 | framework-neutral schema v1 tools；validated source identity、strict one-hop、full Hybrid results、single rule registry、timeout/caps/trace | Day18 定向 52 passed；Day13–18 定向 258 passed；最终完整 642 passed；真实 ZIP/offline fake docs；共同门禁通过 | 工具契约、最小权限与审计 | LangGraph Agent、Citation Guard、报告、API |
 | MigrationLens Day 19 | 2026-08-25 | `completed` | 有界 LangGraph Agent | low-level StateGraph、strict state/decision、显式五工具 dispatcher、deadline/caps、FakeLLM 与无模型回退 | test-first red 2 errors；Day19 定向 31 passed；Day13–19 相关 203 passed；完整回归与共同门禁见 `TASKS.md` | 确定性事实不由 LLM 重写；有界编排与明确降级 | Citation Guard/API、正式报告、真实 LLM、Agent 改代码 |
 | MigrationLens Day 20 | 2026-08-26 | `completed` | Citation Guard 与报告 | current-analysis allowlist、manifest/snapshot/chunk provenance、独立单次 retry、模板回退、single typed JSON/Markdown source | test-first red 4 errors；定向 116 passed；完整回归与共同门禁见 `TASKS.md`；真实 ZIP/offline fake | validity 与 support 分离、跨 analysis 隔离 | HTTP API、SQLite 报告表、人工 support |
-| MigrationLens Day 21 | 2026-08-27 | `planned` | 分析 API 与报告持久化 | 四个业务 API、analyses/reports、`zh-CN`、错误脱敏、ZIP 不落盘 | HTTPX 成功/非法/回退/重启读取/OpenAPI；共同门禁 | API/存储事务边界 | 队列、英文、认证、P1 |
+| MigrationLens Day 21 | 计划 2026-08-27；实际 2026-08-26 | `completed` | 分析 API 与报告持久化 | `/v1` 五个 business routes、schema v2 migration、analysis + JSON/Markdown 原子保存、`zh-CN`、typed errors、bounded multipart | test-first red 2 errors；storage 8 passed；API/ZIP/storage 111 passed；最终共同门禁见 `TASKS.md` | API/存储事务、spool 与历史读取边界 | 队列、英文、认证、P1、locked |
 | MigrationLens Day 22 | 2026-08-28 | `planned` | benchmark 人工复核与冻结 | 12/28 fixture、12/20 检索题、模板族、独立 evaluator 版本、manifest/hash、eval lock 和 frozen commit SHA | 用户确认 gold、条数、类别、evaluator version 和 hash；记录 frozen commit SHA；本日不运行 locked | benchmark 独立性 | 看成绩、改 gold、调行为 |
 | MigrationLens Day 23 | 2026-08-29 | `planned` | 自动化 locked 评测 | 在 frozen commit 上一次性运行 detection、retrieval、Agent 结构化输出和 citation validity，生成聚合及组件报告 | Day 22 frozen commit SHA 是硬前置；各自动 evaluator 只运行一次；共同门禁 | 冻结版本与自动证据 | 人工 citation support、性能测试、据 locked 修改或重跑 |
 | MigrationLens Day 24 | 2026-08-31 | `planned` | 人工 citation support 与失败归档 | 人工审查 20 条 finding，完成 `manual_citation_audit.csv`、`failures.md` 和 `eval.json` 聚合 | 复核证据可追溯到 Day 23 frozen run；不重新运行或调优 locked；共同门禁 | 自动 validity 与人工 support | 性能、修复 locked 暴露的行为 |
