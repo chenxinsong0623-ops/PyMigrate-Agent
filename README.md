@@ -26,6 +26,7 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 17 | `completed` | 基于 Day 14 registry 的确定性本地 import graph、严格一跳 reverse importer impact 与 1 个四文件 mixed candidate fixture |
 | MigrationLens Day 18 | `completed` | framework-neutral 的五个 typed read-only Agent tools、timeout/output caps、source isolation、safe errors 与脱敏 trace |
 | MigrationLens Day 19 | `completed` | low-level StateGraph、typed decision、显式五工具 dispatcher、shared deadline、hard limits、一次 LLM retry 与 deterministic fallback |
+| MigrationLens Day 20 | `completed` | current-analysis Citation Guard、可信 provenance、独立单次 citation retry、确定性模板与同源 typed JSON/Markdown 报告 |
 
 当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite 仍只包含最小
 `system_metadata`，不能描述为已经运行的报告存储；Qdrant startup 仍只创建或校验
@@ -59,14 +60,15 @@ absolute/relative import graph 和严格一跳 reverse importer；不做递归�
 Day 18 在这些稳定结果上新增五个 framework-neutral 只读工具。它们按单个 ZipGuard
 生命周期消费 validated inventory、findings、local graph 与固定官方文档 HybridRetriever；
 Day 19 已在该边界上新增 low-level LangGraph 编排，并继续拒绝 shell、文件写入、Web、
-任意网络 capability、scanner/retriever internals 与 source root。普通测试使用 FakeLLM，
-没有把它写成真实模型证据。
+任意网络 capability、scanner/retriever internals 与 source root。Day 20 现在在 graph 之后
+建立 current-analysis citation allowlist，并用固定 snapshot/manifest/chunk artifact 重新核验
+来源，再从同一 strict typed report 生成 `zh-CN` JSON 与 Markdown。普通测试使用 FakeLLM，
+没有把它写成真实模型或引用语义质量证据。
 
 尚未实现：
 
 - GitHub Actions；
 - final locked retrieval evaluation；
-- Citation Guard 与最终 JSON/Markdown report；
 - 分析 API、报告存储、benchmark、评测和负载测试；
 - 真实 LLM；
 - WDI-ClaimCheck 的任何业务代码。
@@ -522,7 +524,7 @@ impact = OneHopImpactAnalyzer().analyze(graph, rule_result)
 递归展开。A 有直接 finding、B import A、C import B 时，只把 B 标记为 A 的一跳 importer，
 不会把 C 传播到 A。importer 不是新 finding，也不继承 direct finding 的行号或 severity。
 
-## 五个只读 Agent 工具与有界 StateGraph
+## 五个只读 Agent 工具、有界 StateGraph 与最终报告
 
 Day 18 新增 `app.agent.AnalysisToolSet`，Day 19 只在该 capability boundary 上建立图：
 
@@ -533,7 +535,8 @@ Untrusted ZIP -> ZipGuard -> Validated Python Inventory
               -> OneHopImpactAnalyzer -> AnalysisToolContext
               -> 五个只读工具 -> BoundedAnalysisAgent / StateGraph
               -> AgentRunResult / deterministic fallback
-              -> Day 20 Citation Guard（planned）
+              -> CitationGuard -> FinalReport
+              -> JSON Report + Markdown Report
 ```
 
 - `get_findings(rule_id?, severity?)` 只过滤当前稳定 findings；
@@ -574,8 +577,24 @@ execute_tool/complete_group -> finalize`。确定性 evidence-selection groups �
 无模型、`llm_review=false`、LLM invalid/timeout/error、tool error 或任一 limit 到达时，
 fallback 仍保留全部 deterministic findings/one-hop relations，只增加稳定 human-review、
 validation 与 degraded metadata，不制造 explanation/citation success。Day 19 draft 中的 docs
-candidate 明确为 `validated=false`；citation validity/support、allowlist、citation retry 与
-最终 renderer 仍属于 Day 20。
+candidate 明确为 `validated=false`。
+
+Day 20 为候选补充当前 `analysis_id`，并让成功文档检索保存不含 raw query 的 typed
+`RetrievalBinding`：group/rule/finding identity、query SHA256、命中的可信 rule terms 与返回
+chunk IDs。Citation Guard 只把“可信全局 artifact”与“本次 `retrieved_chunks`”的交集放入
+allowlist，再校验 candidate ownership、group/finding/rule/query binding、旧 API/rule keyword、
+URL、ref、commit、heading、content/source hash 与文本截断 identity。全局存在但本次没返回的
+chunk、跨 analysis 候选和伪造 ID 都 fail closed。
+
+`validity=valid` 只证明引用身份、来源与绑定有效；所有自动通过引用仍固定
+`support_status=not_evaluated`，语义支撑留给后续人工审查。只有纯 citation-selection 错误且
+可信 allowlist 非空时，才通过既有 `LLMClient` 最多重选一次；来源、安全与身份错误不重试。
+无模型、disabled、retry 失败或 Day 19 degraded input 都使用 production rule metadata 构造
+确定性模板，不删除或改写 findings/one-hop。
+
+`FinalReport` 是 JSON 与 Markdown 的唯一真源，固定 schema v1、strict/frozen/
+extra-forbid 和 `zh-CN`。renderer 不直接消费 `AgentRunResult`，也不重复 citation 业务逻辑；
+报告不包含 raw query/model output、task root、traceback、secret、运行时间或用户源码正文。
 
 ## 本地运行
 
@@ -926,14 +945,29 @@ input/state/result 与有模型/无模型 exact-preservation 断言，并为同 
 运行 StateGraph async invoke、FakeLLM/sequence/waiting doubles、五工具与真实 ZIP，但没有
 运行真实 LLM、Qdrant/E5、Docker runtime 或 locked evaluation；其余共同门禁见 `TASKS.md`。
 
+### Day 20 验证边界
+
+2026-08-26 先建立 reporting tests；production package 尚不存在时第一次 collection 为
+`4 errors in 1.08s`，均为 `ModuleNotFoundError: No module named 'app.reporting'`。实现与可信
+source loader 修正后，继续覆盖 provenance tampering、forged/cross-analysis candidate、
+rule/query/keyword binding、独立 retry/fallback、全部 Day 19 degraded reasons、zero/one/multi
+finding、one-hop/human review、稳定 JSON/Markdown 与真实 ZIP 完整链。
+
+文档前 Day 20/Day 19/chunker 定向为 `116 passed in 4.00s`，完整回归为
+`728 passed, 2 warnings in 16.38s`。文档同步后 Day 20 专项为 `54 passed in 1.58s`，
+Day 13–20 相关联合为 `376 passed in 12.03s`，最终完整回归为
+`728 passed, 2 warnings in 15.38s`；其余共同门禁与 Git 状态见 `TASKS.md`。普通测试使用
+formal local artifacts、FakeLLM/test doubles 与 offline Retriever；没有运行真实 LLM、
+真实 Qdrant/E5、Docker runtime、locked evaluation 或人工 citation support。
+
 ## 下一开发日
 
-MigrationLens Day 20 — Citation Guard 与报告保持 `planned`，尚未开始。稳定输入是 Day 19
-原样 findings/one-hop relations、retrieved chunks provenance、unvalidated doc candidates、
-human-review items 与 degraded reason。Day 20 才能实现 allowlist/manifest citation validity、
-一次 citation retry、确定性模板 fallback 和 JSON/Markdown renderer；不得提前开始业务 API
-或 locked benchmark。P0 不采用 cross-encoder reranker；20 条 locked retrieval questions
-与 detection candidate 都没有运行或冻结为最终 holdout。
+MigrationLens Day 21 — 分析 API 与报告持久化保持 `planned`，尚未开始。稳定输入是 Day 20
+`FinalReport`、同源 JSON/Markdown renderer、typed citation validation/human-review/degraded
+metadata。Day 21 才能实现同步 business API 与 SQLite `analyses/reports`；当前仍没有 multipart
+分析 endpoint、报告 HTTP endpoint 或业务持久化。P0 不采用 cross-encoder reranker；20 条
+locked retrieval questions、detection/Agent locked evaluation 与人工 citation support 都
+没有提前运行。
 
 ## 项目文档
 
@@ -957,8 +991,9 @@ dev 三路指标；Day 13 已验证 ZIP Guard；Day 14 已验证只读 AST/regis
 已验证前四类，Day 16 已验证后四类确定性 production rules 和 candidate fixture 调用链。
 Day 17 已验证本地 graph 与严格一跳 reverse importer 调用链；Day 18 已验证五个离线只读
 tool boundary 与 source isolation；Day 19 已验证 low-level StateGraph、FakeLLM orchestration、
-timeout/limit/retry/fallback 与真实 ZIP tool integration。20 题 locked 评测、检测 locked
-benchmark、真实 LLM、Citation Guard、CI、样本量和负载测试等发布证据仍未完成，因此 MigrationLens
+timeout/limit/retry/fallback 与真实 ZIP tool integration；Day 20 已验证本地 Citation Guard、
+current-analysis isolation、typed fallback report 和同源 JSON/Markdown。20 题 locked 评测、
+检测/Agent locked benchmark、人工 citation support、真实 LLM、CI、样本量和负载测试等发布证据仍未完成，因此 MigrationLens
 尚未达到可写入简历的发布门槛。不得把 FakeEmbedding、smoke、dev
 指标、candidate label、目标阈值、计划数量或未运行命令描述为 locked 结果、生产检索
 质量、完整 detection accuracy、GPU 性能或发布证据。

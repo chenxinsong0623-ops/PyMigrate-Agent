@@ -19,6 +19,7 @@ from app.ingestion.markdown_chunker import (
     ChunkSourceValidationError,
     MarkdownChunkBuilder,
     MarkdownChunkingError,
+    calculate_chunk_id,
     calculate_text_sha256,
     load_chunk_artifact,
     main,
@@ -326,6 +327,30 @@ def test_chunk_id_and_content_hash_are_stable_and_have_distinct_meaning(
     assert first_chunk.chunk_id == second_chunk.chunk_id
     assert first_chunk.content_sha256 == calculate_text_sha256(first_chunk.text)
     assert first_chunk.chunk_id.removeprefix("sha256:") != first_chunk.content_sha256
+
+
+def test_public_chunk_identity_recomputation_matches_formal_artifact() -> None:
+    artifact = load_chunk_artifact(Path(CHUNK_ARTIFACT_PATH))
+
+    assert all(
+        chunk.chunk_id
+        == calculate_chunk_id(
+            source_id=chunk.source_id,
+            source_path=chunk.source_path,
+            heading_path=chunk.heading_path,
+            text=chunk.text,
+            identity_occurrence=chunk.identity_occurrence,
+        )
+        for chunk in artifact.chunks
+    )
+    with pytest.raises(ValueError):
+        calculate_chunk_id(
+            source_id=artifact.source_id,
+            source_path=artifact.source_path,
+            heading_path=(),
+            text="invalid occurrence",
+            identity_occurrence=-1,
+        )
 
 
 def test_text_or_heading_change_updates_only_affected_identity(tmp_path: Path) -> None:

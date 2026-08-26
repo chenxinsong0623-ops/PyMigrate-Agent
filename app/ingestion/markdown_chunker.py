@@ -60,6 +60,30 @@ def calculate_text_sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def calculate_chunk_id(
+    *,
+    source_id: str,
+    source_path: str,
+    heading_path: tuple[str, ...],
+    text: str,
+    identity_occurrence: int,
+) -> str:
+    """公开重算 Day 9 内容 identity，供后续可信引用边界复核。"""
+    if (
+        isinstance(identity_occurrence, bool)
+        or not isinstance(identity_occurrence, int)
+        or identity_occurrence < 0
+    ):
+        raise ValueError("identity occurrence 必须是非负整数")
+    identity_base = _canonical_chunk_identity(
+        source_id=source_id,
+        source_path=source_path,
+        heading_path=heading_path,
+        text=text,
+    )
+    return _chunk_id(identity_base, identity_occurrence)
+
+
 class MarkdownChunk(BaseModel):
     """Day 10 和后续引用边界可直接消费的不可变 chunk。"""
 
@@ -274,7 +298,13 @@ class MarkdownChunkBuilder:
             )
             identity_occurrence = identity_occurrences.get(identity_base, 0)
             identity_occurrences[identity_base] = identity_occurrence + 1
-            chunk_id = _chunk_id(identity_base, identity_occurrence)
+            chunk_id = calculate_chunk_id(
+                source_id=manifest.source_id,
+                source_path=manifest.path,
+                heading_path=span.heading_path,
+                text=text,
+                identity_occurrence=identity_occurrence,
+            )
             chunks.append(
                 MarkdownChunk(
                     chunk_id=chunk_id,

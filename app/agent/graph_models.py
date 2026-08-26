@@ -261,6 +261,11 @@ class ExplanationCandidate(_StrictFrozenModel):
 class SelectedDocCandidate(_StrictFrozenModel):
     """Day 20 尚未校验的引用候选关联。"""
 
+    analysis_id: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+    )
     group_id: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     finding_ids: tuple[str, ...] = Field(
         min_length=1,
@@ -268,6 +273,36 @@ class SelectedDocCandidate(_StrictFrozenModel):
     )
     chunk_id: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     validated: Literal[False] = False
+
+
+class RetrievalBinding(_StrictFrozenModel):
+    """不保存 raw query 的 group/rule/query/chunk 安全绑定。"""
+
+    group_id: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    rule_id: RuleId
+    finding_ids: tuple[str, ...] = Field(
+        min_length=1,
+        max_length=MAX_FINDINGS_PER_GROUP,
+    )
+    query_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    matched_query_terms: tuple[str, ...]
+    chunk_ids: tuple[str, ...] = Field(min_length=1, max_length=5)
+
+    @field_validator("finding_ids", "matched_query_terms", "chunk_ids")
+    @classmethod
+    def validate_unique_values(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if len(set(value)) != len(value):
+            raise ValueError("retrieval binding values 不得重复")
+        return value
+
+    @field_validator("matched_query_terms")
+    @classmethod
+    def validate_matched_terms(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not item or item != item.strip() for item in value):
+            raise ValueError("matched query terms 必须是无首尾空白的非空字符串")
+        if value != tuple(sorted(value, key=str.casefold)):
+            raise ValueError("matched query terms 必须稳定排序")
+        return value
 
 
 class HumanReviewItem(_StrictFrozenModel):
@@ -312,6 +347,9 @@ class AgentRunResult(_StrictFrozenModel):
     retrieved_chunks: tuple[OfficialDocChunk, ...] = Field(
         max_length=MAX_RETRIEVED_CHUNKS
     )
+    retrieval_bindings: tuple[RetrievalBinding, ...] = Field(
+        max_length=MAX_AMBIGUOUS_GROUPS
+    )
     agent_steps: tuple[AgentStep, ...] = Field(max_length=MAX_AGENT_STEPS)
     draft_report: AgentDraft
     validation_errors: tuple[AgentValidationError, ...] = Field(
@@ -338,6 +376,28 @@ class AgentRunResult(_StrictFrozenModel):
             raise ValueError("每个 finding 最多进入一次模型审查")
         if not set(self.reviewed_finding_ids).issubset(self.finding_ids):
             raise ValueError("reviewed IDs 必须来自 deterministic findings")
+        retrieved_ids = tuple(item.chunk_id for item in self.retrieved_chunks)
+        if len(set(retrieved_ids)) != len(retrieved_ids):
+            raise ValueError("retrieved chunks 不得重复")
+        groups = {item.group_id: item for item in self.ambiguous_groups}
+        binding_keys: set[tuple[str, str]] = set()
+        for binding in self.retrieval_bindings:
+            group = groups.get(binding.group_id)
+            if group is None:
+                raise ValueError("retrieval binding 必须属于当前 group")
+            if (
+                binding.rule_id is not group.rule_id
+                or binding.finding_ids != group.finding_ids
+            ):
+                raise ValueError("retrieval binding 必须与 group identity 对齐")
+            if not set(binding.chunk_ids).issubset(retrieved_ids):
+                raise ValueError(
+                    "retrieval binding chunks 必须来自当前 retrieved chunks"
+                )
+            key = (binding.group_id, binding.query_sha256)
+            if key in binding_keys:
+                raise ValueError("retrieval binding 不得重复")
+            binding_keys.add(key)
         if self.terminal_status is AgentTerminalStatus.COMPLETED:
             if self.degraded_reason is not None:
                 raise ValueError("completed result 不得包含 degraded reason")

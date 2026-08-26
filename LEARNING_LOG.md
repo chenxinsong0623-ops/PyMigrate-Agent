@@ -3044,3 +3044,140 @@ assertion。
 真实 ZIP 集成只使用 injected FakeLLM/offline Retriever，验证 sentinel 不执行、source hash
 不变、ignored Python 不进入分析、findings/one-hop exact preserved 与 cleanup。它不是
 真实 LLM、Qdrant/E5、citation support、locked accuracy 或 release evidence。
+
+## MigrationLens Day 20 — Citation Guard 与最终报告（2026-08-26）
+
+### 1. Citation Guard 为什么位于 Agent 之后
+
+Day 19 的模型只能提出 `SelectedDocCandidate(validated=false)`，不能自己宣布引用有效。模型
+既可能选错 chunk，也可能输出看似合法的 ID；把候选直接渲染会让“模型选择”伪装成“可信
+来源事实”。Day 20 因此采用独立流水线：`AgentRunResult -> CitationGuard -> FinalReport`。
+Guard 不改变 graph，也不给模型新增工具，只把未验证候选变成有效引用或明确拒绝项。
+
+### 2. global artifact 与 current-analysis allowlist
+
+Day 9 artifact 是全局可信 chunk 集，但“真实存在”不等于“本次允许引用”。当前报告只能使用
+本次 `AgentRunResult.retrieved_chunks` 返回过、且重新与 artifact 对照成功的 chunk：
+
+```text
+trusted global artifact ∩ current retrieved chunks = current allowlist
+```
+
+因此 Analysis A 的真实 chunk 即使 URL、commit 和 hash 全部正确，只要 Analysis B 没有检索
+返回它，B 就必须拒绝。这是 cross-analysis isolation，不是对官方文档真实性的否定。
+
+### 3. provenance、manifest 与两种 hash
+
+source manifest 固定 Pydantic ref、resolved commit、immutable raw URL、path、snapshot byte
+length 与 SHA256。chunk artifact 再把同一 source identity 传播到每个 chunk。Guard 从磁盘
+独立读取这些正式对象，不信任 Agent result 自己复制的 metadata。
+
+snapshot/source SHA256 证明完整原文 bytes；content SHA256 证明一个 chunk 的最终文本；chunk
+ID 则对 source ID/path、heading path、text 和 occurrence 做内容寻址。三者职责不同，不能用
+“chunk ID 存在”替代 URL/ref/commit/heading/content/source 全部验证。Day 20 公开
+`calculate_chunk_id()`，并对正式 artifact 的每个 ID 独立重算。
+
+### 4. 为什么需要最小 Day 19 typed extension
+
+审计发现原始 Day 19 result 没有 candidate analysis ownership，也没有冻结 Citation Contract
+要求的 rule/query evidence。仅凭 chunk 文本或模型 explanation 猜 query 会破坏 deterministic
+边界。最小修复是：candidate 保存 `analysis_id`；成功 docs search 保存
+`RetrievalBinding(group/rule/finding IDs, query SHA256, matched trusted terms, chunk IDs)`。
+
+raw query 不进入稳定结果。SHA256 提供稳定 query identity，`matched_query_terms` 只允许由
+production rule ID/category/old APIs 和当前 finding old API 确定性提取。这样 Guard 能检查
+rule/query/chunk binding，同时不复制 prompt、源码或敏感 query。
+
+### 5. candidate identity 与 fail closed
+
+有效候选必须属于当前 analysis、已知 group、精确 group finding IDs、相同 rule、当前
+allowlist 和对应 retrieval binding；重复 relation 也被拒绝。unknown group/finding、
+cross-group finding、cross-analysis/global-only chunk、forged ID、URL/ref/commit/heading/
+text/content/source hash tampering 都返回稳定 typed error，不做“尽量猜”。
+
+expected validation failure 可以被报告 builder 消费；未知 `RuntimeError` 等 programmer error
+继续传播。若 catch 所有 `Exception` 再 fallback，真正的代码 bug 会被伪装成普通无引用报告，
+既难发现，也会让安全审计失真。
+
+### 6. keyword validity 不等于语义支持
+
+冻结 SPEC 要求引用文本至少包含对应 old API 或可信 rule keyword。这个条件能排除明显无关
+chunk，但只能证明最小 validity，不证明该段文档充分支持模型解释。因此自动通过引用固定为：
+
+```text
+validity = valid
+support_status = not_evaluated
+```
+
+不能把 keyword overlap 写成 `supported=true`，不能声称 citation semantic accuracy。support
+必须在 Day 24 对冻结样本人工抽审；当前 report 也用 human-review item 明确保留这项工作。
+
+### 7. citation retry 与 Day 19 retry 为什么不同
+
+Day 19 retry 处理同一 structured Agent decision 的 malformed JSON、wrong group、LLM timeout
+或 typed LLM boundary error。Day 20 retry 只处理 citation selection，使用独立
+`citation_retry_count`，不能复用或累加 Day 19 `retry_count`。
+
+只有 no candidate、forged selection 或 keyword mismatch，且当前可信 allowlist 非空、模型
+可用、没有同时出现安全来源错误时，才通过既有 `LLMClient` 调用一次。retry 只看到当前
+group/rule/finding/old API 和 allowlisted IDs/headings；不能 Web search、扩展 allowlist、调用
+新工具或修改 Finding。第二次仍 invalid、malformed、timeout 或 typed model failure 就停止。
+
+### 8. 哪些错误绝不能交给模型“修”
+
+manifest/artifact 损坏、retrieved provenance mismatch、cross-analysis injection、unknown
+group/finding、rule/query binding mismatch 和空 allowlist 都是确定性信任边界问题。反复问模型
+不会修复本地可信来源，只会增加一次伪造机会。因此这些错误 retry count 为 0，直接 fail
+closed/fallback。最多一次不仅控制成本，也让最坏调用次数与状态转换可证明。
+
+### 9. deterministic template 与 no-model report
+
+无模型、`llm_review=false`、Day 19 degraded、没有 explanation/citation、retry 失败或 trusted
+source 不可用时仍必须有报告。fallback 原样保留 Finding、finding ID、location、severity、
+old API、matched construct、one-hop relation、degraded reason 和 human review。
+
+当前 `PRODUCTION_RULE_SPECS` 只有稳定 summary/scope，没有经项目冻结的完整 migration
+guidance。因此模板只复用这些 metadata，并明确要求结合固定官方文档人工确认，不凭模型常识
+写出“应该替换成某 API”的新业务结论。
+
+### 10. typed FinalReport 为什么是双格式单一真源
+
+如果 JSON builder 和 Markdown builder 各自读取 `AgentRunResult`，finding order、citation
+status、fallback 和 human-review 很容易漂移。Day 20 先构造 schema v1、strict/frozen/
+extra-forbid、`zh-CN` 的 `FinalReport`，再让两个 renderer 只消费该对象。
+
+`ReportFinding` 嵌入原始 deterministic `Finding` 并重算 identity；one-hop relations 原样保存；
+explanation 明确区分 agent candidate 与 template fallback；citation 只能由 trusted chunk
+构造。JSON 使用稳定 key/order，Markdown 按同一 tuple 顺序输出。相同 report 两次 render
+必须 byte/text exact equality。
+
+### 11. 脱敏、human review 与 degraded input
+
+FinalReport 不保存 task root、宿主绝对路径、raw query、raw model output、traceback、secret/
+token、timing 或用户源码正文。identity 合法但包含明显 traceback、absolute path 或 secret
+pattern 的 explanation candidate 也退回模板。Day 19 human-review items 被保留；Day 20 再为
+template fallback、citation unavailable 或 support not evaluated 添加稳定原因并去重。
+
+completed 与 degraded Day 19 result 都是合法输入。测试参数化覆盖全部稳定 degraded reason；
+缺少模型解释不能清空 deterministic findings，也不能让 renderer 拒绝生成报告。
+
+### 12. test-first、实际缺陷与当前证据
+
+production package 不存在时第一次定向 collection 为 `4 errors in 1.08s`，均为
+`ModuleNotFoundError: No module named 'app.reporting'`，是真实 red。首轮实现后为
+`20 failed, 11 passed`：根因是直接调用 Day 8 单一 third-party notice verifier，会把后来
+扩展过的全局 notices 当成早期单一 notice。修复不是跳过 provenance，而是针对 citation
+source 独立验证 manifest/snapshot/artifact/identity。
+
+随后增加 tampering、cross-analysis、forged、binding、retry safety、全部 degraded reasons、
+zero/one/multi report 与真实 ZIP tests。文档前 Day 20/Day 19/chunker 定向为
+`116 passed in 4.00s`，完整回归为 `728 passed, 2 warnings in 16.38s`。warnings 与基线相同；
+文档同步后 Day 20 专项为 `54 passed in 1.58s`，Day 13–20 相关联合为
+`376 passed in 12.03s`，最终完整回归为 `728 passed, 2 warnings in 15.38s`。pip check、
+全仓 Ruff、112-file format、diff check 与 Compose static config 均通过。warnings 与基线
+同类；普通测试完全离线，FakeLLM 不代表真实 citation quality。精确命令和 Git 状态以
+`TASKS.md` 为准。
+
+Day 21 的稳定起点是 `FinalReport`、JSON/Markdown renderer、typed validation/retry/
+human-review/degraded metadata。Day 21 才能建立同步 API 与 SQLite `analyses/reports`；Day 20
+没有 HTTP business endpoint、报告持久化、locked evaluation、真实 LLM 或人工 support 证据。

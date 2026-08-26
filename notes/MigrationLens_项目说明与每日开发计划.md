@@ -592,6 +592,51 @@ Citation Guard 前一律标记 `validated=false`，不伪造 citation。
 本日没有实现 Citation Guard、正式 JSON/Markdown renderer、业务 API、SQLite 报告表、真实
 LLM/provider 或 locked evaluation；这些边界从 Day 20 起按计划继续。
 
+### 2.19 MigrationLens Day 20 实际完成边界
+
+状态：`completed`
+原计划日期：2026-08-26
+实际开发日期：2026-08-26
+
+Day 20 在 Day 19 `AgentRunResult` 之后建立独立 `app.reporting` boundary，没有把 Citation
+Guard 塞回 StateGraph。Guard 只读验证固定 source manifest、snapshot 和 chunk artifact，
+重算 snapshot/content/chunk identity，并将可信全局 artifact 与当前 analysis 的
+`retrieved_chunks` 取交集形成 allowlist。随后校验 candidate `analysis_id`、group/finding/rule
+identity、typed retrieval binding、旧 API/rule keyword，以及 URL、ref、commit、heading、
+content/source hash 和文本/截断 metadata。真实但未在本次检索返回的全局 chunk、跨 analysis
+candidate、伪造 ID 和 provenance tampering 均 fail closed。
+
+冻结 Citation Contract 需要 rule/query 与 analysis ownership，但 Day 19 结果原先没有足够
+metadata。本日做最小 typed 补充：`SelectedDocCandidate.analysis_id`；不含 raw query 的
+`RetrievalBinding(group/rule/finding IDs, query SHA256, matched trusted terms, chunk IDs)`；以及
+公开 Day 9 `calculate_chunk_id()` 供 Guard 独立重算。该扩展不改变 findings、one-hop、五工具、
+graph loop 或 Day 19 orchestration retry。
+
+Citation validity 与 support 严格分离：自动通过只能得到 `validity=valid`，所有引用仍固定
+`support_status=not_evaluated` 并进入后续人工复核。Day 20 citation retry 使用独立 count，只有
+纯 selection 错误、当前 allowlist 非空且模型可用时，通过既有 `LLMClient` 最多调用一次；
+manifest/artifact/provenance、cross-analysis、unknown group/finding、rule/query binding 等安全
+错误不重试。无模型、disabled、Day 19 degraded 或 retry 失败时，用 production rule metadata
+构造确定性模板，不编造 registry 中不存在的 migration guidance。
+
+`FinalReport` 是 schema v1、strict/frozen/extra-forbid、`zh-CN` 的 JSON/Markdown 单一真源；
+原样嵌入 deterministic Finding 和 one-hop relations，并保留 explanation source、validated
+citations、support-not-evaluated、validation/retry、Day 19/20 human review 与 degraded metadata。
+renderer 不直接消费 Agent result，也不保存 task root、raw query/model output、traceback、
+secret、timing 或源码正文。
+
+测试先行首次为 `4 errors in 1.08s`，原因是 `app.reporting` 尚不存在。首轮实现暴露 Day 8
+单一 notice verifier 不适合后来扩展过的全局 notices，随后改为针对 citation source 的独立
+manifest/snapshot/artifact 完整性复核。文档前 Day 20/Day 19/chunker 定向为
+`116 passed in 4.00s`，完整回归为 `728 passed, 2 warnings in 16.38s`；最终共同门禁以
+`TASKS.md` 为准。文档同步后 Day 20 专项为 54 项、Day 13–20 相关联合为 376 项，最终完整
+回归仍为 728 项；pip check、Ruff、format、diff check 与 Compose static config 均通过。
+真实 ZIP 集成验证 sentinel 不执行、source hash 不变、findings/one-hop
+exact preservation、allowlist/citation isolation、双 renderer 一致与 cleanup。
+
+本日没有实现业务 API、SQLite `analyses/reports`、真实 LLM/provider、locked evaluation、
+人工 citation support、CI、Locust 或 Docker runtime；Day 21 继续保持 `planned`。
+
 ## 3. P0、P1 和不做范围
 
 ### 3.1 P0 必须完成
@@ -884,6 +929,8 @@ Day 19 的一次重试只覆盖 malformed/mismatched structured decision、明�
 
 ### 8.4 Citation Guard
 
+Day 20 已按本节实现 production boundary；本节仍是后续 API 与评测必须遵守的契约。
+
 报告只能引用本次分析检索返回的 chunk。自动 `citation_validity` 检查：
 
 - chunk ID 位于 allowlist；
@@ -1115,7 +1162,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 17 | 计划 2026-08-22；实际 2026-08-24 | `completed` | 一跳反向 import | registry-only 本地 import graph、direct findings 分离的一跳 importer；新增 1 个四文件 mixed candidate | Day17 定向 30 passed；Day14–17 定向 121 passed；完整 590 passed（文档前）；真实 ZIP/candidate 集成 | 模块影响而非调用图 | 递归图、跨文件类型、在本日补齐 40 个候选、锁定评测 |
 | MigrationLens Day 18 | 2026-08-24 | `completed` | 五个只读 Agent 工具 | framework-neutral schema v1 tools；validated source identity、strict one-hop、full Hybrid results、single rule registry、timeout/caps/trace | Day18 定向 52 passed；Day13–18 定向 258 passed；最终完整 642 passed；真实 ZIP/offline fake docs；共同门禁通过 | 工具契约、最小权限与审计 | LangGraph Agent、Citation Guard、报告、API |
 | MigrationLens Day 19 | 2026-08-25 | `completed` | 有界 LangGraph Agent | low-level StateGraph、strict state/decision、显式五工具 dispatcher、deadline/caps、FakeLLM 与无模型回退 | test-first red 2 errors；Day19 定向 31 passed；Day13–19 相关 203 passed；完整回归与共同门禁见 `TASKS.md` | 确定性事实不由 LLM 重写；有界编排与明确降级 | Citation Guard/API、正式报告、真实 LLM、Agent 改代码 |
-| MigrationLens Day 20 | 2026-08-26 | `planned` | Citation Guard 与报告 | allowlist、来源校验、一次重试、模板回退、JSON/Markdown renderer | 伪造/空/跨任务拒绝，双格式一致；共同门禁 | validity 与 support | HTTP API、SQLite 报告表 |
+| MigrationLens Day 20 | 2026-08-26 | `completed` | Citation Guard 与报告 | current-analysis allowlist、manifest/snapshot/chunk provenance、独立单次 retry、模板回退、single typed JSON/Markdown source | test-first red 4 errors；定向 116 passed；完整回归与共同门禁见 `TASKS.md`；真实 ZIP/offline fake | validity 与 support 分离、跨 analysis 隔离 | HTTP API、SQLite 报告表、人工 support |
 | MigrationLens Day 21 | 2026-08-27 | `planned` | 分析 API 与报告持久化 | 四个业务 API、analyses/reports、`zh-CN`、错误脱敏、ZIP 不落盘 | HTTPX 成功/非法/回退/重启读取/OpenAPI；共同门禁 | API/存储事务边界 | 队列、英文、认证、P1 |
 | MigrationLens Day 22 | 2026-08-28 | `planned` | benchmark 人工复核与冻结 | 12/28 fixture、12/20 检索题、模板族、独立 evaluator 版本、manifest/hash、eval lock 和 frozen commit SHA | 用户确认 gold、条数、类别、evaluator version 和 hash；记录 frozen commit SHA；本日不运行 locked | benchmark 独立性 | 看成绩、改 gold、调行为 |
 | MigrationLens Day 23 | 2026-08-29 | `planned` | 自动化 locked 评测 | 在 frozen commit 上一次性运行 detection、retrieval、Agent 结构化输出和 citation validity，生成聚合及组件报告 | Day 22 frozen commit SHA 是硬前置；各自动 evaluator 只运行一次；共同门禁 | 冻结版本与自动证据 | 人工 citation support、性能测试、据 locked 修改或重跑 |

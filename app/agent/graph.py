@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import time
 from typing import Literal, TypedDict
@@ -32,6 +33,8 @@ from app.agent.graph_models import (
     HumanReviewItem,
     RepositorySummary,
     RequestHumanReviewDecision,
+    RetrievalBinding,
+    SearchOfficialDocsCall,
     SelectedDocCandidate,
     finding_identity,
     parse_agent_decision,
@@ -49,7 +52,7 @@ from app.agent.tool_models import (
 )
 from app.agent.tools import AnalysisToolSet
 from app.core.llm import LLMClient, LLMMessage, LLMRequest
-from app.scanner import Finding, OneHopImporter
+from app.scanner import Finding, OneHopImporter, get_rule_spec
 
 _SYSTEM_PROMPT = """你是 MigrationLens 的有界解释编排器。
 AST findings 是不可删除、不可新增、不可改写的确定性事实。
@@ -80,6 +83,7 @@ class AnalysisState(TypedDict):
     ambiguous_groups: tuple[AmbiguousGroup, ...]
     overflow_finding_ids: tuple[str, ...]
     retrieved_chunks: tuple[OfficialDocChunk, ...]
+    retrieval_bindings: tuple[RetrievalBinding, ...]
     agent_steps: tuple[AgentStep, ...]
     draft_report: AgentDraft
     validation_errors: tuple[AgentValidationError, ...]
@@ -224,6 +228,7 @@ class BoundedAnalysisAgent:
             ambiguous_groups=(),
             overflow_finding_ids=(),
             retrieved_chunks=(),
+            retrieval_bindings=(),
             agent_steps=(),
             draft_report=_empty_draft(),
             validation_errors=(),
@@ -471,8 +476,11 @@ class BoundedAnalysisAgent:
             )
 
         retrieved = state["retrieved_chunks"]
+        retrieval_bindings = state["retrieval_bindings"]
         draft = state["draft_report"]
         if isinstance(result, SearchOfficialDocsResult):
+            if not isinstance(decision.call, SearchOfficialDocsCall):
+                raise RuntimeError("docs result has no typed search request")
             existing = {item.chunk_id for item in retrieved}
             new_chunks = tuple(
                 item for item in result.results if item.chunk_id not in existing
@@ -482,10 +490,27 @@ class BoundedAnalysisAgent:
                 draft = _add_doc_candidate(
                     draft,
                     SelectedDocCandidate(
+                        analysis_id=state["analysis_id"],
                         group_id=group.group_id,
                         finding_ids=group.finding_ids,
                         chunk_id=item.chunk_id,
                         validated=False,
+                    ),
+                )
+            query = decision.call.request.query
+            if result.results:
+                retrieval_bindings = (
+                    *retrieval_bindings,
+                    RetrievalBinding(
+                        group_id=group.group_id,
+                        rule_id=group.rule_id,
+                        finding_ids=group.finding_ids,
+                        query_sha256=(
+                            "sha256:"
+                            + hashlib.sha256(query.encode("utf-8")).hexdigest()
+                        ),
+                        matched_query_terms=_matched_query_terms(state, group, query),
+                        chunk_ids=tuple(item.chunk_id for item in result.results),
                     ),
                 )
         else:
@@ -501,6 +526,7 @@ class BoundedAnalysisAgent:
             "agent_steps": steps,
             "tool_calls_used": tool_calls,
             "retrieved_chunks": retrieved,
+            "retrieval_bindings": retrieval_bindings,
             "draft_report": draft,
             "current_group_index": state["current_group_index"] + 1,
             "pending_decision": None,
@@ -673,6 +699,7 @@ class BoundedAnalysisAgent:
             one_hop_importers=request.one_hop_importers,
             ambiguous_groups=preparation.groups,
             retrieved_chunks=(),
+            retrieval_bindings=(),
             agent_steps=(),
             draft_report=draft,
             validation_errors=(
@@ -859,6 +886,7 @@ def _state_to_result(
         one_hop_importers=state["one_hop_importers"],
         ambiguous_groups=state["ambiguous_groups"],
         retrieved_chunks=state["retrieved_chunks"],
+        retrieval_bindings=state["retrieval_bindings"],
         agent_steps=state["agent_steps"],
         draft_report=state["draft_report"],
         validation_errors=state["validation_errors"],
@@ -868,4 +896,31 @@ def _state_to_result(
         llm_calls_used=state["llm_calls_used"],
         reviewed_finding_ids=state["reviewed_finding_ids"],
         retry_count=state["retry_count"],
+    )
+
+
+def _matched_query_terms(
+    state: AnalysisState,
+    group: AmbiguousGroup,
+    query: str,
+) -> tuple[str, ...]:
+    """只保留命中的可信 rule terms，不把 raw query 写入稳定结果。"""
+    finding_by_id = {
+        finding_identity(finding): finding for finding in state["findings"]
+    }
+    rule_spec = get_rule_spec(group.rule_id)
+    candidates = {
+        group.rule_id.value,
+        group.rule_id.value.removeprefix("pydantic_v1_"),
+        rule_spec.category.value,
+        rule_spec.category.value.replace("_", " "),
+        *rule_spec.old_apis,
+        *(finding_by_id[item].old_api for item in group.finding_ids),
+    }
+    folded_query = query.casefold()
+    return tuple(
+        sorted(
+            {term for term in candidates if term.casefold() in folded_query},
+            key=str.casefold,
+        )
     )

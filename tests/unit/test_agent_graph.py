@@ -680,8 +680,15 @@ async def test_search_tool_result_becomes_unvalidated_day20_candidate(
 
     assert retriever.calls == ["root model migration"]
     assert result.retrieved_chunks[0].chunk_id == _hybrid_result().chunk_id
-    assert result.draft_report.selected_doc_candidates[0].validated is False
-    assert result.draft_report.selected_doc_candidates[0].group_id == group.group_id
+    candidate = result.draft_report.selected_doc_candidates[0]
+    assert candidate.validated is False
+    assert candidate.analysis_id == result.analysis_id
+    assert candidate.group_id == group.group_id
+    assert result.retrieval_bindings[0].group_id == group.group_id
+    assert result.retrieval_bindings[0].rule_id is group.rule_id
+    assert result.retrieval_bindings[0].finding_ids == group.finding_ids
+    assert result.retrieval_bindings[0].matched_query_terms == ("root model",)
+    assert result.retrieval_bindings[0].chunk_ids == (candidate.chunk_id,)
     assert "citation_valid" not in result.model_dump(mode="json")
 
 
