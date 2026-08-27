@@ -733,8 +733,9 @@ heading/hash 静态 integrity review，没有调用 locked retriever。
 
 用户已完成最终人工确认；approved prepare 连续两次生成相同 Manifest/EvalLock bytes/hash，
 static verify 通过，并记录 `corpus_review_status=human_review_completed`、
-`user_review_status=approved`、lock=`ready_for_user_commit`、locked=`NOT RUN`。当前只等待用户
-milestone commit 和 read-only verify-commit；最终门禁与 hash 以 `TASKS.md` 为准。
+`user_review_status=approved`。随后用户完成 milestone commit，Day24 对 frozen commit
+`3bec58084e13d0734b891d290099a0695ec8dab6` 执行 read-only verify-commit 并通过；Day24 已首次
+且单次消费 locked benchmark，最终门禁与 hash 以 `TASKS.md` 为准。
 
 ## 3. P0、P1 和不做范围
 
@@ -1269,7 +1270,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 21 | 计划 2026-08-27；实际 2026-08-26 | `completed` | 分析 API 与报告持久化 | `/v1` 五个 business routes、schema v2 migration、analysis + JSON/Markdown 原子保存、`zh-CN`、typed errors、bounded multipart | test-first red 2 errors；storage 8 passed；API/ZIP/storage 111 passed；最终共同门禁见 `TASKS.md` | API/存储事务、spool 与历史读取边界 | 队列、英文、认证、P1、locked |
 | MigrationLens Day 22 | 计划 2026-08-28；实际 2026-08-26 | `guardrails_complete` | benchmark freeze guardrails | 独立 static evaluator v1、12/28 与 12/20 fail-closed schema、manifest/lock builder、atomic publish、two-phase commit binding 与 anti-leakage tests；当日正式 freeze 因 corpus incomplete 而 blocked | preflight 仅 10 candidate，缺 16 single-positive/7 negative/7 mixed；真实 prepare exit 2 且无输出；定向与共同门禁见 `TASKS.md` | benchmark 独立性、冻结自引用规避 | 当日补 fixture、看成绩、改 gold、调行为、自动 commit |
 | MigrationLens Day 23 | 2026-08-27 | `benchmark_frozen` | 正式 Detection corpus、全量 Gold review 与 final approval | 40 fixtures、51 Python files、24/8/8、DEV 12/LOCKED 28、APPROVE 40、unresolved 0、approved Manifest/EvalLock、deterministic rebuild 与 static verify passed | 仅 source/contract/provenance 静态复核；24 项 freeze tests；最终共同门禁见 `TASKS.md` | corpus 独立性、Gold/approval/commit binding 分层 | locked scoring、自动 Git 操作、修改 production |
-| MigrationLens Day 24 | 2026-08-29 | `planned` | 自动化 locked 评测 | 在 approved frozen commit 上一次性运行 detection、retrieval、Agent 结构化输出和 citation validity，生成聚合及组件报告 | approved lock + verified frozen commit SHA 是硬前置；各自动 evaluator 只运行一次；共同门禁 | 冻结版本与自动证据 | 人工 citation support、性能测试、据 locked 修改或重跑 |
+| MigrationLens Day 24 | 2026-08-27 | `locked_run_completed_with_metric_failure` | 首次且单次 locked 自动评测 | verified frozen commit `3bec58084e13d0734b891d290099a0695ec8dab6` 上一次性消费 Detection 28、Retrieval 20 与 Agent 28；runner SHA `872536341dfb0492801c0140a12f8613b074a3a35ba669b37b47949ac50add6d`；sealed reports 已生成且 rerun=0 | Detection P/R/F1=1.0/1.0/1.0；negative FP fixtures=0；one-hop=1.0；BM25 R@3=1.0，Dense R@3=0.6，Hybrid R@3=0.9；Hybrid 达到 0.90 且高于 Dense，但低于 BM25；Agent structured/finding completeness=1.0，citation validity=0.0，support NOT_EVALUATED/Day25；共同门禁见 `TASKS.md` | 一次性 holdout 消费、sealed evidence、自动 validity 与人工 support 分离 | 人工 citation support、性能测试、据 locked 修改或重跑 |
 | MigrationLens Day 25 | 2026-08-31 | `planned` | 人工 citation support 与失败归档 | 人工审查 20 条 finding，完成 `manual_citation_audit.csv`、`failures.md` 和 `eval.json` 聚合 | 复核证据可追溯到 Day 24 frozen run；不重新运行或调优 locked；共同门禁 | 自动 validity 与人工 support | 性能、修复 locked 暴露的行为 |
 | MigrationLens Day 26 | 2026-09-01 | `planned` | 性能与负载证据 | scanner、FakeLLM、条件式真实模型、硬件/commit/hash/sample | Locust、loadtest；样本规则和 Fake/real 分离；共同门禁 | 统计口径与样本量 | 样本不足填 p95、CI、发布文档 |
 | MigrationLens Day 27 | 2026-09-02 | `planned` | CI 与安全门禁 | FakeLLM GitHub Actions、依赖检查、secret 扫描和发布候选安全测试摘要 | CI 实际运行；pytest/Ruff/安全测试精确结果写入 `reports/test-summary.txt`；共同门禁 | 离线 CI 与发布安全 | clean clone、Docker 复验、自动 commit/push |
@@ -1282,11 +1283,12 @@ Days 15–17 只按当日规则或一跳边界增量建立候选 fixture，并�
 
 Day 22 只完成了独立 evaluator/冻结 guardrails，并因 corpus incomplete 而 blocked。经用户
 授权后，Day 23 已作为独立 prerequisite day 完成 corpus、全量 Gold 复核、最终用户 approval、
-approved prepare 与 static verify；用户 commit 和 verify-commit 仍是下一步硬门禁。门禁通过后，Day 24
-只运行自动化 locked evaluator，Day 25 只进行人工 citation support 与失败归档。Day 24 后若
-改变行为，旧 locked 结果不能继续作为最终证据。Days 26–29 分别负责性能、CI/安全、
-clean clone/Docker 和发布文档，不得重新
-合并成一个发布日。
+approved prepare、static verify、milestone commit 与 `verify-commit`。Day 24 已在该 frozen
+commit 上首次且单次消费 locked benchmark，并把 Detection、Retrieval 与 Agent 自动评测结果
+封存到 `reports/`；其中 Hybrid locked R@3 低于 BM25 是真实 metric failure，不能通过调参或
+重跑修正。Day 25 只进行人工 citation support 与失败归档。Day 24 后若改变行为，旧 locked
+结果不能继续作为最终证据。Days 26–29 分别负责性能、CI/安全、clean clone/Docker 和发布文档，
+不得重新合并成一个发布日。
 
 ## 12. 历史编号迁移说明
 

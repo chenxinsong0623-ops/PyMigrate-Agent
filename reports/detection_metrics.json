@@ -1,0 +1,163 @@
+{
+  "ablations": [
+    {
+      "f1": 0.4736842105263157,
+      "fn": 8,
+      "fp": 72,
+      "precision": 0.3333333333333333,
+      "recall": 0.8181818181818182,
+      "system": "regex_baseline",
+      "tp": 36
+    },
+    {
+      "f1": 0.4025974025974026,
+      "fn": 13,
+      "fp": 79,
+      "precision": 0.2818181818181818,
+      "recall": 0.7045454545454546,
+      "system": "ast_name_only_baseline",
+      "tp": 31
+    }
+  ],
+  "attempts": 1,
+  "component": "detection",
+  "evaluator_sha256": "872536341dfb0492801c0140a12f8613b074a3a35ba669b37b47949ac50add6d",
+  "evaluator_version": "migrationlens-day24-locked-evaluator-v1",
+  "false_positive_fixture_count": 0,
+  "fixture_count": 28,
+  "frozen_benchmark_sha256": "a005ed2b6c44f26c5c9d5ab8b9f42815b8f4521190808934f14fe2fcf1512ecf",
+  "frozen_commit": "3bec58084e13d0734b891d290099a0695ec8dab6",
+  "line_location_accuracy": {
+    "accuracy": 1.0,
+    "denominator": 44,
+    "formula": "exact-line / predictions whose (file, rule_id) matches positive gold",
+    "numerator": 44
+  },
+  "negative_fixtures": [
+    {
+      "fixture_id": "locked-negative-method-receivers",
+      "has_false_positive": false,
+      "predicted_finding_count": 0
+    },
+    {
+      "fixture_id": "locked-negative-ordinary-config",
+      "has_false_positive": false,
+      "predicted_finding_count": 0
+    },
+    {
+      "fixture_id": "locked-negative-rebinding",
+      "has_false_positive": false,
+      "predicted_finding_count": 0
+    },
+    {
+      "fixture_id": "locked-negative-similar-imports",
+      "has_false_positive": false,
+      "predicted_finding_count": 0
+    },
+    {
+      "fixture_id": "locked-negative-text-only",
+      "has_false_positive": false,
+      "predicted_finding_count": 0
+    },
+    {
+      "fixture_id": "locked-negative-type-evidence",
+      "has_false_positive": false,
+      "predicted_finding_count": 0
+    }
+  ],
+  "one_hop_accuracy": {
+    "accuracy": 1.0,
+    "denominator": 9,
+    "forbidden_negative_relation_incorrectly_emitted": 0,
+    "formula": "(positive_correct + negative_correct) / (positive_gold + negative_gold + unexpected_predictions)",
+    "negative_relation_correct": 1,
+    "positive_relation_correct": 8,
+    "positive_relation_missed": 0,
+    "unexpected_relation_emitted": 0
+  },
+  "overall": {
+    "f1": 1.0,
+    "fn": 0,
+    "fp": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "tp": 44
+  },
+  "per_rule": {
+    "pydantic_v1_base_model_method": {
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 4
+    },
+    "pydantic_v1_config": {
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 10
+    },
+    "pydantic_v1_data_loading": {
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 3
+    },
+    "pydantic_v1_field": {
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 10
+    },
+    "pydantic_v1_generic_model": {
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 5
+    },
+    "pydantic_v1_root_model": {
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 4
+    },
+    "pydantic_v1_settings": {
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 3
+    },
+    "pydantic_v1_validator": {
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 5
+    }
+  },
+  "rerun_count": 0,
+  "schema_version": 1,
+  "targets": {
+    "negative_fp_fixture_le_1": {
+      "observed": 0,
+      "status": "PASS",
+      "target": 1
+    },
+    "precision_ge_0_92": {
+      "observed": 1.0,
+      "status": "PASS",
+      "target": 0.92
+    },
+    "recall_ge_0_85": {
+      "observed": 1.0,
+      "status": "PASS",
+      "target": 0.85
+    }
+  }
+}

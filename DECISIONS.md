@@ -707,3 +707,48 @@
   操作、补造 Day 22 commit、运行 locked scoring、修改 Gold/fixture 或弱化 validator。
 - 影响：只更新 Manifest/EvalLock 的 workflow approval 状态及五份项目文档；corpus、Gold、
   review semantics、evaluator、production behavior、SPEC、依赖和部署均不改变。
+
+## D-027 — Day 24 one-shot locked evaluator、sealed evidence 与 rerun guard
+
+- 日期：2026-08-27
+- 状态：已接受；首次 locked 自动评测已消费并封存
+- 决策：
+  - Day 24 locked scoring 在 verified frozen commit
+    `3bec58084e13d0734b891d290099a0695ec8dab6` 和 clean worktree 上启动。运行前
+    `verify-commit` 必须通过，且 Day24 evaluator 先在 ignored temporary path
+    `var/tmp/day24-evaluator/locked_evaluator.py` 中开发、用 DEV/synthetic 数据验证并计算
+    SHA256，不改变 tracked frozen system-under-test；
+  - locked consumption boundary 定义为第一条 locked fixture/question 进入 production
+    `ZipGuard -> ASTScanner -> RuleScanner -> ImportGraphBuilder -> OneHopImpactAnalyzer`、
+    Retriever 或 Agent 路径的时刻。该边界之后即使指标失败也不得重跑、调参、改 Gold、
+    改 fixture 或改 production；
+  - Day24 evaluator 使用 production path 先捕获 raw predictions，再由独立 scoring logic 读取
+    Gold 计算指标。Detection exact key 固定为 `(fixture_id, file, line, rule_id)`；line accuracy、
+    one-hop accuracy、retrieval Recall@1/3 与 MRR@5、Agent structured/citation-validity/fallback
+    口径均在 locked run 前由 selftest/dev-smoke 固定；
+  - locked run artifact 一次性发布到 `reports/day24_raw_evidence.json`、
+    `reports/detection_metrics.json`、`reports/retrieval_metrics.csv`、
+    `reports/retrieval_ablation.csv`、`reports/agent_metrics.json`、
+    `reports/eval_manifest.json` 和 `reports/eval.json`。JSON 使用 canonical serialization，
+    report hashes 写入 manifest/raw evidence；raw evidence 不保存 raw fixture source、raw query、
+    secrets、`.env` 或模型私密内容；
+  - rerun guard 绑定 Day24 artifact existence、`locked_run_consumed=true`、`run_attempt=1`、
+    evaluator version/hash 与 sealed report status。任一正式 Day24 artifact 已存在时，普通
+    one-shot command 必须 fail closed，不能覆盖已消费结果；
+  - locked run 完成后，实际执行的 evaluator exact bytes 归档为
+    `app/evaluation/locked.py`，其 SHA256 必须与 run metadata 中的
+    `872536341dfb0492801c0140a12f8613b074a3a35ba669b37b47949ac50add6d` 一致。后续 ordinary
+    pytest 只能测试 scorer/guard、DEV/synthetic 或静态 schema/hash，不得再次把 locked 输入
+    production。
+- 原因：Day 24 的价值是首次、单次、可追溯地暴露 frozen system 在未知 locked holdout 上的
+  真实表现。先改 tracked runner 再运行会污染 frozen HEAD；运行后根据结果调 Scanner、
+  Retrieval 或 Agent 会把 holdout 变成开发集；没有 sealed raw evidence 和 rerun guard 则无法
+  区分一次性正式结果、失败重试和事后改写。
+- 替代方案：未采用 tracked repo 先改后测、`--force/--rerun`、可选 locked path/gold/query
+  参数、基础设施失败当作 miss、Dense failure 自动降级为 BM25-only、根据 locked 指标调整
+  BM25/RRF/E5/query/Scanner、把 Agent 自动 validity 冒充人工 support，或把 locked reports
+  覆盖成更好看的结果。
+- 影响：新增 Day24 locked evaluator archive、ordinary scorer/guard tests 和七个 locked run
+  reports；不改变 SPEC、Gold、fixtures、production Scanner/ImportGraph/OneHop、Retriever、
+  Agent、Citation Guard、API、存储、依赖、配置或部署。Day25 继续只做人工 citation support
+  与失败归档，不能重跑 Day24 locked evaluator。

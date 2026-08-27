@@ -3541,3 +3541,105 @@ Freeze 专项为 `24 passed in 5.25s`，Rules 定向 `56 passed in 0.97s`，Impo
 `780 passed, 2 warnings in 17.22s`。pip check、全仓 Ruff、175-file format check、diff check
 和 Compose static config 均通过；Compose 仍只有既有 Docker config access warnings。
 部署未修改，没有运行 Docker runtime，也没有执行 git add/commit/push/tag。
+
+## 2026-08-27：MigrationLens Day 24 — 首次且单次 Locked Benchmark 自动评测
+
+### 1. locked 只运行一次
+
+Day24 的成功标准不是指标漂亮，而是在冻结、可信、只运行一次的条件下取得真实结果并封存。
+本轮 frozen commit 是 `3bec58084e13d0734b891d290099a0695ec8dab6`，运行前 branch=`main`、
+worktree clean，`verify-commit` 通过，frozen benchmark SHA256 为
+`a005ed2b6c44f26c5c9d5ab8b9f42815b8f4521190808934f14fe2fcf1512ecf`。从第一条 locked
+fixture/question 进入 Scanner/Retriever/Agent 开始，`locked_run_consumed=true`，后续不得
+因为指标或 bug 重新运行。
+
+### 2. evaluator 与 system-under-test 隔离
+
+当前 frozen commit 没有 tracked locked scorer，所以 Day24 runner 先在 ignored
+`var/tmp/day24-evaluator/` 开发，并用 selftest、DEV detection smoke、普通 pytest、Ruff、
+pip、Qdrant/E5/index preflight 验证。正式运行前再次确认 clean worktree 和 `verify-commit`
+PASS。locked 完成后才把 exact bytes 归档为 `app/evaluation/locked.py`，runner SHA256 为
+`872536341dfb0492801c0140a12f8613b074a3a35ba669b37b47949ac50add6d`。
+
+### 3. Detection 真实 locked 数字
+
+Detection locked 输入是 28 fixtures：16 single、6 negative、6 mixed。production path 是
+fixture source → in-memory ZIP → ZipGuard → ASTScanner → RuleScanner → ImportGraphBuilder →
+OneHopImpactAnalyzer；Gold 只在 prediction 捕获后用于 scoring。结果为 TP=44、FP=0、
+FN=0、Precision=1.0、Recall=1.0、F1=1.0。八类 rule 的 P/R 均为 1.0/1.0；6 个 locked
+negative fixture 预测 finding count 全为 0，false-positive fixture count=0。line-location
+accuracy=44/44=1.0；one-hop accuracy=9/9=1.0，其中 positive correct=8、missed=0、
+negative correct=1、unexpected=0。
+
+### 4. Detection ablation 的作用
+
+regex baseline 在 locked 上为 TP=36、FP=72、FN=8、Precision=0.333333、Recall=0.818182、
+F1=0.473684；AST name-only baseline 为 TP=31、FP=79、FN=13、Precision=0.281818、
+Recall=0.704545、F1=0.402597。它们是评测用消融，不进入 production Scanner，也不能据
+locked 结果回头改 rule。
+
+### 5. Retrieval 真实 locked 数字
+
+Retrieval locked 输入是 20 questions。三路使用同一 raw query；BM25 k1=1.5、b=0.75，Dense
+使用 fixed `intfloat/multilingual-e5-small` revision
+`614241f622f53c4eeff9890bdc4f31cfecc418b3`，Qdrant collection 为
+`migrationlens-documents`，384 维 Cosine，固定 62-point index 验证通过。locked 结果：
+BM25 R@1=0.95、R@3=1.0、MRR@5=0.975；Dense R@1=0.45、R@3=0.6、
+MRR@5=0.508333；Hybrid R@1=0.6、R@3=0.9、MRR@5=0.758333。Hybrid R@3 达到 0.90
+目标且高于 Dense，但低于 BM25；这是真实 metric failure，不能调 RRF 或重跑。
+
+### 6. Agent 自动 locked 数字
+
+Agent 只评 structured output、citation validity、finding field completeness、fallback、tool
+usage 和 token availability，不评 explanation accuracy。真实 LLM 未启用；model identity 记录为
+`deterministic-fallback`，LLM calls=0，tool calls=0，token usage=`not_available`。28 cases 中
+structured-output success rate=1.0，finding completeness=1.0，fallback attempts=44、success=44，
+degraded cases=22。citation total=31、valid=0、invalid=31、validity rate=0.0；citation support
+保持 `NOT_EVALUATED / Day25`，不能把自动 validity 当作人工 support。
+
+### 7. 指标与失败记录
+
+Detection targets 全部 PASS：Precision ≥0.92、Recall ≥0.85、negative FP fixture ≤1。Retrieval
+targets 中 Hybrid R@3 ≥0.90 PASS、Hybrid ≥ Dense PASS、Hybrid ≥ BM25 FAIL。没有基础设施
+failure 或 evaluator failure；唯一明确 metric failure 是 Hybrid locked R@3 低于 BM25。失败
+本身不是修改系统的授权，Day25 只能做人工 citation support 与失败归档。
+
+### 8. raw evidence 与 rerun guard
+
+Day24 生成 `reports/day24_raw_evidence.json`、`reports/detection_metrics.json`、
+`reports/retrieval_metrics.csv`、`reports/retrieval_ablation.csv`、
+`reports/agent_metrics.json`、`reports/eval_manifest.json` 和 `reports/eval.json`。raw evidence
+记录 prediction/ranking/fallback/citation-validity 证据，但不保存 raw source、raw query、
+secret、token 或 `.env`。rerun guard 发现 Day24 artifact 已存在且 `locked_run_consumed=true`
+或 `run_attempt=1` 时 fail closed；普通 pytest 只测试 scorer/guard，不消费 locked。
+
+### 9. 28 个核心学习点
+
+1. locked benchmark 只能一次，因为看过结果后它就不再是未知 holdout。
+2. dev 用于开发和调试，locked 只用于冻结后的最终估计。
+3. frozen commit 固定了被测系统身份。
+4. `verify-commit` 证明 HEAD、Manifest、EvalLock 与 benchmark hash 一致。
+5. evaluator 在临时路径开发可以不污染 frozen commit。
+6. consumption boundary 是 locked 输入第一次进入 production component。
+7. Detection TP/FP/FN 必须用 exact key 统计，不能模糊匹配。
+8. Precision 衡量误报控制，Recall 衡量漏报控制。
+9. F1 是 P/R 的派生值，没有单独发明阈值。
+10. Per-rule 指标能暴露局部 rule 风险。
+11. Negative fixtures 专门测 false positive。
+12. line accuracy 要独立统计，因为 finding 对了但行号错仍影响可用性。
+13. one-hop accuracy 是 relation 指标，不能混进 direct finding F1。
+14. Recall@1/3 看 gold 是否进入前 K。
+15. MRR@5 奖励更靠前的首次命中。
+16. BM25、Dense、Hybrid 是三路真实系统，不是互相替代的假设。
+17. Target PASS/FAIL 只记录 observed，不授权调参。
+18. Hybrid 低于 BM25 后不能改 RRF，因为这会污染 locked。
+19. infrastructure failure 与 miss 不同，不能偷偷记成检索失误。
+20. structured output success 只证明 schema 结果可产生。
+21. citation validity 是引用来源是否被 guard 接受。
+22. citation support 是人工判断引用是否真正支持陈述，留到 Day25。
+23. deterministic fallback 不能冒充真实 LLM。
+24. tool usage 和 token usage 必须按可观测 metadata 记录。
+25. immutable raw evidence 让后续审计能复算报告。
+26. one-shot guard 不能靠开发者记忆，必须由 artifact 阻断。
+27. locked 后修 bug 必须换新 unseen holdout 才能重新作为最终证据。
+28. Day25 接人工 citation support 与失败归档，不接调参、性能或 CI。

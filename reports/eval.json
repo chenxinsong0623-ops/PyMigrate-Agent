@@ -1,0 +1,103 @@
+{
+  "agent": {
+    "case_count": 28,
+    "citation_invalid": 31,
+    "citation_total": 31,
+    "citation_valid": 0,
+    "citation_validity_rate": 0.0,
+    "degraded_cases": 22,
+    "fallback_attempts": 44,
+    "fallback_success": 44,
+    "finding_field_completeness_rate": 1.0,
+    "model_identity": "deterministic-fallback",
+    "per_tool": {},
+    "structured_output_success_rate": 1.0,
+    "token_usage": "not_available",
+    "tool_calls": 0
+  },
+  "citation_support": "NOT_EVALUATED / Day25",
+  "detection": {
+    "overall": {
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 44
+    },
+    "targets": {
+      "negative_fp_fixture_le_1": {
+        "observed": 0,
+        "status": "PASS",
+        "target": 1
+      },
+      "precision_ge_0_92": {
+        "observed": 1.0,
+        "status": "PASS",
+        "target": 0.92
+      },
+      "recall_ge_0_85": {
+        "observed": 1.0,
+        "status": "PASS",
+        "target": 0.85
+      }
+    }
+  },
+  "integrity": {
+    "fixtures_unchanged": true,
+    "gold_unchanged": true,
+    "model_revision_unchanged": true,
+    "no_rerun": true,
+    "no_tuning_from_locked_results": true,
+    "production_behavior_unchanged": true,
+    "retrieval_parameters_unchanged": true
+  },
+  "locked_run_consumed": true,
+  "rerun_count": 0,
+  "retrieval": {
+    "aggregates": {
+      "bm25": {
+        "mrr_at_5": 0.975,
+        "question_count": 20,
+        "recall_at_1": 0.95,
+        "recall_at_3": 1.0,
+        "system": null
+      },
+      "dense": {
+        "mrr_at_5": 0.5083333333333333,
+        "question_count": 20,
+        "recall_at_1": 0.45,
+        "recall_at_3": 0.6,
+        "system": null
+      },
+      "hybrid": {
+        "mrr_at_5": 0.7583333333333334,
+        "question_count": 20,
+        "recall_at_1": 0.6,
+        "recall_at_3": 0.9,
+        "system": null
+      }
+    },
+    "targets": {
+      "hybrid_recall_at_3_ge_0_90": {
+        "observed": 0.9,
+        "status": "PASS",
+        "target": 0.9
+      },
+      "hybrid_recall_at_3_ge_bm25": {
+        "observed_bm25": 1.0,
+        "observed_hybrid": 0.9,
+        "status": "FAIL"
+      },
+      "hybrid_recall_at_3_ge_dense": {
+        "observed_dense": 0.6,
+        "observed_hybrid": 0.9,
+        "status": "PASS"
+      }
+    }
+  },
+  "run_attempt": 1,
+  "run_id": "day24-3bec58084e13-1787815381",
+  "schema_version": 1,
+  "status": "completed"
+}

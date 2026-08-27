@@ -1,0 +1,95 @@
+{
+  "components": {
+    "agent": {
+      "component": "agent",
+      "consumed": true,
+      "expected_count": 28,
+      "failure_type": null,
+      "locked_inputs": [
+        "data/evaluation/detection/locked.json",
+        "production detection outputs"
+      ],
+      "processed_count": 28,
+      "rerun_count": 0,
+      "run_attempt": 1,
+      "run_completed_at": "2026-08-27T07:23:21Z",
+      "run_started_at": "2026-08-27T07:23:20Z",
+      "status": "completed"
+    },
+    "detection": {
+      "component": "detection",
+      "consumed": true,
+      "expected_count": 28,
+      "failure_type": null,
+      "locked_inputs": [
+        "data/evaluation/detection/locked.json",
+        "data/evaluation/detection/fixtures/locked/"
+      ],
+      "processed_count": 28,
+      "rerun_count": 0,
+      "run_attempt": 1,
+      "run_completed_at": "2026-08-27T07:23:01Z",
+      "run_started_at": "2026-08-27T07:23:01Z",
+      "status": "completed"
+    },
+    "retrieval": {
+      "component": "retrieval",
+      "consumed": true,
+      "expected_count": 20,
+      "failure_type": null,
+      "locked_inputs": [
+        "data/evaluation/retrieval/locked_candidates.json"
+      ],
+      "processed_count": 20,
+      "rerun_count": 0,
+      "run_attempt": 1,
+      "run_completed_at": "2026-08-27T07:23:20Z",
+      "run_started_at": "2026-08-27T07:23:01Z",
+      "status": "completed"
+    }
+  },
+  "frozen_identity": {
+    "benchmark_version": "migrationlens-p0-benchmark-v1",
+    "branch": "main",
+    "chunks_sha256": "36ab67593a997edb81cf0385d74213471b95bf5c915e551e92461e88192b1773",
+    "commit_sha": "3bec58084e13d0734b891d290099a0695ec8dab6",
+    "cpu_identity": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "detection_dev_sha256": "2b5ad6c461b184b9e3ab153c2949ed17ce0b93b8b7da7be8e39598ca49ffead0",
+    "detection_locked_sha256": "f2a68a586c7b75a33b54f72d6b01aa6e652932200a689fad1b1e654d479194a8",
+    "detection_review_sha256": "d6428c706c15bdf37fc266b358db98c8341af77c3ab091603f3407ed655343b7",
+    "eval_lock_sha256": "d599f97480c9f9e15dd05f9cbdd177eb69eb8a6da399f14e601bcf50726ed7ca",
+    "evaluator_sha256": "872536341dfb0492801c0140a12f8613b074a3a35ba669b37b47949ac50add6d",
+    "evaluator_version": "migrationlens-day24-locked-evaluator-v1",
+    "fixture_source_aggregate_sha256": "119f204c3d864620a6c805ccbbff12b1a183048c30d03a2f8d46bc02fe83f60a",
+    "frozen_benchmark_sha256": "a005ed2b6c44f26c5c9d5ab8b9f42815b8f4521190808934f14fe2fcf1512ecf",
+    "gold_artifact_aggregate_sha256": "d4328bd39d8f4bccb9d5ad68bfae7b0ad1b1cdcedf2f9198b7485349f2e135de",
+    "locked_fixture_source_aggregate_sha256": "930726372fe4caf4bbed8c1060b169c4ded555954ef5a5acca881d6b1cef5949",
+    "manifest_sha256": "ef9d18ce9d6181094067a45d5cd228f7b174cc60113f53837faf4fe46e5349c9",
+    "official_source_manifest_sha256": "22f954dc65b5f691e2e9d015079e530adc0a45623e482cc0fa910f5ed59f9c1e",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "pydantic_ref": "v2.13.4",
+    "pydantic_snapshot_sha256": "3a33c005259e6ede170df1904a168a4a64e8d8efc5b7fed360b65e5c000c05b7",
+    "python_version": "3.11.15",
+    "reference_evaluator_source_hashes": {
+      "app/evaluation/artifacts.py": "50d97da2fa041b93c5afa43dc174b6c337df14f9b607d10e97fe76314f74b61f",
+      "app/evaluation/benchmark.py": "c377eca3a5b2bce46cbce1d3e88c6f92e2b7d13a9186002a516f6fcac5d71312"
+    },
+    "resolved_upstream_commit": "cf67d4b3193c3fe43ede18612ed62785eee11382",
+    "retrieval_dev_sha256": "89a2602fec98c12ced414539ba0152409a85a368e6cbdbf309ed9af50403e9c7",
+    "retrieval_locked_sha256": "df0b46bb90c96f7f2967ceb9b1439e6659a202473e1dc679642b4f492cce7f56"
+  },
+  "locked_run_consumed": true,
+  "no_locked_evaluator_was_rerun": true,
+  "reports": {
+    "reports/agent_metrics.json": "5bd9231421c22b4c53a92b45c392d124f5d9e416500a71f497551e511da21c23",
+    "reports/detection_metrics.json": "12a16128eef68fcbc0930057168a699186485a7ab453e51e18688a0a08194671",
+    "reports/eval.json": "c0f4ba7977e84f1f2c9a7cada4876c71615adab3d0290e7c1add690e54170159",
+    "reports/eval_manifest.json": "cc9d2ecc3a77b5d6941022e8356ba2d6c32e57f6086f7fc3c90eb4ee145cb104",
+    "reports/retrieval_ablation.csv": "c42e89852e64e4a20028040ca20a9f3bea7f5ac76c61b6c3d24ff74ae8f470b2",
+    "reports/retrieval_metrics.csv": "c42e89852e64e4a20028040ca20a9f3bea7f5ac76c61b6c3d24ff74ae8f470b2"
+  },
+  "rerun_count": 0,
+  "run_attempt": 1,
+  "run_id": "day24-3bec58084e13-1787815381",
+  "schema_version": 1
+}
