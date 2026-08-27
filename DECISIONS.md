@@ -594,3 +594,116 @@
   `app/core/dependencies.py`、`app/main.py`、`pyproject.toml`、第三方 notice 与 Day 21 测试
   遵守本契约。Day 22 benchmark 冻结、locked evaluation、真实 LLM、CI、Locust、Docker
   runtime 与发布流程均不在本日范围。
+
+## D-024 — Day 22 独立 reference evaluator、两阶段冻结与 incomplete corpus 门禁
+
+- 日期：2026-08-26
+- 状态：已接受；正式 freeze 因 detection prerequisite incomplete 而阻断
+- 决策：
+  - reference evaluator identity 固定为
+    `migrationlens-reference-evaluator-v1`。实现位于
+    `app/evaluation/benchmark.py`，只依赖标准库、Pydantic strict schema 与独立的
+    `app/evaluation/artifacts.py` 原子发布工具；不得 import 或调用 production finding
+    生成、应用编排或检索执行模块。evaluator source path 与 SHA256 进入未来 manifest，
+    因此逻辑变化必须提升 version 或至少通过 source hash 形成显式可追踪变化；
+  - 正式 detection gold 物理拆分为
+    `data/evaluation/detection/dev.json` 与 `locked.json`，fixture source 分别位于
+    `fixtures/dev/` 与 `fixtures/locked/`。schema 独立记录 split、fixture kind、primary
+    rule、direct gold 与单独的 one-hop gold，并 fail closed 验证 12/28、8/2/2 与
+    16/6/6 kind 分布、每规则 dev 1 + locked 2 个单规则变体、1–4 个 Python files、
+    30–200 LOC、真实 inventory、line、metadata、heading 与重复 key；
+  - retrieval 继续复用 Day 12 的 12/20 两个物理 artifact，但由 Day 22 evaluator 独立解析
+    bytes，静态验证 schema、八类各 4、ID、NFKC/casefold/whitespace text、template family
+    与 fixed Day 9 heading；该路径没有评分或被测系统调用入口；
+  - 完整 corpus 才能确定性发布
+    `data/manifests/migrationlens-benchmark-v1.json` 与根目录 `eval_lock.json`。两者使用
+    canonical UTF-8 JSON、relative path、SHA256、stable ordering、temporary sibling、
+    flush、fsync 与 replace/rollback；相同输入和相同 review status 必须产生相同 bytes；
+  - manifest/lock 始终记录 `locked_run_status/not_run`，不包含 metric。用户尚未确认时
+    lock=`pending_user_review`；用户明确复核后才可用 prepare 的 approved 状态形成
+    `ready_for_user_commit`。两者都记录 `pending_user_commit`，不把 Day 21 HEAD 冒充
+    Day 22 frozen commit；
+  - commit SHA 采用无自引用的外部绑定：`prepare -> user review -> user commit ->
+    verify-commit`。只读 `verify-commit --commit <40-hex>` 要求 approved lock、当前 HEAD
+    精确相等、worktree clean 且全部 hash 可重算；它不改 tracked artifact。Day 23 才把该
+    SHA 写入运行报告/评测 metadata，因此不会出现“写 SHA 又改变 commit”的循环；
+  - 当前真实 detection artifact 仍是 schema v1/status=candidate 的 10 projects：8 个
+    single-rule positive、1 个 negative、1 个 mixed，未分 dev/locked。相对总体 24/8/8
+    设计还缺 16/7/7，共 30 个 fixture。冻结日不得补齐、重命名或从 production output
+    反推 gold；因此当前 prepare 必须退出 2，且不得留下 manifest 或 `eval_lock.json`。
+- 原因：冻结价值来自在未知 locked 成绩时固定输入、gold、evaluator 与代码 identity。
+  incomplete corpus、自动把 candidate 当 holdout、运行后补 gold 或把旧 HEAD 写成 frozen
+  SHA 都会使最终指标失去独立性；外部 commit 绑定和 fail-closed builder 可以保持
+  benchmark 可追溯且避免自引用。
+- 替代方案：未采用冻结日临时生成 30 个 fixture、candidate 直接改名、production output
+  生成 gold、可选择 locked scoring 的 CLI、Python `hash()`、绝对路径、timestamp identity、
+  部分 publish、在 tracked lock 内回填 commit SHA，或自动 git add/commit/push/tag。
+- 影响：新增 Day 22 evaluator/atomic publish 与离线 synthetic contract tests；不改变八类
+  production rule、Retriever、Agent、Citation Guard、报告、API、存储、依赖、配置或部署。
+  `SPEC.md` 的 P0 数量和 locked policy 不变，不需要发布新 SPEC 版本。
+
+## D-025 — Day 23 corpus completion、独立 Gold review 与 approval 分离
+
+- 日期：2026-08-27
+- 状态：已接受；corpus review 完成，最终用户批准待确认
+- 决策：
+  - 仓库每日任务禁止子编号，因此用户提出的“Day22.5”登记为独立 MigrationLens Day 23。
+    Day 22 guardrails 的 fail-closed 结论不被回写；自动化 locked evaluation 顺延到 Day 24，
+    后续计划日相应顺延；
+  - 正式 Detection corpus 固定为 40 fixtures：24 `single_rule_positive`、8 `negative`、
+    8 `mixed`；物理 split 固定为 DEV 12（8/2/2）与 LOCKED 28（16/6/6）。八类 rule 各有
+    DEV 1 + LOCKED 2 个 single fixture；51 个 Python source 的声明 inventory 必须与物理
+    inventory exact match，且禁止 exact-source duplicate；
+  - Gold 只能由 fixture source、SPEC、既有 decisions、Day 14–17 静态 contract 和固定
+    Pydantic source/snapshot/chunks 独立建立。禁止调用 RuleScanner、OneHopImpactAnalyzer、
+    Retriever 或 Agent 生成 prediction 后反推 Gold，也禁止为适配 fixture 修改 production；
+  - 新增 `data/evaluation/detection/review.json` 作为冻结输入。它必须覆盖 DEV/LOCKED 全部
+    fixture、记录首轮状态/correction/review passes，并且 final status 全为 `APPROVE`、
+    unresolved disputes=0；不完整 review 与未批准项均 fail closed；
+  - corpus review 的 `human_review_completed` 与用户的 `pending_user_review` 是两个不同状态。
+    前者表示 Codex 已完成逐项 source/Gold 预审，后者表示最终 freeze 仍需用户明确确认；
+    pending prepare 可以生成可审阅 Manifest/EvalLock，但不得冒充 approved freeze；
+  - 既有 10 candidates 初审为 KEEP 9、FIX 0、REPLACE 1；候选 artifact 保留为历史增量数据，
+    不直接改名为正式 holdout。全量第二遍 review 首轮为 APPROVE 39、NEEDS_CHANGE 1、
+    REJECT 0；证据不足的 GenericModel data-loading receiver 改为显式 BaseModel receiver，
+    不改变 Scanner contract，修正后最终 APPROVE 40；
+  - commit binding 名称由特定日期的 `external_day23_git_verification` 改为通用
+    `external_post_review_git_verification`；D-024 的外部绑定实质不变：approved prepare →
+    用户 commit → read-only `verify-commit`。当前不得运行 locked scoring、approved prepare、
+    git add/commit/push/tag。
+- 原因：corpus completion 是一个可独立测试和验收的主要工程目标，不能塞回已结束且明确
+  blocked 的 Day 22，也不能和一次性 locked evaluation 合并。把 review artifact、用户批准
+  和 commit binding 分层，可以证明 Gold 在未知 locked 成绩时已经固定，同时保留用户作为
+  最终 freeze gate。
+- 替代方案：未采用 `Day22.5` 子编号、复制同模板改变量名、candidate 直接改名、production
+  prediction 生成 Gold、为歧义 fixture 扩张 Scanner、二跳冒充一跳、自动 approved、提前
+  locked scoring、自动 Git 操作或把 pending artifact 描述成 final freeze。
+- 影响：新增正式 detection split/source/review artifact，扩展独立 evaluator 的 review 与
+  source-uniqueness 门禁，并生成 pending-review Manifest/EvalLock；不改变 SPEC、八类规则、
+  production Scanner/ImportGraph/OneHop、Retriever、Agent、API、存储、依赖或部署。
+
+## D-026 — 最终人工批准、approved freeze 与单一 milestone commit
+
+- 日期：2026-08-27
+- 状态：已接受；approved freeze 完成，commit binding 待完成
+- 决策：
+  - 用户已亲自确认全部 40 个 fixture、Gold 与 review 结果，最终人工复核状态固定为
+    `human_review_completed`，`user_review_status` 从 `pending_user_review` 转为 `approved`；
+  - 使用既有独立 evaluator 执行正式 `prepare --user-review-status approved`，生成 FINAL
+    Manifest 与 EvalLock。连续两次 prepare 必须产生 byte/hash 相同的 artifacts，随后 static
+    `verify` 必须重算全部冻结文件、evaluator、official source、Detection 与 Retrieval identity；
+  - approved lock 状态为 `ready_for_user_commit`，commit binding 仍为
+    `pending_user_commit`。Day 22 guardrails 没有独立 commit，禁止通过 rebase/reset/stash/
+    checkout 补造历史；Day 22 guardrails + Day 23 corpus/review + final approved freeze 由用户
+    作为一个 benchmark milestone commit 提交；
+  - 用户 commit 后必须以真实 HEAD 执行只读 `verify-commit --commit <SHA>`。只有该命令通过
+    且 worktree clean，才可 push 并进入 Day 24 首次 locked evaluation；
+  - approved freeze 仍只固定 benchmark identity，不运行 locked Detection/Retrieval/Agent
+    scoring，也不计算 Precision、Recall、F1、MRR、Recall@K 或 Agent locked metrics。
+- 原因：最终用户确认满足 D-024/D-025 的 approval gate；确定性双重 prepare 和 static verify
+  可以在不消费 locked 样本的情况下证明 freeze artifacts 完整。单一 milestone commit忠实
+  反映当前 Git 历史，避免通过危险历史改写伪造不存在的 Day 22 commit。
+- 替代方案：未采用保留 pending 状态、混用旧 pending hash、提前 `verify-commit`、自动 Git
+  操作、补造 Day 22 commit、运行 locked scoring、修改 Gold/fixture 或弱化 validator。
+- 影响：只更新 Manifest/EvalLock 的 workflow approval 状态及五份项目文档；corpus、Gold、
+  review semantics、evaluator、production behavior、SPEC、依赖和部署均不改变。

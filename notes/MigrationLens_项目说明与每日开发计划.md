@@ -1,6 +1,6 @@
 # MigrationLens 项目说明与每日开发计划
 
-更新时间：2026-08-25
+更新时间：2026-08-26
 产品：MigrationLens — Pydantic v1→v2 升级影响分析 Agent
 权威范围：`SPEC.md`
 
@@ -671,6 +671,71 @@ Starlette multipart parser 的实际 spool threshold 为 1 MiB，所以较大合
 测试，按 v2/事务语义更新后通过。最终共同门禁以 `TASKS.md` 为准。没有运行真实 LLM、
 真实 E5/Qdrant query、locked evaluation、Docker runtime、CI 或 Locust；Day 22 未开始。
 
+### 2.21 MigrationLens Day 22 实际完成边界与阻塞
+
+状态：`blocked`
+原计划日期：2026-08-28
+实际开发日期：2026-08-26
+
+Day 22 开发前 `main@1aa273e`、worktree clean；完整基线为
+`756 passed, 2 warnings in 21.93s`，pip check、Ruff、format、diff 与 Compose static
+config 通过。只读 preflight 确认 detection 仍只有 schema v1/status=candidate 的 10 个
+projects、13 个 Python files、35 positive/20 negative direct labels 和 3 positive/1 negative
+one-hop labels。fixture composition 为 8 single-rule positive、1 negative、1 mixed，且没有
+正式 dev/locked split；相对 24/8/8 总设计还缺 16/7/7，共 30 个 fixture。根据既有计划，
+这些缺口不得在冻结日本日补齐，也不得把 candidate 改名或从 production output 反推 gold。
+
+Retrieval preflight 仍为 12 dev + 20 locked candidates；总计八类各 4，dev template families
+为 `dev_code_review`/`dev_upgrade_review`，locked 为 `locked_dependency_breakage`、
+`locked_incident_diagnosis`、`locked_migration_checklist`，两侧 ID、normalized question 和
+template family 无交叉，gold headings 均存在于固定 62-chunk artifact。该步骤只解析 bytes
+和静态 metadata，没有调用 BM25、E5、Qdrant、Hybrid 或产生 Recall/MRR。
+
+本日新增独立 `migrationlens-reference-evaluator-v1`：只用标准库、Pydantic strict schema
+与独立原子 artifact publisher，验证 detection 12/28、kind/rule/category/severity、真实
+inventory/LOC/line、direct/one-hop 分离、gold heading/hash，以及 retrieval 12/20、八类、
+污染、template family、heading/hash 和官方 snapshot/chunk provenance。它不 import 被测
+business modules，也不提供任何 locked scoring 入口。
+
+完整 corpus 才能确定性发布 `data/manifests/migrationlens-benchmark-v1.json` 和根目录
+`eval_lock.json`。两阶段协议为 pending user review → explicit approved prepare → user commit →
+read-only `verify-commit`；commit SHA 由后续 locked run metadata 外部绑定，不回写 tracked lock，
+避免自引用。当前真实 `prepare` 退出码 2、状态 BLOCKED，且 manifest/lock 均未创建；所以
+没有 benchmark/manifest/lock hash、用户 approval 或 frozen commit SHA。locked detection、
+locked retrieval 与 Agent locked evaluation 全部 `NOT RUN`。
+
+### 2.22 MigrationLens Day 23 corpus completion 与全量 Gold 复核
+
+状态：`benchmark_frozen / commit_binding_pending`
+实际开发日期：2026-08-27
+
+仓库治理不允许 `Day22.5` 子编号，因此用户授权的 prerequisite 工作登记为独立 Day 23，
+自动化 locked evaluation 顺延为 Day 24。本日没有修改 production Scanner、ImportGraph、
+OneHop、Retriever 或 Agent，也没有从这些组件的 prediction 反推 Gold。
+
+正式 Detection corpus 已补齐为 40 fixtures、51 个 Python files，物理 split 为 DEV 12
+（8 single/2 negative/2 mixed）和 LOCKED 28（16/6/6），总体严格为 24/8/8。八类 production
+rule 各有 DEV 1 + LOCKED 2 个 single fixture。ID、路径、Gold key、one-hop relation 与 exact
+source hash 均无重复，声明 inventory 与物理 Python inventory exact match，source 全部为
+30–200 LOC 且可被标准库 AST 解析。
+
+历史 10 candidates 保留为历史增量 artifact，初审结论为 KEEP 9、FIX 0、REPLACE 1；唯一旧
+mixed candidate 不直接升级为正式 holdout。全量第二遍 source review 首轮为 APPROVE 39、
+NEEDS_CHANGE 1、REJECT 0：`locked-mixed-generic-data` 的 GenericModel receiver 超出当前
+data-loading identity proof，故改为显式 BaseModel receiver 并同步 line Gold，而不是扩张
+production contract。最终 40 项全部 APPROVE，unresolved disputes=0；review 记录在
+`data/evaluation/detection/review.json` 并进入冻结 hash。
+
+正式 Gold 为 84 positive/78 negative direct labels、12 positive/2 negative one-hop labels。
+六个 Gold heading 均精确存在于固定 Day 9 chunk artifact，继续保持 source manifest → fixed
+snapshot → chunk → heading → Gold provenance。Retrieval 只做 12/20 的 ID/text/template/
+heading/hash 静态 integrity review，没有调用 locked retriever。
+
+用户已完成最终人工确认；approved prepare 连续两次生成相同 Manifest/EvalLock bytes/hash，
+static verify 通过，并记录 `corpus_review_status=human_review_completed`、
+`user_review_status=approved`、lock=`ready_for_user_commit`、locked=`NOT RUN`。当前只等待用户
+milestone commit 和 read-only verify-commit；最终门禁与 hash 以 `TASKS.md` 为准。
+
 ## 3. P0、P1 和不做范围
 
 ### 3.1 P0 必须完成
@@ -779,10 +844,11 @@ flowchart LR
 E5/Qdrant/BM25/Dense/Hybrid 所在的 `app/retrieval`，以及 dev evaluator 所在的
 `app/evaluation`、Day 13 ZIP Guard 所在的 `app/security`，以及 Day 14 AST/registry 与
 Day 15–16 八类 production rules、Day 17 local import graph/impact 所在的 `app/scanner`，
-以及 Day 18 五个只读工具和 Day 19 bounded StateGraph 所在的 `app/agent`；尚无业务
-reporting 实现。Day 12 的 `reports/retrieval_dev_*` 是项目评测
-artifact，不是分析报告存储；Day 15–17 detection artifact 仍是 candidate，不是 locked
-结果。
+以及 Day 18 五个只读工具和 Day 19 bounded StateGraph 所在的 `app/agent`，Day 20
+`app/reporting` 与 Day 21 `app/application`/business API/storage v2，以及 Day 22 独立静态
+benchmark evaluator 所在的 `app/evaluation`。Day 12 的 `reports/retrieval_dev_*` 是项目
+评测 artifact，不是分析报告存储；Day 15–17 detection artifact 仍是 candidate，不是
+locked 结果。
 
 ## 6. 数据与文档快照
 
@@ -1201,22 +1267,25 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 19 | 2026-08-25 | `completed` | 有界 LangGraph Agent | low-level StateGraph、strict state/decision、显式五工具 dispatcher、deadline/caps、FakeLLM 与无模型回退 | test-first red 2 errors；Day19 定向 31 passed；Day13–19 相关 203 passed；完整回归与共同门禁见 `TASKS.md` | 确定性事实不由 LLM 重写；有界编排与明确降级 | Citation Guard/API、正式报告、真实 LLM、Agent 改代码 |
 | MigrationLens Day 20 | 2026-08-26 | `completed` | Citation Guard 与报告 | current-analysis allowlist、manifest/snapshot/chunk provenance、独立单次 retry、模板回退、single typed JSON/Markdown source | test-first red 4 errors；定向 116 passed；完整回归与共同门禁见 `TASKS.md`；真实 ZIP/offline fake | validity 与 support 分离、跨 analysis 隔离 | HTTP API、SQLite 报告表、人工 support |
 | MigrationLens Day 21 | 计划 2026-08-27；实际 2026-08-26 | `completed` | 分析 API 与报告持久化 | `/v1` 五个 business routes、schema v2 migration、analysis + JSON/Markdown 原子保存、`zh-CN`、typed errors、bounded multipart | test-first red 2 errors；storage 8 passed；API/ZIP/storage 111 passed；最终共同门禁见 `TASKS.md` | API/存储事务、spool 与历史读取边界 | 队列、英文、认证、P1、locked |
-| MigrationLens Day 22 | 2026-08-28 | `planned` | benchmark 人工复核与冻结 | 12/28 fixture、12/20 检索题、模板族、独立 evaluator 版本、manifest/hash、eval lock 和 frozen commit SHA | 用户确认 gold、条数、类别、evaluator version 和 hash；记录 frozen commit SHA；本日不运行 locked | benchmark 独立性 | 看成绩、改 gold、调行为 |
-| MigrationLens Day 23 | 2026-08-29 | `planned` | 自动化 locked 评测 | 在 frozen commit 上一次性运行 detection、retrieval、Agent 结构化输出和 citation validity，生成聚合及组件报告 | Day 22 frozen commit SHA 是硬前置；各自动 evaluator 只运行一次；共同门禁 | 冻结版本与自动证据 | 人工 citation support、性能测试、据 locked 修改或重跑 |
-| MigrationLens Day 24 | 2026-08-31 | `planned` | 人工 citation support 与失败归档 | 人工审查 20 条 finding，完成 `manual_citation_audit.csv`、`failures.md` 和 `eval.json` 聚合 | 复核证据可追溯到 Day 23 frozen run；不重新运行或调优 locked；共同门禁 | 自动 validity 与人工 support | 性能、修复 locked 暴露的行为 |
-| MigrationLens Day 25 | 2026-09-01 | `planned` | 性能与负载证据 | scanner、FakeLLM、条件式真实模型、硬件/commit/hash/sample | Locust、loadtest；样本规则和 Fake/real 分离；共同门禁 | 统计口径与样本量 | 样本不足填 p95、CI、发布文档 |
-| MigrationLens Day 26 | 2026-09-02 | `planned` | CI 与安全门禁 | FakeLLM GitHub Actions、依赖检查、secret 扫描和发布候选安全测试摘要 | CI 实际运行；pytest/Ruff/安全测试精确结果写入 `reports/test-summary.txt`；共同门禁 | 离线 CI 与发布安全 | clean clone、Docker 复验、自动 commit/push |
-| MigrationLens Day 27 | 2026-09-03 | `planned` | clean clone 与 Docker 复现 | 从干净目录按 README 构建；API+Qdrant compose；live、ready 和代表性分析请求 | clean clone pytest/Ruff/compose；实际 build/up/health/request/down；保存复现日志 | 可复现部署与真实 backend | 改业务行为、补写未运行结果、发布文案 |
-| MigrationLens Day 28 | 2026-09-04 | `planned` | 发布文档与工程发布门槛 | README、架构、复现、安全、限制、许可证、演示脚本和全部证据索引一致；形成 v1.0 候选清单 | 全部发布门槛逐项映射到真实文件、命令、commit/hash；未通过项阻断发布 | 证据化交接与简历边界 | P1、补数字、自动 commit/push/tag 或公开发布 |
+| MigrationLens Day 22 | 计划 2026-08-28；实际 2026-08-26 | `guardrails_complete` | benchmark freeze guardrails | 独立 static evaluator v1、12/28 与 12/20 fail-closed schema、manifest/lock builder、atomic publish、two-phase commit binding 与 anti-leakage tests；当日正式 freeze 因 corpus incomplete 而 blocked | preflight 仅 10 candidate，缺 16 single-positive/7 negative/7 mixed；真实 prepare exit 2 且无输出；定向与共同门禁见 `TASKS.md` | benchmark 独立性、冻结自引用规避 | 当日补 fixture、看成绩、改 gold、调行为、自动 commit |
+| MigrationLens Day 23 | 2026-08-27 | `benchmark_frozen` | 正式 Detection corpus、全量 Gold review 与 final approval | 40 fixtures、51 Python files、24/8/8、DEV 12/LOCKED 28、APPROVE 40、unresolved 0、approved Manifest/EvalLock、deterministic rebuild 与 static verify passed | 仅 source/contract/provenance 静态复核；24 项 freeze tests；最终共同门禁见 `TASKS.md` | corpus 独立性、Gold/approval/commit binding 分层 | locked scoring、自动 Git 操作、修改 production |
+| MigrationLens Day 24 | 2026-08-29 | `planned` | 自动化 locked 评测 | 在 approved frozen commit 上一次性运行 detection、retrieval、Agent 结构化输出和 citation validity，生成聚合及组件报告 | approved lock + verified frozen commit SHA 是硬前置；各自动 evaluator 只运行一次；共同门禁 | 冻结版本与自动证据 | 人工 citation support、性能测试、据 locked 修改或重跑 |
+| MigrationLens Day 25 | 2026-08-31 | `planned` | 人工 citation support 与失败归档 | 人工审查 20 条 finding，完成 `manual_citation_audit.csv`、`failures.md` 和 `eval.json` 聚合 | 复核证据可追溯到 Day 24 frozen run；不重新运行或调优 locked；共同门禁 | 自动 validity 与人工 support | 性能、修复 locked 暴露的行为 |
+| MigrationLens Day 26 | 2026-09-01 | `planned` | 性能与负载证据 | scanner、FakeLLM、条件式真实模型、硬件/commit/hash/sample | Locust、loadtest；样本规则和 Fake/real 分离；共同门禁 | 统计口径与样本量 | 样本不足填 p95、CI、发布文档 |
+| MigrationLens Day 27 | 2026-09-02 | `planned` | CI 与安全门禁 | FakeLLM GitHub Actions、依赖检查、secret 扫描和发布候选安全测试摘要 | CI 实际运行；pytest/Ruff/安全测试精确结果写入 `reports/test-summary.txt`；共同门禁 | 离线 CI 与发布安全 | clean clone、Docker 复验、自动 commit/push |
+| MigrationLens Day 28 | 2026-09-03 | `planned` | clean clone 与 Docker 复现 | 从干净目录按 README 构建；API+Qdrant compose；live、ready 和代表性分析请求 | clean clone pytest/Ruff/compose；实际 build/up/health/request/down；保存复现日志 | 可复现部署与真实 backend | 改业务行为、补写未运行结果、发布文案 |
+| MigrationLens Day 29 | 2026-09-04 | `planned` | 发布文档与工程发布门槛 | README、架构、复现、安全、限制、许可证、演示脚本和全部证据索引一致；形成 v1.0 候选清单 | 全部发布门槛逐项映射到真实文件、命令、commit/hash；未通过项阻断发布 | 证据化交接与简历边界 | P1、补数字、自动 commit/push/tag 或公开发布 |
 
 Days 15–17 只按当日规则或一跳边界增量建立候选 fixture，并持续记录数量与类别；
 不得要求 Day 17 在一天内补齐 40 个候选。如果 Day 17 后仍有缺口，应在 Day 22 前
 增加独立计划日，不能在冻结日临时生成。
 
-Day 22 只做人审、独立 evaluator 复核、hash 和冻结；用户确认并产生 frozen commit
-SHA 后，Day 23 才可开始。Day 23 只运行自动化 locked evaluator，Day 24 只进行人工
-citation support 与失败归档。Day 23 后若改变行为，旧 locked 结果不能继续作为最终
-证据。Days 25–28 分别负责性能、CI/安全、clean clone/Docker 和发布文档，不得重新
+Day 22 只完成了独立 evaluator/冻结 guardrails，并因 corpus incomplete 而 blocked。经用户
+授权后，Day 23 已作为独立 prerequisite day 完成 corpus、全量 Gold 复核、最终用户 approval、
+approved prepare 与 static verify；用户 commit 和 verify-commit 仍是下一步硬门禁。门禁通过后，Day 24
+只运行自动化 locked evaluator，Day 25 只进行人工 citation support 与失败归档。Day 24 后若
+改变行为，旧 locked 结果不能继续作为最终证据。Days 26–29 分别负责性能、CI/安全、
+clean clone/Docker 和发布文档，不得重新
 合并成一个发布日。
 
 ## 12. 历史编号迁移说明

@@ -3367,3 +3367,177 @@ Access denied warnings；部署文件未修改，未运行 build/up/down。
 明确未运行真实 LLM/provider、真实 E5/Qdrant query、locked retrieval/detection/Agent eval、
 人工 citation support、Day 22 freeze、Locust、CI、clean clone 与 Docker runtime。没有执行
 git add/commit/push/tag；精确命令和最终工作树状态以 `TASKS.md` 为准。
+
+## 2026-08-26：MigrationLens Day 22 — benchmark 人工复核与冻结（BLOCKED）
+
+### 1. Freeze preflight 必须先于 builder
+
+开发前 branch=`main`、HEAD=`1aa273e feat(api): add Day21 analysis API and persistence`，
+worktree clean。指定解释器基线为 `756 passed, 2 warnings in 21.93s`；pip check、Ruff、
+format、diff 与 Compose static config 通过。该基线只证明 Day 21 commit 可回归，不证明
+Day 22 benchmark 已存在或 locked 已运行。
+
+只读 corpus audit 得到 detection candidate 10 projects/13 Python files、35 positive 与
+20 negative direct labels、3 positive/1 negative one-hop labels。按 fixture kind 是 8 个
+single-rule positive、1 个 negative、1 个 mixed，没有正式 dev/locked split。冻结设计需要
+24/8/8，因此仍缺 16/7/7，共 30 个。既有计划已经写明 fixture 不能在冻结日临时补齐，
+所以正确结果是 BLOCKED，而不是把当前 10 个改名后声称 10/40 frozen。
+
+Retrieval 静态 audit 仍为 12/20，共 32，八类各 4。dev families 是
+`dev_code_review`、`dev_upgrade_review`；locked families 是
+`locked_dependency_breakage`、`locked_incident_diagnosis`、
+`locked_migration_checklist`。两侧 ID、normalized text 与 family 无交叉，gold heading
+存在于固定 Day 9 chunks。dev/locked SHA256 仍分别为
+`89a2602fec98c12ced414539ba0152409a85a368e6cbdbf309ed9af50403e9c7` 与
+`df0b46bb90c96f7f2967ceb9b1439e6659a202473e1dc679642b4f492cce7f56`。这些是静态 bytes
+证据，不是 Recall/MRR。
+
+### 2. Reference evaluator 为什么必须独立定义 schema
+
+Day 22 evaluator version 为 `migrationlens-reference-evaluator-v1`。它没有复用会 import
+production result types 的 dev evaluator，而是独立定义 detection/retrieval/source strict
+schema，仅用 fixture/source bytes、固定 SPEC 数量、人工 gold、Day 8 manifest/snapshot 与
+Day 9 chunks 复核 identity。source AST test 明确禁止被测业务模块 import，并检查公共 CLI
+只有 `prepare`、`verify` 与 `verify-commit`，没有评分动作。
+
+Detection 正式 schema 把 direct `(source path,line,rule)` gold 与 one-hop relation 分开，
+并物理要求 `fixtures/dev/`、`fixtures/locked/`。它重算真实 Python inventory、UTF-8/LOC、
+line、rule/category/severity、heading、source hash；再验证 dev 8/2/2、locked 16/6/6 和每
+rule dev 1 + locked 2 个单规则变体。Retrieval 独立复核 12/20、八类各 4、NFKC/casefold/
+whitespace text、template family 和 gold heading，完全不构造 query 或调用被测系统。
+
+### 3. Manifest、lock 与 commit 自引用
+
+完整 corpus 才能发布 `data/manifests/migrationlens-benchmark-v1.json` 和根目录
+`eval_lock.json`。canonical JSON 不含 timestamp、absolute path、mtime 或 Python `hash()`；
+记录 evaluator source、全部 benchmark/source bytes、aggregate SHA256、official provenance、
+review status 与 locked=`not_run`。相同输入和相同 review status 重建 bytes/hash 相同；
+missing/changed/duplicate/malformed/future schema 全部 fail closed。
+
+commit SHA 不能写入 commit 前的 tracked lock 后再反复改写。D-024 采用两阶段外部绑定：
+pending review prepare → 用户明确 approved prepare → 用户 commit → 只读
+`verify-commit --commit <sha>`。最后一步要求 approved lock、HEAD exact match、clean worktree
+与 hash 重算通过，但不写文件；Day 23 report 才记录 SHA。
+
+### 4. Atomic publish 与真实阻断结果
+
+公共 artifact publisher 先对所有 sibling temp 完成 write/flush/fsync，再按稳定 path replace；
+已有目标使用 sibling backup，任一 replace 失败回滚旧 bytes，并清理本轮 temp/backup。
+injected failure 测试证明不会留下一个新文件加一个旧文件的半发布状态。
+
+测试先行首次在 collection 阶段得到
+`ModuleNotFoundError: No module named 'app.evaluation.artifacts'`。实现后首轮为
+`17 passed, 1 failed`，唯一失败是测试错误地把 argparse help action 当作 subparser；修正
+test inspection 后通过。扩展 source/gold/evaluator tamper 与 duplicate lock path 后，文档前
+Day 22 定向为 `22 passed in 6.53s`。
+
+当前仓库真实执行 `python -m app.evaluation.benchmark prepare --repo-root .` 返回退出码 2、
+`benchmark_freeze_status=BLOCKED: benchmark input is missing`；`data/manifests/
+migrationlens-benchmark-v1.json` 与 `eval_lock.json` 均不存在。该命令先完成 current retrieval
+静态校验，再因 detection dev/locked artifact 缺失停止。locked detection、locked retrieval、
+Agent locked evaluation 均 `NOT RUN`，也没有 git add/commit/push/tag。
+
+最终 Day 22 专项为 `22 passed in 3.74s`，完整回归为
+`778 passed, 2 warnings in 13.54s`；pip check、全仓 Ruff、124-file format、diff check 与
+Compose static config 全部通过。Compose 仍只有两条既有 Docker config Access denied
+warning；部署未改，没有运行 build/up/down。最终文件清单和 Git 状态以 `TASKS.md` 为准。
+
+## 2026-08-27：MigrationLens Day 23 — corpus completion 与全量 Gold 复核
+
+### 1. 现场状态必须覆盖提示中的状态
+
+用户说明 Day 22 guardrails 已 commit，但开发前实际 branch=`main`、starting
+HEAD=`1aa273e80e4815aacb03e55f1c1b4d3ac4a81e59`，5 个文档仍 modified，evaluator、publisher
+和 freeze tests 仍 untracked。基线是在这个真实 dirty worktree 上运行，结果为
+`778 passed, 2 warnings in 17.04s`。因此本轮在既有未提交 Day 22 改动之上继续，不能把它们
+误报为 starting HEAD 的内容，也没有执行 Git add/commit/push/tag。
+
+### 2. Corpus completion 与 freeze 是两个 gate
+
+仓库治理禁止 `Day22.5`，所以本轮登记为 Day 23，并把自动 locked evaluation 顺延到 Day 24。
+正式 Detection corpus 最终是 40 fixtures、51 个 Python files：DEV 12（8 single/2 negative/
+2 mixed），LOCKED 28（16/6/6），总体 24/8/8；每类 production rule 恰有 3 个 single
+fixture。历史 10 candidates 保留不变，初审为 KEEP 9、REPLACE 1，不能通过改名自动获得
+正式 holdout 身份。
+
+`human_review_completed` 只证明 Codex 已完成全量静态预审，不等于用户批准。
+`pending_user_review` Manifest/EvalLock 可用于用户检查 hash 和 inventory，但在用户明确确认、
+approved prepare、commit 与 verify-commit 前仍不是 final freeze。locked detection、retrieval、
+Agent 继续 `NOT RUN`，没有 Precision/Recall/F1/MRR/Recall@K。
+
+### 3. 第二遍 source review 确实发现了第一遍错误
+
+40 个 fixture 的第二遍复核没有读取 production prediction，而是重新对照 source、import
+provenance、inheritance、binding/shadowing、当前 scope、line、severity 和固定 heading。
+`locked-mixed-generic-data` 最初把 `GenericModel` subclass 的 `parse_raw` 当作可证明的
+data-loading positive，但 Day 14 当前 contract 只对 BaseModel identity 做该 receiver proof。
+正确处理不是扩张 Scanner，也不是保留含糊 Gold，而是把 fixture 改为显式 `Payload(BaseModel)`
+receiver 并同步 line。首轮统计因此是 APPROVE 39、NEEDS_CHANGE 1、REJECT 0；修正后二次
+复核为 APPROVE 40、unresolved=0。
+
+这说明 benchmark review 不能只是 validator schema pass；真正的独立复核必须重新阅读源码，
+并允许拒绝或改写无法由当前 contract 静态证明的场景。
+
+### 4. Review artifact 也必须进入冻结身份
+
+`data/evaluation/detection/review.json` 记录 40 个 fixture 的 first/final status、correction 和
+review passes。独立 evaluator 现在要求它与 DEV/LOCKED inventory exact match，所有 final
+status 为 APPROVE，reviewed count=40、unresolved=0；同时拒绝正式 source 的 exact SHA256
+duplicate。review artifact 本身进入 Manifest/EvalLock 的 frozen files 和 aggregate identity，
+因此修改 Gold review 不能绕过 hash verification。
+
+### 5. Retrieval integrity 不等于 locked retrieval evaluation
+
+Retrieval 仍为 12 DEV + 20 LOCKED candidates，八类各 4；跨 split ID、normalized question、
+template family 无交叉，Gold headings 存在于固定 Day 9 chunks，source/snapshot/chunk hashes
+保持不变。整个过程只解析静态 artifact，没有构造 locked query 或调用 BM25、E5、Qdrant、
+HybridRetriever，所以只能写 integrity passed，不能写 Recall 或 MRR。
+
+### 6. 本日门禁
+
+Day 22/23 freeze contract 在加入仓库正式 corpus 静态测试后为 `24 passed in 7.21s`；pending
+prepare 与 verify 均通过并保持 `locked_evaluation=NOT_RUN`。最终完整回归、Ruff、pip、diff
+与 Compose static config 的准确结果以 `TASKS.md` 本轮最终记录为准。
+
+## 2026-08-27：MigrationLens final benchmark approval 与 freeze
+
+### 1. Approval 会改变 workflow artifacts，但不应改变 corpus identity
+
+用户亲自确认全部 corpus、Gold 与 review 后，正式执行
+`prepare --user-review-status approved`。FINAL Manifest SHA256 为
+`ef9d18ce9d6181094067a45d5cd228f7b174cc60113f53837faf4fe46e5349c9`，FINAL EvalLock
+SHA256 为 `d599f97480c9f9e15dd05f9cbdd177eb69eb8a6da399f14e601bcf50726ed7ca`。
+它们与 pending 版本不同，因为 workflow review/lock 状态发生变化；frozen benchmark SHA256
+仍为 `a005ed2b6c44f26c5c9d5ab8b9f42815b8f4521190808934f14fe2fcf1512ecf`，说明 corpus、Gold、
+evaluator 与 fixed provenance identity 没有被审批动作改写。
+
+连续第二次 approved prepare 产生完全相同的 Manifest/EvalLock hash，随后 static verify 通过。
+这分别证明 canonical rebuild determinism 与当前全部 frozen-file hash 可重算，不等于 commit
+binding，更不等于 locked evaluation。
+
+### 2. Git 历史必须按真实状态收尾
+
+本轮开始时 branch=`main`、HEAD 仍为
+`1aa273e80e4815aacb03e55f1c1b4d3ac4a81e59`；最近提交直接从 Day 21 回溯到 Day 20，确认
+Day 22 guardrails 没有独立 commit。正确做法是保留当前 working tree，由用户把 Day 22
+guardrails、Day 23 corpus/review 和 approved freeze 一次性提交为 benchmark milestone；不能
+用 reset/rebase/stash/checkout 补造历史。
+
+当前 lock=`ready_for_user_commit`、binding=`pending_user_commit`。`verify` 只能验证 artifact；
+用户 commit 后还必须用真实 SHA 运行 `verify-commit --commit <SHA>`，通过后才可 push 和进入
+Day 24。由于 commit 尚未存在，本轮不能声称 commit binding passed。
+
+### 3. Approved freeze 仍不消费 locked benchmark
+
+本轮只执行静态 builder、deterministic rebuild、hash verification 和普通测试。locked
+Detection、locked Retrieval 与 Agent locked evaluation 均 `NOT RUN`，Precision/Recall/F1、
+MRR、Recall@K 与 Agent locked metrics 均 `NOT COMPUTED`。正式首次 locked evaluation 仍归
+MigrationLens Day 24，且以 commit + verify-commit 通过为硬前置。
+
+### 4. 最终质量门禁
+
+Freeze 专项为 `24 passed in 5.25s`，Rules 定向 `56 passed in 0.97s`，ImportGraph/OneHop
+定向 `15 passed in 0.41s`，Retrieval evaluation 定向 `12 passed in 0.37s`，完整回归为
+`780 passed, 2 warnings in 17.22s`。pip check、全仓 Ruff、175-file format check、diff check
+和 Compose static config 均通过；Compose 仍只有既有 Docker config access warnings。
+部署未修改，没有运行 Docker runtime，也没有执行 git add/commit/push/tag。

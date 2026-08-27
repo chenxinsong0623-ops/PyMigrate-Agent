@@ -1,0 +1,446 @@
+{
+  "benchmark_version": "migrationlens-p0-benchmark-v1",
+  "commit_binding": {
+    "status": "pending_user_commit",
+    "strategy": "external_post_review_git_verification"
+  },
+  "corpus_review_status": "human_review_completed",
+  "detection": {
+    "dev_fixture_count": 12,
+    "dev_gold": {
+      "byte_length": 21571,
+      "path": "data/evaluation/detection/dev.json",
+      "sha256": "2b5ad6c461b184b9e3ab153c2949ed17ce0b93b8b7da7be8e39598ca49ffead0"
+    },
+    "direct_negative_label_count": 78,
+    "direct_positive_label_count": 84,
+    "fixture_kind_counts": [
+      {
+        "count": 2,
+        "name": "dev:mixed"
+      },
+      {
+        "count": 2,
+        "name": "dev:negative"
+      },
+      {
+        "count": 8,
+        "name": "dev:single_rule_positive"
+      },
+      {
+        "count": 6,
+        "name": "locked:mixed"
+      },
+      {
+        "count": 6,
+        "name": "locked:negative"
+      },
+      {
+        "count": 16,
+        "name": "locked:single_rule_positive"
+      }
+    ],
+    "fixture_source_aggregate_sha256": "119f204c3d864620a6c805ccbbff12b1a183048c30d03a2f8d46bc02fe83f60a",
+    "fixture_sources": [
+      {
+        "byte_length": 565,
+        "path": "data/evaluation/detection/fixtures/dev/dev-base-model-method/methods.py",
+        "sha256": "6587791d78f3851ea7e214b0404874e7a160a2ebde702e99c6e63b841bc7dfbf"
+      },
+      {
+        "byte_length": 572,
+        "path": "data/evaluation/detection/fixtures/dev/dev-config/models.py",
+        "sha256": "ecfe942bf4fd299d9b34df294565a4a7ba36741dd365148e37db5443bf28a3a5"
+      },
+      {
+        "byte_length": 569,
+        "path": "data/evaluation/detection/fixtures/dev/dev-data-loading/loading.py",
+        "sha256": "697ca5986510bcf296af2c72f6bc0184d73198b44ab42f82f8f6081a2b1f2e9c"
+      },
+      {
+        "byte_length": 776,
+        "path": "data/evaluation/detection/fixtures/dev/dev-field/fields.py",
+        "sha256": "dd6577b21fbde94385394f7a2e412cbcdff12d6b06858011eec4e52ed0556ea2"
+      },
+      {
+        "byte_length": 619,
+        "path": "data/evaluation/detection/fixtures/dev/dev-generic-model/generics.py",
+        "sha256": "5dea6643f9b29f4e28d95614958d290cd35dfb6949cf919ea8711824cb93e2cc"
+      },
+      {
+        "byte_length": 644,
+        "path": "data/evaluation/detection/fixtures/dev/dev-mixed-aliases/direct.py",
+        "sha256": "8e6cfe4ced07945e68df14731be997dc905d77fccd512904f4fb6a3dd4a5df9e"
+      },
+      {
+        "byte_length": 513,
+        "path": "data/evaluation/detection/fixtures/dev/dev-mixed-aliases/importer.py",
+        "sha256": "7fc2c755c82dbf5d1c46a79e204b4d939e8d5347a2d89907c113b286180e3811"
+      },
+      {
+        "byte_length": 565,
+        "path": "data/evaluation/detection/fixtures/dev/dev-mixed-service/project/__init__.py",
+        "sha256": "82f186ada7a4d9e16e96e31381f717b437beba73ea106d15506f558fbea22ef8"
+      },
+      {
+        "byte_length": 623,
+        "path": "data/evaluation/detection/fixtures/dev/dev-mixed-service/project/features/api.py",
+        "sha256": "b6a302b09eb2e5b9160095e06ee9f607e6a8cd3a953fea91b7d6f767905af521"
+      },
+      {
+        "byte_length": 648,
+        "path": "data/evaluation/detection/fixtures/dev/dev-mixed-service/project/models.py",
+        "sha256": "aea98ddf28451cc695357d08ad5a2424b805a9dfc378319d5829a6e876378c35"
+      },
+      {
+        "byte_length": 676,
+        "path": "data/evaluation/detection/fixtures/dev/dev-mixed-service/project/service.py",
+        "sha256": "3b01236531ec08cbd9db079d2a8a495b35a713dd2dc076b350e718bc7095202f"
+      },
+      {
+        "byte_length": 683,
+        "path": "data/evaluation/detection/fixtures/dev/dev-negative-receivers/receivers.py",
+        "sha256": "d2febbc44927618126f6d6c78859cc59c343efb4b4d7afc04fc357d0cd1a834b"
+      },
+      {
+        "byte_length": 665,
+        "path": "data/evaluation/detection/fixtures/dev/dev-negative-shadowing/ordinary.py",
+        "sha256": "3bc60dec1d2eb5bb90d41153d8add9776fab224c73c825c0c5bad90846017a71"
+      },
+      {
+        "byte_length": 460,
+        "path": "data/evaluation/detection/fixtures/dev/dev-root-model/models.py",
+        "sha256": "6fba3fd6854e609d0e4f1c4416922e779e4694a314cf58230f09674fa18d22d4"
+      },
+      {
+        "byte_length": 613,
+        "path": "data/evaluation/detection/fixtures/dev/dev-settings/settings.py",
+        "sha256": "eff07bf7bb9bb8b3e8edc6851744e39879f2abb5555bf6fc7fcd77a2d859d671"
+      },
+      {
+        "byte_length": 660,
+        "path": "data/evaluation/detection/fixtures/dev/dev-validator/validators.py",
+        "sha256": "f86c42fceab7e660b526da3b7daa096dd3c31bf44ae4a5cabafb6229267551dc"
+      },
+      {
+        "byte_length": 553,
+        "path": "data/evaluation/detection/fixtures/locked/locked-base-model-method-annotation/model.py",
+        "sha256": "0f42d2ccfb7859192b4ff32fd98c9dc65cd34f96c21eb903c71b1e46294a9a56"
+      },
+      {
+        "byte_length": 502,
+        "path": "data/evaluation/detection/fixtures/locked/locked-base-model-method-inheritance/model.py",
+        "sha256": "311c44697889c380facbd5554f3390d68a0923118f2b3f48734adf5d952eefa9"
+      },
+      {
+        "byte_length": 553,
+        "path": "data/evaluation/detection/fixtures/locked/locked-config-inheritance/models.py",
+        "sha256": "4cc6ba6b8caf7b08410a8cecc246ff0257ec612dfad323d1d12c2185e11e7ee3"
+      },
+      {
+        "byte_length": 544,
+        "path": "data/evaluation/detection/fixtures/locked/locked-config-module-alias/models.py",
+        "sha256": "cdaaf529bb9ee1124ea8b58821279b80860bdb9e2bfa74bde787e8792246bb13"
+      },
+      {
+        "byte_length": 615,
+        "path": "data/evaluation/detection/fixtures/locked/locked-data-loading-class-reference/loader.py",
+        "sha256": "6b963c237c5028535f65ad5db77c0d6c81159873dcb24e6a87593e9bca0d40d8"
+      },
+      {
+        "byte_length": 580,
+        "path": "data/evaluation/detection/fixtures/locked/locked-data-loading-parameter/loader.py",
+        "sha256": "dff447564ef48fb0bec2fc494b8ccf1ac7d71b040bb08a3954b32b55bb037257"
+      },
+      {
+        "byte_length": 666,
+        "path": "data/evaluation/detection/fixtures/locked/locked-field-direct-alias/fields.py",
+        "sha256": "1f7b2f78fe33c3a3bf816aef76bbf31f7f4bce235811ddb7d2deef0363cc092d"
+      },
+      {
+        "byte_length": 637,
+        "path": "data/evaluation/detection/fixtures/locked/locked-field-module-alias/fields.py",
+        "sha256": "0484136b98cd1feea303f441aaf374357d7f632ba44a63d73ff48481224564d4"
+      },
+      {
+        "byte_length": 546,
+        "path": "data/evaluation/detection/fixtures/locked/locked-generic-model-direct-alias/generics.py",
+        "sha256": "9c04a1567c4b68251a9cadb1be9ef7892740b2a7201aaefbace242de01a0472d"
+      },
+      {
+        "byte_length": 541,
+        "path": "data/evaluation/detection/fixtures/locked/locked-generic-model-module-alias/generics.py",
+        "sha256": "1ae3bfbc34bbee4257758ce97b2741790bd366ced350f8ec460fb88dac349fb0"
+      },
+      {
+        "byte_length": 527,
+        "path": "data/evaluation/detection/fixtures/locked/locked-mixed-config-validator/api.py",
+        "sha256": "4e3eb3d2adef434f4f801d643e6877c187fe55d66a48d48a2b77e3e630c1a926"
+      },
+      {
+        "byte_length": 565,
+        "path": "data/evaluation/detection/fixtures/locked/locked-mixed-config-validator/models.py",
+        "sha256": "b1ea683ee6416e84ae9a6d3f64066732aeb94f0558564ee3a0f255d957e362f2"
+      },
+      {
+        "byte_length": 483,
+        "path": "data/evaluation/detection/fixtures/locked/locked-mixed-cycle/a.py",
+        "sha256": "20fc512d9961a028eac56e3579d1df1cc59bc2000f3ee59cfde6402978a1c4c5"
+      },
+      {
+        "byte_length": 584,
+        "path": "data/evaluation/detection/fixtures/locked/locked-mixed-cycle/b.py",
+        "sha256": "3e4a471fe4686928ee97e0e0312ef20dfd21e04e098be68c4594f78add6c547c"
+      },
+      {
+        "byte_length": 655,
+        "path": "data/evaluation/detection/fixtures/locked/locked-mixed-generic-data/envelope.py",
+        "sha256": "cb61ec5717a51b59683637164096a24eef74e909953c130c093a41db3cdaedff"
+      },
+      {
+        "byte_length": 515,
+        "path": "data/evaluation/detection/fixtures/locked/locked-mixed-generic-data/handler.py",
+        "sha256": "2ffc8d3bedd249af48a4833630c0f09c847ba689ffa964620175854db6e2e920"
+      },
+      {
+        "byte_length": 501,
+        "path": "data/evaluation/detection/fixtures/locked/locked-mixed-method-field/consumer.py",
+        "sha256": "b9e99adb99fd53312277d590cd41254c428fd2f726bb54c4086838ac32041bd6"
+      },
+      {
+        "byte_length": 591,
+        "path": "data/evaluation/detection/fixtures/locked/locked-mixed-method-field/domain.py",
+        "sha256": "a68c268e88614de5325b03384c3736f92c8fb2891b36211034ba151ae77f6e29"
+      },
+      {
+        "byte_length": 550,
+        "path": "data/evaluation/detection/fixtures/locked/locked-mixed-settings-root/bootstrap.py",
+        "sha256": "d2647d9be20706d7351e07dfc517ff3dc1135bcd774bb8b9b5c355b946a09fd0"
+      },
+      {
+        "byte_length": 560,
+        "path": "data/evaluation/detection/fixtures/locked/locked-mixed-settings-root/definitions.py",
+        "sha256": "9324371d88d25df3ef64ae19668f047915c71b99038d49690a56c57e5b6b8899"
+      },
+      {
+        "byte_length": 516,
+        "path": "data/evaluation/detection/fixtures/locked/locked-mixed-transitive/api.py",
+        "sha256": "9aa597194afe63185889c28bce13c132ffe493cd6509873d732c508d6d660340"
+      },
+      {
+        "byte_length": 551,
+        "path": "data/evaluation/detection/fixtures/locked/locked-mixed-transitive/model.py",
+        "sha256": "2646ab306c6def558b5780f2fe8586bc445548eb6b71b547e283848150b56494"
+      },
+      {
+        "byte_length": 624,
+        "path": "data/evaluation/detection/fixtures/locked/locked-mixed-transitive/service.py",
+        "sha256": "d8209affc3838780ade5bbf00a94dd8f524b2e0ba5aeb936ed7fde4f6a714434"
+      },
+      {
+        "byte_length": 640,
+        "path": "data/evaluation/detection/fixtures/locked/locked-negative-method-receivers/receivers.py",
+        "sha256": "6ff1b17efb5bd2802bcbd61ab491601c2bd9e03d1fa313f5f7ae2de9316d8e09"
+      },
+      {
+        "byte_length": 608,
+        "path": "data/evaluation/detection/fixtures/locked/locked-negative-ordinary-config/ordinary.py",
+        "sha256": "55df97beabde0c4c582714873c671c360379119e6babd00eee41ba111ad055f1"
+      },
+      {
+        "byte_length": 702,
+        "path": "data/evaluation/detection/fixtures/locked/locked-negative-rebinding/rebound.py",
+        "sha256": "27cc0213569c8e196398534d6e807c3a200f919e124b77e14b52e8b92ac4448b"
+      },
+      {
+        "byte_length": 619,
+        "path": "data/evaluation/detection/fixtures/locked/locked-negative-similar-imports/imports.py",
+        "sha256": "225ec66fd152be4b293c9a3af08bd2a5e8047aa747cc537d41342fdec9f0891f"
+      },
+      {
+        "byte_length": 735,
+        "path": "data/evaluation/detection/fixtures/locked/locked-negative-text-only/text.py",
+        "sha256": "e6a465f219aec555638999e7ebfccc11d13d1be112f028c7bad204130ec4aa0a"
+      },
+      {
+        "byte_length": 642,
+        "path": "data/evaluation/detection/fixtures/locked/locked-negative-type-evidence/typing.py",
+        "sha256": "22393afa2ad374e4723559d0dafbea9d1ae35225655252b38d81f6c187b74aea"
+      },
+      {
+        "byte_length": 495,
+        "path": "data/evaluation/detection/fixtures/locked/locked-root-model-inheritance/models.py",
+        "sha256": "29a790e4112c8119bc1c2b9bd5c9940652d9800207f13db454979c254f2ff93d"
+      },
+      {
+        "byte_length": 560,
+        "path": "data/evaluation/detection/fixtures/locked/locked-root-model-module-alias/models.py",
+        "sha256": "c24c2ce90e2b31212499637c09d8ece1c60fbe62f6bdd55a4702e9735a025fe4"
+      },
+      {
+        "byte_length": 613,
+        "path": "data/evaluation/detection/fixtures/locked/locked-settings-direct-alias/settings.py",
+        "sha256": "46cd4dcaaf48455965f076d69aa03c7349c9fa3a93c7c6abc35fe984158001f0"
+      },
+      {
+        "byte_length": 523,
+        "path": "data/evaluation/detection/fixtures/locked/locked-settings-module-reference/settings.py",
+        "sha256": "2ff3451b44dc665bda9108d87af179439e5d82fc4ef2b3d4a6817ff5f5d09955"
+      },
+      {
+        "byte_length": 556,
+        "path": "data/evaluation/detection/fixtures/locked/locked-validator-direct-alias/validators.py",
+        "sha256": "a7cb4fad4d2576d2b4337903c42f9299293adfeb2216d67b901d4675c7781d2f"
+      },
+      {
+        "byte_length": 599,
+        "path": "data/evaluation/detection/fixtures/locked/locked-validator-module-alias/validators.py",
+        "sha256": "a9e9abe7d25ed5939ad0f29d6c228997dea10d9d29f4a23afc0ef2398ae5d241"
+      }
+    ],
+    "gold_artifact_aggregate_sha256": "d4328bd39d8f4bccb9d5ad68bfae7b0ad1b1cdcedf2f9198b7485349f2e135de",
+    "locked_fixture_count": 28,
+    "locked_gold": {
+      "byte_length": 33569,
+      "path": "data/evaluation/detection/locked.json",
+      "sha256": "f2a68a586c7b75a33b54f72d6b01aa6e652932200a689fad1b1e654d479194a8"
+    },
+    "one_hop_negative_label_count": 2,
+    "one_hop_positive_label_count": 12,
+    "review": {
+      "byte_length": 6212,
+      "path": "data/evaluation/detection/review.json",
+      "sha256": "d6428c706c15bdf37fc266b358db98c8341af77c3ab091603f3407ed655343b7"
+    },
+    "rule_fixture_counts": [
+      {
+        "count": 3,
+        "name": "pydantic_v1_base_model_method"
+      },
+      {
+        "count": 3,
+        "name": "pydantic_v1_data_loading"
+      },
+      {
+        "count": 3,
+        "name": "pydantic_v1_config"
+      },
+      {
+        "count": 3,
+        "name": "pydantic_v1_validator"
+      },
+      {
+        "count": 3,
+        "name": "pydantic_v1_field"
+      },
+      {
+        "count": 3,
+        "name": "pydantic_v1_settings"
+      },
+      {
+        "count": 3,
+        "name": "pydantic_v1_generic_model"
+      },
+      {
+        "count": 3,
+        "name": "pydantic_v1_root_model"
+      }
+    ]
+  },
+  "evaluator": {
+    "source_files": [
+      {
+        "byte_length": 2982,
+        "path": "app/evaluation/artifacts.py",
+        "sha256": "50d97da2fa041b93c5afa43dc174b6c337df14f9b607d10e97fe76314f74b61f"
+      },
+      {
+        "byte_length": 48258,
+        "path": "app/evaluation/benchmark.py",
+        "sha256": "c377eca3a5b2bce46cbce1d3e88c6f92e2b7d13a9186002a516f6fcac5d71312"
+      }
+    ],
+    "version": "migrationlens-reference-evaluator-v1"
+  },
+  "frozen_benchmark_sha256": "a005ed2b6c44f26c5c9d5ab8b9f42815b8f4521190808934f14fe2fcf1512ecf",
+  "locked_run_status": "not_run",
+  "official_source": {
+    "chunks": {
+      "byte_length": 111830,
+      "path": "data/chunks/pydantic-v2-migration.json",
+      "sha256": "36ab67593a997edb81cf0385d74213471b95bf5c915e551e92461e88192b1773"
+    },
+    "git_ref": "v2.13.4",
+    "resolved_commit_sha": "cf67d4b3193c3fe43ede18612ed62785eee11382",
+    "snapshot": {
+      "byte_length": 50035,
+      "path": "data/snapshots/pydantic-v2-migration/migration.md",
+      "sha256": "3a33c005259e6ede170df1904a168a4a64e8d8efc5b7fed360b65e5c000c05b7"
+    },
+    "source_id": "pydantic-v2-migration",
+    "source_manifest": {
+      "byte_length": 943,
+      "path": "data/manifests/pydantic-v2-migration.json",
+      "sha256": "22f954dc65b5f691e2e9d015079e530adc0a45623e482cc0fa910f5ed59f9c1e"
+    }
+  },
+  "retrieval": {
+    "category_counts": [
+      {
+        "count": 4,
+        "name": "base_model_methods"
+      },
+      {
+        "count": 4,
+        "name": "data_loading"
+      },
+      {
+        "count": 4,
+        "name": "config"
+      },
+      {
+        "count": 4,
+        "name": "validators"
+      },
+      {
+        "count": 4,
+        "name": "field_arguments"
+      },
+      {
+        "count": 4,
+        "name": "settings"
+      },
+      {
+        "count": 4,
+        "name": "generic_model"
+      },
+      {
+        "count": 4,
+        "name": "root_model"
+      }
+    ],
+    "dev_question_count": 12,
+    "dev_questions": {
+      "byte_length": 6017,
+      "path": "data/evaluation/retrieval/dev.json",
+      "sha256": "89a2602fec98c12ced414539ba0152409a85a368e6cbdbf309ed9af50403e9c7"
+    },
+    "dev_template_families": [
+      "dev_code_review",
+      "dev_upgrade_review"
+    ],
+    "locked_question_count": 20,
+    "locked_questions": {
+      "byte_length": 11164,
+      "path": "data/evaluation/retrieval/locked_candidates.json",
+      "sha256": "df0b46bb90c96f7f2967ceb9b1439e6659a202473e1dc679642b4f492cce7f56"
+    },
+    "locked_template_families": [
+      "locked_dependency_breakage",
+      "locked_incident_diagnosis",
+      "locked_migration_checklist"
+    ]
+  },
+  "schema_version": 1,
+  "user_review_status": "approved"
+}

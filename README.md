@@ -28,6 +28,8 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 19 | `completed` | low-level StateGraph、typed decision、显式五工具 dispatcher、shared deadline、hard limits、一次 LLM retry 与 deterministic fallback |
 | MigrationLens Day 20 | `completed` | current-analysis Citation Guard、可信 provenance、独立单次 citation retry、确定性模板与同源 typed JSON/Markdown 报告 |
 | MigrationLens Day 21 | `completed` | `/v1` 同步分析 API、schema v2 事务迁移、analysis + 双格式报告原子持久化、历史读取、typed error 与 upload request hard limit |
+| MigrationLens Day 22 | `guardrails_complete` | 独立静态 reference evaluator、deterministic manifest/lock builder、原子发布与反泄漏测试已实现；当日因 detection 只有 10/40 个未分 split candidates 而阻断正式 freeze |
+| MigrationLens Day 23 | `benchmark_frozen` | 正式 Detection corpus 已补齐为 24 single + 8 negative + 8 mixed、DEV 12 + LOCKED 28；40 个 fixture/Gold 已完成两遍独立静态复核且 unresolved=0，最终人工批准、approved prepare 与 static verify 已完成，commit binding 待完成，locked evaluation 未运行 |
 
 当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite schema version `2` 包含
 `system_metadata`、`analyses` 与 `reports`，支持 v1→v2 事务迁移以及 API envelope、Day 20
@@ -68,12 +70,18 @@ Day 19 已在该边界上新增 low-level LangGraph 编排，并继续拒绝 she
 没有把它写成真实模型或引用语义质量证据。Day 21 的 application service 现已把 Day 13–20
 真实调用链接入 `/v1/analyses`，并在成功响应前原子保存 API JSON 与两种 Day 20 renderer
 输出；历史 GET 只读取已保存文本，不重跑 Agent、retrieval 或 renderer。
+Day 22 已建立不导入被测业务模块的静态冻结边界。Day 23 随后在独立开发日补齐正式
+Detection corpus：40 个 fixture 物理拆为 DEV 12 + LOCKED 28，kind 为 24/8/8；Gold 只依据
+source、既有规则语义和固定官方证据建立，没有调用 production prediction。全量二次复核
+最终 APPROVE 40、unresolved disputes=0。用户已完成最终人工确认；approved Manifest/EvalLock
+已确定性重建并通过 static verify，`user_review_status=approved`、commit binding 尚待用户
+commit 后验证，locked detection/retrieval/Agent 均未运行。
 
 尚未实现：
 
 - GitHub Actions；
 - final locked retrieval evaluation；
-- benchmark、locked 评测和负载测试；
+- benchmark commit binding、locked 评测和负载测试；
 - 真实 LLM；
 - WDI-ClaimCheck 的任何业务代码。
 
@@ -541,6 +549,34 @@ loading severity 为 high，其余四类为 medium。普通 `obj.dict()`、unkno
 另有 3 个 positive、1 个 negative one-hop relation label，与 finding gold 使用独立字段。
 loader 只做文件、LOC、关系和 heading 静态校验；它不运行 benchmark、不计算检测指标，
 也不是 locked holdout。
+
+上述 candidate 是 Day 15–17 的历史增量数据。Day 23 已另建正式 24 个单规则正例、8 个
+负例和 8 个 mixed project，并物理划分为 12 DEV/28 LOCKED；历史 candidate 没有被覆盖或
+直接改名为 holdout。
+
+## Benchmark 静态复核与冻结准备
+
+Day 22 新增 [`app/evaluation/benchmark.py`](app/evaluation/benchmark.py)，evaluator version
+为 `migrationlens-reference-evaluator-v1`。它独立解析 detection/retrieval/source bytes，
+验证 12/28、12/20、fixture kind/rule 分布、真实 Python inventory、line、direct/one-hop
+gold 分离、category/severity、fixed heading、template family、normalized question text 和
+全部 SHA256。实现不 import production rule finding、应用编排或检索执行模块，也没有
+Precision/Recall/F1/Recall@K/MRR 的运行入口。
+
+Day 23 完整 corpus 已通过独立静态复核和用户最终确认；以下命令生成正式 approved
+`data/manifests/migrationlens-benchmark-v1.json` 和 `eval_lock.json`：
+
+```powershell
+$Py = 'D:\conda_envs\pymigrate-agent\python.exe'
+& $Py -m app.evaluation.benchmark prepare --repo-root . `
+  --user-review-status approved
+```
+
+当前真实 approved prepare 已连续两次产生相同 bytes/hash，static verify 通过，corpus
+review=`human_review_completed`、user review=`approved`、lock=`ready_for_user_commit`、
+locked=`NOT RUN`。用户完成 milestone commit 后，须只读执行
+`verify-commit --commit <40-hex>`。commit SHA 不写回 tracked lock，而由下一日运行 metadata
+记录，从而避免 commit 自引用；发布失败恢复旧文件且不留半成品。
 
 ## Local Import Graph 与一跳影响
 
@@ -1015,12 +1051,13 @@ rollback、foreign key、duplicate ID、防 raw source 持久化、重启 GET、
 共同门禁和精确最终数字见 [`TASKS.md`](TASKS.md)。普通测试没有运行真实 LLM、真实 E5/
 Qdrant query、locked evaluation、Docker runtime、Locust 或 CI。
 
-## 下一开发日
+## 当前阻塞与下一开发日
 
-MigrationLens Day 22 — benchmark 人工复核与冻结保持 `planned`，尚未开始。Day 21 已完成
-同步 business API 与 SQLite 报告持久化，但没有查看或运行 locked 结果。Day 22 的硬目标是
-由用户确认 gold、条数、类别、独立 evaluator version 与 hash，并产生 frozen commit SHA；
-本轮没有自动 commit/push/tag，也没有提前开始 Day 22。
+MigrationLens Day 23 corpus completion、全量 Gold 复核、最终用户批准、approved prepare 与
+static verify 已完成：40 fixtures、12 DEV/28 LOCKED、最终 APPROVE 40、unresolved=0。
+当前唯一剩余 freeze 门禁是用户 milestone commit 与只读 `verify-commit`。只有 approved
+lock、clean worktree 与 frozen commit SHA 全部通过后，MigrationLens Day 24 才可单次运行
+自动化 locked evaluator。本轮没有自动 git add/commit/push/tag。
 
 ## 项目文档
 
@@ -1047,7 +1084,9 @@ tool boundary 与 source isolation；Day 19 已验证 low-level StateGraph、Fak
 timeout/limit/retry/fallback 与真实 ZIP tool integration；Day 20 已验证本地 Citation Guard、
 current-analysis isolation、typed fallback report 和同源 JSON/Markdown；Day 21 已验证同步
 multipart API、完整 Day 13–20 service chain、v1→v2 migration、双报告原子提交、重启历史读取、
-OpenAPI 与错误脱敏。20 题 locked 评测、
+OpenAPI 与错误脱敏。Day 22 已验证 synthetic-only 完整 corpus contract、独立静态
+reference evaluator、deterministic hash/lock 与 atomic failure rollback；这不是 40 个真实
+benchmark fixture，也没有生成当前正式 manifest/lock。20 题 locked 评测、
 检测/Agent locked benchmark、人工 citation support、真实 LLM、CI、样本量和负载测试等发布证据仍未完成，因此 MigrationLens
 尚未达到可写入简历的发布门槛。不得把 FakeEmbedding、smoke、dev
 指标、candidate label、目标阈值、计划数量或未运行命令描述为 locked 结果、生产检索
