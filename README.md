@@ -31,6 +31,7 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 22 | `guardrails_complete` | 独立静态 reference evaluator、deterministic manifest/lock builder、原子发布与反泄漏测试已实现；当日因 detection 只有 10/40 个未分 split candidates 而阻断正式 freeze |
 | MigrationLens Day 23 | `benchmark_frozen` | 正式 Detection corpus 已补齐为 24 single + 8 negative + 8 mixed、DEV 12 + LOCKED 28；40 个 fixture/Gold 已完成两遍独立静态复核且 unresolved=0，最终人工批准、approved prepare、static verify、milestone commit 与 commit binding 已完成；Day23 自身未运行 locked evaluation |
 | MigrationLens Day 24 | `locked_run_completed_with_metric_failure` | frozen commit `3bec58084e13d0734b891d290099a0695ec8dab6` 上首次且单次完成 locked 自动评测；Detection P/R/F1=1.0/1.0/1.0，Retrieval Hybrid R@3=0.9 但低于 BM25 R@3=1.0，Agent citation validity=0.0 且 citation support 留到 Day25 |
+| MigrationLens Day 25 | `blocked / citation_support_not_assessable_from_sealed_evidence` | 七个 Day24 sealed artifacts hash/identity 已复核；Agent artifact 只有 case-level aggregate counts，没有 exact finding ↔ citation mapping，故未生成 20 条假样本、未冒充 human review；已新增 blocked audit、失败归档与版本化 additive aggregate，locked rerun=0 |
 
 当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite schema version `2` 包含
 `system_metadata`、`analyses` 与 `reports`，支持 v1→v2 事务迁移以及 API envelope、Day 20
@@ -82,12 +83,17 @@ automated evaluation 已完成并封存：Detection TP=44、FP=0、FN=0、Precis
 Recall=1.0、F1=1.0；BM25/Dense/Hybrid locked R@3 分别为 1.0、0.6、0.9；Hybrid 达到
 0.90 目标且高于 Dense，但低于 BM25，这作为真实 metric failure 保留。Agent 自动评测
 structured-output success rate=1.0、finding completeness=1.0、citation validity=0.0；
-citation support 仍为 `NOT_EVALUATED / Day25`。No locked evaluator was rerun。
+citation support 在 Day25 审计后为
+`BLOCKED / NOT_ASSESSABLE_FROM_SEALED_EVIDENCE`。Day24 case artifact 没有保存具体 finding、
+claim/explanation、citation/chunk provenance 或 exact finding ↔ citation mapping；因此没有合法
+的 20 条 frozen review sample，不能重跑或用当前 production code 重建。No locked evaluator
+was rerun。
 
 尚未实现：
 
 - GitHub Actions；
-- 人工 citation support 与失败归档；
+- 可计算的人工 citation support：Day25 已归档失败，但因 sealed finding-level evidence
+  缺失而 blocked；
 - 负载测试；
 - 真实 LLM；
 - WDI-ClaimCheck 的任何业务代码。
@@ -1060,12 +1066,21 @@ Qdrant query、locked evaluation、Docker runtime、Locust 或 CI。
 
 ## 当前阻塞与下一开发日
 
-MigrationLens Day 24 locked automated evaluation 已完成并封存：locked 已消费，run attempt=1，
-rerun=0。Detection targets 全部 PASS；Retrieval target 中 Hybrid R@3 达到 0.90 且高于 Dense，
-但低于 BM25，因此当前状态为 `locked_run_completed_with_metric_failure`。Agent 只完成自动
-structured/citation-validity/fallback 指标，citation support 仍为 `NOT_EVALUATED / Day25`。
-下一开发日只能进入 MigrationLens Day25 人工 citation support 与失败归档；不得重跑 locked，
-不得根据 locked 结果调参，也不得开始 Day26。
+MigrationLens Day25 已完成 Day24 artifact integrity、citation evidence sufficiency 与失败归档，
+当前状态为 `blocked / citation_support_not_assessable_from_sealed_evidence`。Day24 locked 已消费，
+run attempt=1、rerun=0；Detection targets 全部 PASS；Retrieval Hybrid R@3=0.9 低于 BM25=1.0；
+Agent citation validity=0.0。Day24 没有 sealed finding-level citation evidence，故 sample size=0、
+human reviewed=0、support counts/rate 均未计算。
+
+Day25 的最终 Python 3.11 共同门禁为专项 34 passed、完整回归 819 passed（2 warnings）；
+pip check、Ruff check、179-file format check、diff check 与 Compose static config 均通过。
+这是后处理与仓库回归证据，不是 citation support 已完成人工审查的证据。
+
+`reports/manual_citation_audit.csv` 是一个明确 blocker record，`reports/failures.md` 归档真实失败。
+D-027 把原 `reports/eval.json`/`eval_manifest.json` 封存，Day25 因此保持其 bytes/hash 不变，
+用 `reports/eval-day25.json` 和 `reports/day25_manifest.json` 保存版本化 additive provenance。
+Day24 evaluator 没有重跑，production、Gold、frozen fixtures、retrieval params 与 Agent behavior
+均未修改。Day26 仍为 `planned`，不能用性能工作掩盖当前 evidence blocker。
 
 ## 项目文档
 
@@ -1097,7 +1112,7 @@ reference evaluator、deterministic hash/lock 与 atomic failure rollback。Day 
 40-fixture benchmark、approved manifest/eval lock 和 verified frozen commit。Day 24 已首次且
 单次完成 locked automated evaluation：Detection locked P/R/F1=1.0/1.0/1.0；20 题 locked
 Retrieval 中 BM25/Dense/Hybrid R@3=1.0/0.6/0.9；Agent 自动 citation validity=0.0，support
-仍未人工评估。人工 citation support、真实 LLM、CI、样本量和负载测试等发布证据仍未完成，
+因缺少 sealed per-finding mapping 而不可人工评估。真实 LLM、CI、样本量和负载测试等发布证据仍未完成，
 因此 MigrationLens 尚未达到可写入简历的完整发布门槛。不得把 FakeEmbedding、smoke、dev
 指标、candidate label、目标阈值、计划数量、自动 citation validity 或未运行命令描述为人工
 support、生产检索质量、GPU 性能或发布证据。

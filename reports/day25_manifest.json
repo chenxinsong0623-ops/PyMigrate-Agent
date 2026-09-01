@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "audit_version": "migrationlens-day25-citation-audit-v1",
+  "status": "blocked",
+  "run_id": "day24-3bec58084e13-1787815381",
+  "frozen_commit": "3bec58084e13d0734b891d290099a0695ec8dab6",
+  "locked_run_consumed": true,
+  "run_attempt": 1,
+  "rerun_count": 0,
+  "evidence_sufficient": false,
+  "sample_size": 0,
+  "reviewed_count": 0,
+  "reviewer_status": "blocked_before_review",
+  "block_reason": "insufficient sealed per-finding citation evidence",
+  "day24_preserved_artifacts": {
+    "reports/day24_raw_evidence.json": "2ef2e5b03c39812655b3f0f59abc3bb97c3d22f750431298c878bdd9af437c2f",
+    "reports/detection_metrics.json": "12a16128eef68fcbc0930057168a699186485a7ab453e51e18688a0a08194671",
+    "reports/retrieval_metrics.csv": "c42e89852e64e4a20028040ca20a9f3bea7f5ac76c61b6c3d24ff74ae8f470b2",
+    "reports/retrieval_ablation.csv": "c42e89852e64e4a20028040ca20a9f3bea7f5ac76c61b6c3d24ff74ae8f470b2",
+    "reports/agent_metrics.json": "5bd9231421c22b4c53a92b45c392d124f5d9e416500a71f497551e511da21c23",
+    "reports/eval_manifest.json": "668acfcb42ce1bf988d4cfd25563a6b0faf81d3fb2e6d931de2e380936400258",
+    "reports/eval.json": "c0f4ba7977e84f1f2c9a7cada4876c71615adab3d0290e7c1add690e54170159"
+  },
+  "day25_artifacts": {
+    "reports/manual_citation_audit.csv": "6c92e9d7252089bdcbab1429a8fce09d4644bea32f297597a09d67fde6cb896f",
+    "reports/failures.md": "daa1f7053e4401f05771a8612c2840f4934ad657485fd0f830eec308fb74d23f",
+    "reports/eval-day25.json": "ee793af86f58bf85e202ccea9514fc523a58c56ec40900c9a6e70cd0dca0ebc8"
+  },
+  "artifact_contract": {
+    "day24_eval_json_preserved": true,
+    "day24_eval_manifest_preserved": true,
+    "day25_aggregate_path": "reports/eval-day25.json",
+    "manifest_internal_self_hash_matches_final_bytes": false,
+    "manifest_final_sha256_source": "reports/day24_raw_evidence.json"
+  },
+  "integrity": {
+    "locked_evaluator_rerun": false,
+    "production_behavior_modified": false,
+    "frozen_fixtures_modified": false,
+    "gold_modified": false,
+    "retrieval_parameters_modified": false,
+    "agent_behavior_modified": false
+  }
+}

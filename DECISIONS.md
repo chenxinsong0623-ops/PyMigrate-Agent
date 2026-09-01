@@ -752,3 +752,36 @@
   reports；不改变 SPEC、Gold、fixtures、production Scanner/ImportGraph/OneHop、Retriever、
   Agent、Citation Guard、API、存储、依赖、配置或部署。Day25 继续只做人工 citation support
   与失败归档，不能重跑 Day24 locked evaluator。
+
+## D-028 — Locked 后语义审查的 finding-level evidence 与版本化聚合契约
+
+- 日期：2026-09-01
+- 状态：已接受；Day24 因历史 sealed evidence 不足而无法追溯补齐
+- Context：Day25 审计发现 Day24 runner 在内存中构造了完整 `FinalReport`，但 sealed Agent
+  artifact 只投影 case-level finding/citation counts、fallback 和运行 aggregates，没有保存
+  stable finding identity、claim/explanation、citation/chunk provenance 或 exact finding ↔
+  citation mapping。因此在不重跑 locked pipeline、不调用当前 production 组件重建的前提下，
+  无法准备可信的 20 条人工 citation support sample。另有 artifact contract 冲突：D-027
+  把 `reports/eval.json`/`eval_manifest.json` 作为 Day24 sealed one-shot artifacts，而每日计划
+  同时把 `eval.json` 描述为 rolling aggregate；原路径更新会使历史 hash stale。
+- Decision：
+  - 任何需要 locked post-run semantic review 的新 benchmark，必须在首次消费前冻结并持久化
+    最小 finding-level evidence：run/fixture/analysis、stable finding identity、claim、当时实际
+    citation identity、chunk provenance/content hash/evidence 和 exact mapping。aggregate count
+    永远不能替代该 evidence；缺失时必须 fail closed，不能重跑或按当前代码推断；
+  - 人工 review sample 只从上述 sealed population 产生，使用 verdict-independent canonical
+    SHA256 排序，固定取 20 个 unique finding；LLM/Codex verdict 不得冒充 human verdict；
+  - locked artifact 一经按 sealed contract 发布，后续 aggregate 使用版本化新路径并记录
+    predecessor path/hash，不覆盖原文件或改写旧 manifest。Day25 因此保留 Day24
+    `reports/eval.json`/`eval_manifest.json` bytes，并新增 `reports/eval-day25.json` 与
+    `reports/day25_manifest.json`；
+  - manifest 不记录自身最终 hash 作为自引用不动点；若历史 artifact 已有该字段，必须由外部
+    predecessor/raw evidence 或新版本 manifest 记录最终 bytes hash，不能静默声称内部值有效。
+- Alternatives：未采用重跑 Day24 Agent/FinalReport/Retriever、从 detection prediction 或当前
+  production code 猜 citation、生成 20 条空假样本、用 validity=0 推导 support=0、让 Codex
+  填 human verdict、覆盖 `reports/eval.json` 后更新或删除旧 hash，或原地修改 Day24 manifest。
+- Consequences：Day25 的 citation support 状态保持 blocked/not assessable，support counts/rate
+  不计算；`manual_citation_audit.csv` 只保存 blocker record。未来修复 production 或 evaluation
+  observability 后必须使用新的 unseen holdout，不能再次使用 Day24 locked set 证明改进。本决策
+  只影响 evaluation governance 与后处理 artifact，不改变 SPEC P0、生产 Scanner、Retriever、
+  Agent、Citation Guard、报告行为、依赖或部署。

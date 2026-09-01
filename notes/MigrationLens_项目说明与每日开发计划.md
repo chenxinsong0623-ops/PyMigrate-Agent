@@ -1,6 +1,6 @@
 # MigrationLens 项目说明与每日开发计划
 
-更新时间：2026-08-26
+更新时间：2026-09-01
 产品：MigrationLens — Pydantic v1→v2 升级影响分析 Agent
 权威范围：`SPEC.md`
 
@@ -737,6 +737,36 @@ static verify 通过，并记录 `corpus_review_status=human_review_completed`�
 `3bec58084e13d0734b891d290099a0695ec8dab6` 执行 read-only verify-commit 并通过；Day24 已首次
 且单次消费 locked benchmark，最终门禁与 hash 以 `TASKS.md` 为准。
 
+### 2.23 MigrationLens Day 25 人工 Citation Support 审查与失败归档
+
+状态：`blocked / citation_support_not_assessable_from_sealed_evidence`
+实际开发日期：2026-09-01
+
+Day25 从 clean `main@b204cd7` 开始，只读复核 Day24 七个 sealed artifacts、frozen identity、
+run/attempt/rerun 与 Day23 frozen inputs。全部当前 bytes/hash 与历史记录一致，locked 仍为
+consumed=true、attempt=1、rerun=0；没有调用 Day24 locked evaluator。
+
+evidence sufficiency audit 发现 `app/evaluation/locked.py` 虽在内存中创建 `FinalReport`，但
+case artifact 只保存 finding/citation counts、fallback 与运行 aggregate，没有具体 finding、
+claim/explanation、citation/chunk provenance 或 exact finding ↔ citation mapping。aggregate
+`citation_total=31` 不能恢复逐 finding support evidence。因此不生成 20 条假 review item，
+不调用 Agent/Retriever/Scanner 重建，不让 Codex/LLM 冒充 human reviewer；sample size=0、
+reviewed=0，四类 support counts 与 strict rate 均未计算。
+
+新增 evaluation-only `app/evaluation/citation_audit.py`：只解析 sealed JSON/CSV、校验 hash/
+identity、识别 evidence gap，并为未来完整 population 提供 verdict-independent SHA256 20-item
+sampling、immutable review validation 与 strict aggregation。结构测试禁止它依赖 locked runner、
+Agent、Retriever、Scanner、network 或 execution capability。
+
+正式 artifacts 为 blocked `reports/manual_citation_audit.csv`、`reports/failures.md`、版本化
+`reports/eval-day25.json` 与 `reports/day25_manifest.json`。D-027 将原 `reports/eval.json` 和
+`eval_manifest.json` 封存，而计划曾称前者是 rolling aggregate；Day25 采用 predecessor
+path/hash 的版本化 additive 方案，两个 Day24 文件保持 byte-identical，不留下 stale hash。
+
+Day24 Retrieval 的 Hybrid R@3=0.9 低于 BM25=1.0、Agent citation validity=0.0 与本次
+observability gap 均已归档；没有修改 production、Gold、frozen fixtures、retrieval params、
+Agent 或 Citation Guard。Day26 保持 `planned`，Day25 不能标记 completed。
+
 ## 3. P0、P1 和不做范围
 
 ### 3.1 P0 必须完成
@@ -917,8 +947,8 @@ fixture 必须随规则开发持续建设；不能在冻结日临时生成全部
 共 32 条，每类规则 4 条：
 
 - dev 12：已建立并实际用于 Day 12 evaluator，可调试 query 与比较三路；
-- locked candidates 20：已建立并物理隔离，冻结前只允许 schema、数量、污染与 gold
-  existence 静态校验；未运行检索，冻结后不得调检索或 prompt。
+- locked 20：冻结前只允许 schema、数量、污染与 gold existence 静态校验；Day24 已在
+  verified frozen commit 上首次且单次运行，之后不得调检索、prompt 或重跑。
 
 两份 artifact 位于 `data/evaluation/retrieval/`。Gold 在检索前从 fixed snapshot/chunks
 独立建立，标到稳定 `heading_path`，不依赖 chunk 数组序号。D-015 固定了 schema identity、
@@ -1164,10 +1194,10 @@ AST + alias/浅层类型；不得与检索 Recall 混成一个“准确率”。
 Recall@3、MRR@5。建设目标为 Hybrid Recall@3 ≥ 0.90 且不低于两个单路基线；
 目标不能写入简历。
 
-Day 12 已在独立的 12 条 dev questions 上建立同指标 evaluator，并真实观察到 BM25、
-Dense、Hybrid 的 Recall@3 分别为 1.000000、0.666667、0.833333。它们只用于开发诊断，
-不等于上述 20 条 locked 目标是否通过。20 条 locked candidates 尚未运行，也没有据其
-修改检索行为。
+Day 12 在 12 条 dev questions 上观察到 BM25、Dense、Hybrid Recall@3 分别为
+1.000000、0.666667、0.833333。Day24 在 20 条 locked questions 上首次且单次观察到
+1.0、0.6、0.9；Hybrid 达到 0.90 且高于 Dense，但低于 BM25，因此 comparative gate 失败。
+没有据 locked 结果修改检索行为或重跑。
 
 ### 10.3 Agent 与引用
 
@@ -1176,7 +1206,8 @@ Dense、Hybrid 的 Recall@3 分别为 1.000000、0.666667、0.833333。它们只
 - finding 字段完整率；
 - 回退成功率；
 - 工具调用和 token；
-- 人工抽查 20 条 finding 的 citation support。
+- 人工抽查 20 条 finding 的 citation support；Day25 因 sealed finding-level citation
+  mapping 缺失而 blocked/not assessable，不能伪造 20 条或重跑补证据。
 
 没有独立 explanation gold 时，不宣称 Agent 提高了解释准确率或 detection recall。
 
@@ -1221,9 +1252,11 @@ reports/failures.md
 reports/test-summary.txt
 ```
 
-`reports/eval.json` 是聚合入口，记录 git commit、文档快照 hash、benchmark hash、
-模型/Embedding 标识、evaluator version，并引用各组件报告；组件报告保留各自指标和
-失败明细。`reports/test-summary.txt` 保存发布候选版本实际运行的测试命令和精确摘要。
+`reports/eval.json` 是首次 locked run 的 sealed 聚合入口，记录 git commit、文档快照 hash、
+benchmark hash、模型/Embedding 标识、evaluator version，并引用各组件报告；组件报告保留
+各自指标和失败明细。sealed 后的后处理聚合采用版本化文件（Day25 为
+`reports/eval-day25.json`）并记录 predecessor path/hash，不覆盖旧 bytes。`reports/test-summary.txt`
+保存发布候选版本实际运行的测试命令和精确摘要。
 
 只有测试、数据/文档 hash、评测、失败记录、Docker 启动、模型元数据、样本量、
 负载测试和 clean clone 都有真实证据时，P0 才达到发布和简历门槛。
@@ -1271,7 +1304,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 22 | 计划 2026-08-28；实际 2026-08-26 | `guardrails_complete` | benchmark freeze guardrails | 独立 static evaluator v1、12/28 与 12/20 fail-closed schema、manifest/lock builder、atomic publish、two-phase commit binding 与 anti-leakage tests；当日正式 freeze 因 corpus incomplete 而 blocked | preflight 仅 10 candidate，缺 16 single-positive/7 negative/7 mixed；真实 prepare exit 2 且无输出；定向与共同门禁见 `TASKS.md` | benchmark 独立性、冻结自引用规避 | 当日补 fixture、看成绩、改 gold、调行为、自动 commit |
 | MigrationLens Day 23 | 2026-08-27 | `benchmark_frozen` | 正式 Detection corpus、全量 Gold review 与 final approval | 40 fixtures、51 Python files、24/8/8、DEV 12/LOCKED 28、APPROVE 40、unresolved 0、approved Manifest/EvalLock、deterministic rebuild 与 static verify passed | 仅 source/contract/provenance 静态复核；24 项 freeze tests；最终共同门禁见 `TASKS.md` | corpus 独立性、Gold/approval/commit binding 分层 | locked scoring、自动 Git 操作、修改 production |
 | MigrationLens Day 24 | 2026-08-27 | `locked_run_completed_with_metric_failure` | 首次且单次 locked 自动评测 | verified frozen commit `3bec58084e13d0734b891d290099a0695ec8dab6` 上一次性消费 Detection 28、Retrieval 20 与 Agent 28；runner SHA `872536341dfb0492801c0140a12f8613b074a3a35ba669b37b47949ac50add6d`；sealed reports 已生成且 rerun=0 | Detection P/R/F1=1.0/1.0/1.0；negative FP fixtures=0；one-hop=1.0；BM25 R@3=1.0，Dense R@3=0.6，Hybrid R@3=0.9；Hybrid 达到 0.90 且高于 Dense，但低于 BM25；Agent structured/finding completeness=1.0，citation validity=0.0，support NOT_EVALUATED/Day25；共同门禁见 `TASKS.md` | 一次性 holdout 消费、sealed evidence、自动 validity 与人工 support 分离 | 人工 citation support、性能测试、据 locked 修改或重跑 |
-| MigrationLens Day 25 | 2026-08-31 | `planned` | 人工 citation support 与失败归档 | 人工审查 20 条 finding，完成 `manual_citation_audit.csv`、`failures.md` 和 `eval.json` 聚合 | 复核证据可追溯到 Day 24 frozen run；不重新运行或调优 locked；共同门禁 | 自动 validity 与人工 support | 性能、修复 locked 暴露的行为 |
+| MigrationLens Day 25 | 2026-09-01 | `blocked / citation_support_not_assessable_from_sealed_evidence` | 人工 citation support 与失败归档 | Day24 七个 sealed artifact integrity；evidence sufficiency fail closed；单一 blocker CSV、`failures.md`、版本化 `eval-day25.json`/Day25 manifest；0 假样本、0 human verdict | Python 3.11 专项 34 passed；完整 819 passed、2 warnings；pip/Ruff/format/diff/Compose static config 退出码 0；locked rerun=0，production/Gold/fixtures unchanged；精确命令见 `TASKS.md` | validity/support 分离、sealed evidence、deterministic sampling 与 failure governance | 性能、重建缺失 evidence、修复或重跑 locked |
 | MigrationLens Day 26 | 2026-09-01 | `planned` | 性能与负载证据 | scanner、FakeLLM、条件式真实模型、硬件/commit/hash/sample | Locust、loadtest；样本规则和 Fake/real 分离；共同门禁 | 统计口径与样本量 | 样本不足填 p95、CI、发布文档 |
 | MigrationLens Day 27 | 2026-09-02 | `planned` | CI 与安全门禁 | FakeLLM GitHub Actions、依赖检查、secret 扫描和发布候选安全测试摘要 | CI 实际运行；pytest/Ruff/安全测试精确结果写入 `reports/test-summary.txt`；共同门禁 | 离线 CI 与发布安全 | clean clone、Docker 复验、自动 commit/push |
 | MigrationLens Day 28 | 2026-09-03 | `planned` | clean clone 与 Docker 复现 | 从干净目录按 README 构建；API+Qdrant compose；live、ready 和代表性分析请求 | clean clone pytest/Ruff/compose；实际 build/up/health/request/down；保存复现日志 | 可复现部署与真实 backend | 改业务行为、补写未运行结果、发布文案 |
@@ -1286,8 +1319,9 @@ Day 22 只完成了独立 evaluator/冻结 guardrails，并因 corpus incomplete
 approved prepare、static verify、milestone commit 与 `verify-commit`。Day 24 已在该 frozen
 commit 上首次且单次消费 locked benchmark，并把 Detection、Retrieval 与 Agent 自动评测结果
 封存到 `reports/`；其中 Hybrid locked R@3 低于 BM25 是真实 metric failure，不能通过调参或
-重跑修正。Day 25 只进行人工 citation support 与失败归档。Day 24 后若改变行为，旧 locked
-结果不能继续作为最终证据。Days 26–29 分别负责性能、CI/安全、clean clone/Docker 和发布文档，
+重跑修正。Day 25 已执行 evidence sufficiency 与失败归档，但因 Day24 缺少 finding-level
+citation mapping 而 blocked；没有伪造人工结果。Day 24 后若改变行为，旧 locked 结果不能继续
+作为最终证据。Days 26–29 分别负责性能、CI/安全、clean clone/Docker 和发布文档，
 不得重新合并成一个发布日。
 
 ## 12. 历史编号迁移说明

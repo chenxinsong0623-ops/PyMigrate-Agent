@@ -3643,3 +3643,140 @@ secret、token 或 `.env`。rerun guard 发现 Day24 artifact 已存在且 `lock
 26. one-shot guard 不能靠开发者记忆，必须由 artifact 阻断。
 27. locked 后修 bug 必须换新 unseen holdout 才能重新作为最终证据。
 28. Day25 接人工 citation support 与失败归档，不接调参、性能或 CI。
+
+## 2026-09-01：MigrationLens Day 25 — 人工 Citation Support 审查与失败归档
+
+状态：`blocked / citation_support_not_assessable_from_sealed_evidence`
+
+### 1. Citation validity 与 citation support
+
+Citation validity 是确定性来源/身份检查：chunk 是否来自当前 analysis allowlist，URL、ref、
+heading、commit 与 hash 是否匹配，rule/query/finding binding 是否成立。Citation support 是
+语义判断：引用证据是否直接、完整地支持当前 finding claim 或 migration advice。validity=1
+仍可能引用只相关但不支持结论的段落；validity=0 也不能自动推导 support=0，因为可能根本
+没有足够 frozen content 供语义判断。两者必须分别报告。
+
+### 2. 为什么 support 需要真实 human-in-the-loop
+
+Day25 的 rubric 是 SUPPORTED、PARTIALLY_SUPPORTED、UNSUPPORTED、NOT_ASSESSABLE。
+Codex 可以准备不可变 review pack、校验 sample 和聚合人类填写结果，但不能把自己的语义判断
+写成 `reviewer=human`。LLM 自评会让生成 claim 的系统同时充当独立审查者，既缺乏人类责任
+边界，也不能满足“人工抽查”的证据含义。
+
+### 3. Sealed evidence sufficiency 先于 sampling
+
+人工审查不是先挑 20 条再找证据，而必须从 Day24 已冻结的 population 沿以下链追溯：
+
+```text
+run -> fixture -> analysis -> finding identity -> claim/explanation
+    -> 当时实际 citation identity -> frozen chunk provenance/evidence
+```
+
+Day24 case artifact 只有 finding/citation aggregate counts、fallback 和运行 metadata。它没有具体
+finding、claim、citation/chunk 或 exact mapping。`citation_total=31` 只能说明产生了 31 个
+validation item，不能证明哪个 item 属于哪个 finding，也不能恢复证据正文。因此 evidence
+sufficiency gate 失败，正确行为是 blocked，而不是重跑或补猜数据。
+
+### 4. 为什么 locked run 不能重复
+
+Day24 holdout 已经暴露 Detection、Retrieval 与 Agent 结果；它不再是未见数据。若根据 Hybrid
+低于 BM25、citation validity=0 或 evidence gap 修改 behavior/evaluator 后再在同一集合运行，
+结果会包含 evaluation leakage。修改后的可信估计必须来自新的 unseen holdout，即在修改与
+调试期间完全没有被观察或用于选择行为的样本。
+
+### 5. Fail closed 比“补数据跑通”更正确
+
+重新调用 `BoundedAnalysisAgent`、FinalReportBuilder、Retriever 或 Scanner 只能生成“当前代码
+现在会产生什么”，不能证明“Day24 当时实际产生什么”。即使 deterministic fallback 看起来
+可复现，当前环境、代码或 artifact contract 的变化也会把重建结果伪装成历史证据。fail closed
+保留了证据的时间身份和可证伪性。
+
+### 6. Deterministic sampling 与 cherry-pick
+
+Day25 helper 为未来完整 frozen population 实现 canonical review key：run、fixture、analysis、
+finding 与 citation identity 先做稳定 JSON，再用 SHA256 排序取前 20 条。它不使用 Python
+`hash()`、UUID4、时间、文件枚举顺序或 support verdict。这样输入顺序变化仍得到相同 sample，
+也阻止 reviewer 只挑容易、valid 或预期 supported 的项目。cherry-pick 会让 support rate 只
+描述被人为筛选的子集，不再描述 frozen finding population。
+
+### 7. Strict support rate
+
+正常完成时分母固定为 20；只有 SUPPORTED 进入分子。PARTIALLY_SUPPORTED、UNSUPPORTED 与
+NOT_ASSESSABLE 都属于 strict failure。PENDING row 不进入 completed aggregate，partial review
+也不能提前计算 rate。当前没有合法 sample，sample/reviewed 均为 0，四类 counts 与 rate
+保持未计算，而不是写成 0/20。
+
+### 8. Artifact provenance 与 hash
+
+SHA256 把一个 path 的当前 bytes 与已记录 identity 绑定，可以发现 silent overwrite、换行或
+字段变化；它不证明语义正确。Day25 实际重算七个 Day24 artifact、Day23 Manifest/EvalLock、
+Detection/Retrieval inputs 与 chunks，均匹配。`eval_manifest.json` 内部 self-hash 是写入自身
+字段前的 hash，无法形成最终 bytes 的不动点；Day24 raw evidence 保存的最终 manifest hash
+才匹配当前 bytes。
+
+D-027 明确把 `eval.json`/`eval_manifest.json` 封存，计划又称 `eval.json` 是 rolling
+aggregate。为不让旧 hash stale，Day25 保留两者 byte-identical，新增版本化
+`eval-day25.json` 和 `day25_manifest.json`，显式记录 predecessor path/hash。这比原地覆盖后
+解释历史更可追溯。
+
+### 9. Failure archive 是 benchmark 正式产物
+
+`reports/failures.md` 不只是开发日志：它把 passed gate、failed gate、evidence、限制与 future
+remediation precondition 放在一个可审计 artifact 中。Detection 如实记录全部通过，不制造
+failure；Retrieval 如实记录 Hybrid R@3=0.9 仍因低于 BM25=1.0 而失败；Agent 保留
+structured/completeness=1.0、citation validity=0.0、fallback/degraded 与 LLM calls=0；Citation
+support 记录 blocked 与 observability gap。
+
+### 10. Day25 helper 与 production boundary
+
+`app/evaluation/citation_audit.py` 只解析本地 sealed JSON/CSV、计算 hash、校验人工 review 与
+构造 additive structure。源码结构测试禁止它 import locked runner、Agent、Scanner、Retriever、
+Reporting production、网络或执行能力。这样“没有 rerun”不是只靠文档承诺；helper 根本没有
+进入 production pipeline 的依赖路径。
+
+### 11. 实际失败与修复
+
+开发前原样 pytest 因 shell SOCKS proxy 与缺失 `socksio` 在收集阶段得到 5 errors；没有新增
+依赖掩盖。移除本次子进程 proxy 后第一次重跑缺少最终摘要/exit code，不能记为通过；使用
+仓库内隔离 basetemp 后得到 `785 passed, 2 warnings` 的有效基线。
+
+Day25 新增测试第一次为 `34 passed`。随后定向 Ruff check 报两处 line length，format check
+报两个新文件需要格式化；只执行机械 formatter 后 Ruff 与 format 通过，没有放宽断言。
+最终用显式 Python 3.11 环境复验：Day25 专项 `34 passed in 0.68s`（共同门禁并行批次另一次
+为 5.52s），完整回归
+`819 passed, 2 warnings in 21.85s`；pip check、全仓 Ruff check、179-file format check、
+diff check 与 Compose static config 均以退出码 0 完成。Compose 有两条用户级 Docker config
+access-denied warning，本日没有部署改动，未运行容器 runtime。精确命令与边界见 `TASKS.md`。
+
+### 12. 当前仍未完成
+
+没有 20 条可展示的 frozen review items，没有用户 human verdict，没有 support counts/rate，
+所以 Day25 不能 completed。Day26 性能/Locust 未开始；GitHub Actions、WDI 与真实 LLM 均未
+在本日实施。未来若增强 evaluation evidence 或 production behavior，必须先建立新 unseen
+holdout，Day24 locked set 不可重跑作为改进证据。
+
+### Day 25 后应能回答的 23 个问题
+
+1. citation validity 和 citation support 有什么区别？
+2. 为什么 validity=1 仍不能证明 support=1？
+3. 为什么 validity=0 不能机械推导 support=0？
+4. 为什么 citation support 需要人工抽查？
+5. 为什么 Codex/LLM 判断不能冒充 human review？
+6. 什么是 sealed per-finding evidence？
+7. 为什么 aggregate citation count 不等于 finding ↔ citation mapping？
+8. Day24 artifacts 具体缺了哪些 support review 字段？
+9. 为什么不能从当前 production code 重建 Day24 citation？
+10. locked benchmark 为什么只能运行一次？
+11. 什么是 evaluation leakage？
+12. 什么是 unseen holdout？
+13. deterministic sample 为什么要使用 canonical SHA256？
+14. Python `hash()`、UUID4 与时间为什么不适合 sample identity？
+15. cherry-pick 会怎样污染人工 support rate？
+16. strict support rate 如何处理 PARTIALLY_SUPPORTED？
+17. NOT_ASSESSABLE 为什么仍属于 strict failure？
+18. frozen commit 与 run ID 分别固定什么？
+19. artifact SHA256 能证明什么、不能证明什么？
+20. 为什么 fail closed 比重新运行补数据更正确？
+21. Hybrid Recall@3=0.9 为什么仍是 failed gate？
+22. 为什么 Day25 不能修改 Citation Guard 或 RRF？
+23. 为什么版本化 aggregate 比覆盖 sealed `eval.json` 更安全？
