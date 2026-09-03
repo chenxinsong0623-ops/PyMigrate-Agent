@@ -3900,3 +3900,43 @@ config 均通过。所有这些仍是离线测试证据，不是百炼 runtime e
 adapter wall time=`1697.8 ms`、response content length=22。命令未输出正文、endpoint 或 key。
 当前只能将 provider runtime 标记为 `smoke_verified`；N=1 不支持 p50/p95、failure rate、
 token usage、Agent retry/fallback、FastAPI 或 production Qdrant/E5 E2E 结论。
+
+## MigrationLens Day 27 — CI 与安全门禁
+
+### 1. Test-first security contract
+
+先新增 `tests/unit/test_day27_ci_security.py`，在 workflow 尚不存在时得到
+`2 failed, 1 passed in 1.05s`。该测试固定检查 Python 3.11、顶层只读权限、FakeLLM、
+禁止 secrets 与 `pull_request_target`、禁止 Docker runtime/真实 LLM、完整 SHA action pin、
+质量/审计/secret gates、`.env` ignore，以及 Day24/Day25 的既有证据边界。实现
+workflow 后该定向测试为 `4 passed in 0.16s`。
+
+### 2. CI trust boundary
+
+Day27 CI 只在 `push(main)`、`pull_request` 和手动触发时运行，顶层
+`permissions` 为 `contents: read`。它以 `MIGRATIONLENS_LLM_BACKEND=fake` 强制测试边界，
+不读取或注入 provider key，也不运行 real-provider smoke、Docker build/up 或其他 Day28
+runtime 操作。`pull_request_target` 会把不可信 PR 代码置于更敏感的上下文，故不使用；
+checkout 关闭凭据持久化。Action 使用经上游 ref 核实的完整 commit SHA，下载的 Gitleaks
+release asset 也先校验官方 SHA256，降低 tag 漂移和供应链替换风险。
+
+### 3. Dependency and secret gates
+
+选择 Apache-2.0 的 PyPA `pip-audit==2.10.1` 作为仅开发/安全用途的漏洞门禁；它支持
+Python 3.11 和 `pyproject.toml` project audit。CI 对完整项目使用 `python -m pip_audit . --strict`，
+任何解析或漏洞失败都会使 job 失败。当地 project-mode resolver 因在隔离环境中长时间卡住，
+已停止经 PID 确认的子进程，不能把它写成成功；随后对 16 个已声明的直接固定依赖执行
+`--no-deps --disable-pip --strict`，结果为 `No known vulnerabilities found`（exit 0）。
+
+选择 MIT 的 Gitleaks 8.30.1 作真实 Git history 扫描；本地执行扫描了 30 commits、
+约 2,821,971 bytes，结果 `no leaks found`（exit 0）。它不读取 Git 忽略的 `.env`；未提交的
+Day27 文件由 security contract test 覆盖，提交后将由 CI history scan 覆盖。没有使用宽泛
+忽略或 vulnerability allowlist。
+
+### 4. Evidence discipline
+
+完整回归实测为 `851 passed, 2 warnings in 26.21s`；`pip check`、Ruff、191-file format、
+Compose static config 和 `git diff --check` 通过。Day24 的七个 sealed artifact SHA256 仍匹配，
+Day25 的 `citation_support_not_assessable_from_sealed_evidence` blocker 及其 no-rerun
+状态不变。新的 workflow 尚未由用户 commit/push，故 GitHub-hosted runtime 只能标记为
+`not_verified`，并未开始 Day28 或 Day29。

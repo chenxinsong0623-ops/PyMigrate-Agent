@@ -1,0 +1,90 @@
+MigrationLens Day27 CI/security evidence summary
+format_version = migrationlens-day27-ci-security-evidence-v1
+status = implementation_complete / github_actions_runtime_pending
+
+LOCAL PRE-FLIGHT
+branch = main
+starting_head = c19c4dd478d894c8dd038cf1ec1a475cca7e6b3a
+starting_subject = feat(llm): add real provider adapter and Day26 performance checks
+remote_main = c19c4dd478d894c8dd038cf1ec1a475cca7e6b3a
+starting_worktree = clean
+project_python = CPython 3.11.15
+shell_default_python = Python 3.9.13 (not used for project gates)
+os_runtime = Windows-10-10.0.22000-SP0
+gitignore_env = true (.gitignore:27, local .env was not read)
+existing_workflows_at_start = none (.github/workflows was absent)
+existing_github_actions_status = not_available (GitHub CLI is not installed locally; no repository workflow existed)
+
+Commands actually run with the project Python and FakeLLM environment:
+- python -m pip check -> exit 0; No broken requirements found.
+- python -m pytest tests/unit/test_day27_ci_security.py -q -> exit 0; 4 passed in 0.16s.
+- python -m pytest -q --basetemp var/tmp/day27-final-pytest-final -> exit 0; 851 passed, 2 warnings in 26.21s.
+- python -m ruff check . -> exit 0; All checks passed!
+- python -m ruff format --check . -> exit 0; 191 files already formatted.
+- docker compose config --quiet -> exit 0; two existing user Docker config access-denied warnings. This is static configuration validation only.
+- git diff --check -> exit 0; no output.
+
+The two pytest warnings were not filtered: Starlette TestClient/httpx deprecation and qdrant-client server-version compatibility warning.
+The pytest subprocess removed proxy variables and explicitly set MIGRATIONLENS_LLM_BACKEND=fake; test collection also disables dotenv loading. No provider key, paid provider request, E5 download, Qdrant daemon, Docker runtime, or Day24 evaluator run occurred.
+
+GITHUB ACTIONS
+workflow_path = .github/workflows/ci.yml
+triggers = push(main), pull_request, workflow_dispatch
+python = 3.11
+permissions = contents: read
+fake_llm_only = true
+provider_secret_references = none
+pull_request_target = absent
+checkout = actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 (v7.0.1); fetch-depth=0; persist-credentials=false
+setup_python = actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 (v7.0.0)
+remote_workflow_run_id = not_verified
+remote_workflow_url = not_verified
+github_actions_runtime = not_verified
+
+CI has no docker compose build/up, no Docker runtime job, no real LLM smoke/load, no secret injection, no artifact upload, and no auto commit/push. A future committed workflow will fail closed on pip check, pytest, Ruff, Compose static config, pip-audit, or Gitleaks failure.
+
+DEPENDENCY AUDIT
+tool = pip-audit 2.10.1
+tool_role = direct development/security dependency; not runtime dependency
+upstream = https://github.com/pypa/pip-audit
+license = Apache-2.0
+python_support = >=3.10 (verified upstream; local runtime is 3.11.15)
+local_successful_command = python -m pip_audit -r var/tmp/day27-declared-requirements.txt --no-deps --disable-pip --strict --progress-spinner off --timeout 10
+local_scope = all 16 exact direct runtime and dev dependency pins exported from pyproject.toml; the temporary requirements list is Git ignored
+local_result = exit 0; No known vulnerabilities found.
+local_warnings = pip-audit warned that --no-deps works best with fully hashed requirements; warnings were retained, not suppressed.
+ci_command = python -m pip_audit . --strict
+ci_scope = project metadata and resolved dependency tree after fresh Python 3.11 install
+ci_runtime = not_verified
+
+Local project-mode attempts were not treated as a pass: --index-url with project mode exited 2 because pip-audit only permits that option with -r; plain project-mode resolution exceeded the local execution window while creating an isolated environment for the ML dependency tree, so its verified child processes were stopped. The successful direct-declaration audit above is the local vulnerability evidence; remote CI retains the full project-mode audit.
+
+SECRET SCAN
+tool = Gitleaks 8.30.1
+upstream = https://github.com/gitleaks/gitleaks
+license = MIT
+release_tag = v8.30.1
+release_checksums_file_sha256 = 061476c21adaf5441516f96f185c1a4706a83cd6329b9b38762271b3d4a52fae
+local_asset = gitleaks_8.30.1_windows_x64.zip (checksum verified against the verified checksums file)
+ci_asset = gitleaks_8.30.1_linux_x64.tar.gz
+ci_asset_sha256 = 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+local_command = gitleaks git . --redact --no-banner --exit-code 1 --log-opts=--all
+local_result = exit 0; 30 commits scanned; approximately 2,821,971 bytes scanned; no leaks found.
+scan_scope = complete current Git history only; Git-ignored .env and ignored user data were not read.
+uncommitted_day27_files = outside local git-history scan; the static workflow contract test covers them locally, and the full-history CI scan will include them after user commit/push.
+allowlist = none
+
+SECURITY CONTRACT
+workflow_contract_test = tests/unit/test_day27_ci_security.py; exit 0; 4 passed in 0.16s.
+verified = workflow exists; Python 3.11; FakeLLM forced; no provider secret variables or secrets.*; contents: read only; no pull_request_target; complete action SHA pins; no Docker runtime; required quality/audit/secret gates present.
+env_contract = .env and .env.* ignored while .env.example remains tracked; local .env was not copied, read, logged, or scanned.
+day24_sealed_integrity = passed by Day27 contract test and full pytest; all seven expected SHA256 values unchanged.
+locked_evaluator = not rerun.
+day25_blocker = unchanged; status=blocked; locked_run_consumed=true; run_attempt=1; rerun_count=0; evidence_sufficient=false; citation_support_not_assessable_from_sealed_evidence remains in reports/failures.md.
+
+KNOWN BLOCKERS
+- GitHub-hosted CI has not run because the workflow has not been committed or pushed by the user.
+- Day25 citation support remains blocked by missing sealed finding-to-citation evidence.
+- Day26 real-provider load, Agent/API real-provider E2E, and real-provider p95 evidence remain unverified; no such work was performed here.
+- Day28 clean clone and Docker runtime verification remain unstarted.
+- Day29 release documentation remains unstarted.

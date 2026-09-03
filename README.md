@@ -33,6 +33,7 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 24 | `locked_run_completed_with_metric_failure` | frozen commit `3bec58084e13d0734b891d290099a0695ec8dab6` 上首次且单次完成 locked 自动评测；Detection P/R/F1=1.0/1.0/1.0，Retrieval Hybrid R@3=0.9 但低于 BM25 R@3=1.0，Agent citation validity=0.0 且 citation support 留到 Day25 |
 | MigrationLens Day 25 | `blocked / citation_support_not_assessable_from_sealed_evidence` | 七个 Day24 sealed artifacts hash/identity 已复核；Agent artifact 只有 case-level aggregate counts，没有 exact finding ↔ citation mapping，故未生成 20 条假样本、未冒充 human review；已新增 blocked audit、失败归档与版本化 additive aggregate，locked rerun=0 |
 | MigrationLens Day 26 | `implementation_complete / real_llm_smoke_verified` | 50 files/10k LOC scanner benchmark、FakeLLM Locust concurrency 5/10、`reports/loadtest.json`/`e2e_latency.json`、百炼 direct adapter N=1 smoke 成功；真实 Locust load 与 Agent/API E2E 未运行 |
+| MigrationLens Day 27 | `implementation_complete / github_actions_runtime_pending` | Python 3.11 FakeLLM-only CI、pinned actions、`pip check`/pytest/Ruff/Compose static gate、strict pip-audit 与 checksum-pinned Gitleaks full-history secret scan 已实现；尚未 push，remote Actions 未验证 |
 
 当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite schema version `2` 包含
 `system_metadata`、`analyses` 与 `reports`，支持 v1→v2 事务迁移以及 API envelope、Day 20
@@ -90,13 +91,14 @@ claim/explanation、citation/chunk provenance 或 exact finding ↔ citation map
 的 20 条 frozen review sample，不能重跑或用当前 production code 重建。No locked evaluator
 was rerun。
 
-尚未实现：
+仍未验证或未完成：
 
-- GitHub Actions；
+- GitHub Actions remote runtime：Day27 workflow 尚未由用户 commit/push，不能写成已通过；
 - 可计算的人工 citation support：Day25 已归档失败，但因 sealed finding-level evidence
   缺失而 blocked；
-- 负载测试；
-- 真实 LLM；
+- 真实 LLM load 与 Agent/API real-provider E2E；
+- Day28 clean clone / Docker runtime 复现；
+- Day29 release documentation；
 - WDI-ClaimCheck 的任何业务代码。
 
 P0 按冻结 SPEC 明确不采用 cross-encoder reranker；它不是待补齐的 P0 功能。
@@ -786,8 +788,18 @@ $Py = 'D:\conda_envs\pymigrate-agent\python.exe'
 & $Py -m ruff check .
 & $Py -m ruff format --check .
 git diff --check
-docker compose config
+docker compose config --quiet
 ```
+
+### Day27 CI/security gate
+
+`.github/workflows/ci.yml` 在 `push` 到 `main`、`pull_request` 与手动触发时使用 Python
+3.11，并强制 `MIGRATIONLENS_LLM_BACKEND=fake`。它没有真实 provider key、
+`pull_request_target`、写权限或自动 Git 操作；top-level permission 仅为 `contents: read`。
+workflow 以完整 commit SHA 固定 checkout/setup actions，完整执行 pytest、Ruff、`pip check`、
+Compose static config 和 `pip-audit`，再下载 SHA256 校验的 Gitleaks v8.30.1 扫描全部 Git
+history。任何 gate 失败都会使 job 失败；它不运行 Docker runtime 或真实 LLM。remote run 状态
+在 `reports/test-summary.txt` 中如实保留为 `not_verified`，直到用户提交并推送。
 
 ### 当前基线证据
 
@@ -1156,7 +1168,9 @@ D-027 把原 `reports/eval.json`/`eval_manifest.json` 封存，Day25 因此保�
 用 `reports/eval-day25.json` 和 `reports/day25_manifest.json` 保存版本化 additive provenance。
 Day24 evaluator 没有重跑，production、Gold、frozen fixtures、retrieval params 与 Agent behavior
 均未修改。Day26 为 `implementation_complete / real_llm_smoke_verified`；性能工作没有
-掩盖或解除当前 evidence blocker。下一开发日 Day27 CI/安全门禁尚未开始。
+掩盖或解除当前 evidence blocker。Day27 CI/安全门禁现为
+`implementation_complete / github_actions_runtime_pending`；用户 commit/push 后的 GitHub-hosted
+run 是升级为 completed 的必要证据。
 
 ## 项目文档
 

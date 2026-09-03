@@ -871,3 +871,39 @@
 - 影响：Day26 provider 状态从 `not_verified` 更新为 `smoke_verified`；real load、Agent/API
   E2E、p95、token usage 与 production Qdrant/E5 仍未验证。Day24 sealed artifacts 与 Day25
   blocker 不变。
+
+## D-032 — Day27 离线 FakeLLM CI 与 fail-closed 安全门禁
+
+- 日期：2026-09-03
+- 状态：已接受；本地实现完成，GitHub-hosted runtime 待用户 commit/push 后验证
+- 决策：
+  - 以单一 `.github/workflows/ci.yml` 覆盖 `push` 到 `main`、`pull_request` 与
+    `workflow_dispatch`。顶层权限固定为 `contents: read`，不使用
+    `pull_request_target`、`secrets.*`、写权限、OIDC、自动 commit/push 或 artifact upload；
+  - workflow 以环境变量强制 `MIGRATIONLENS_LLM_BACKEND=fake`，不设置 provider API key、
+    real-load opt-in 或任何真实模型 smoke。`actions/checkout` 固定为 v7.0.1 commit
+    `3d3c42e5aac5ba805825da76410c181273ba90b1`，并设 `fetch-depth: 0` 与
+    `persist-credentials: false`；`actions/setup-python` 固定为 v7.0.0 commit
+    `5fda3b95a4ea91299a34e894583c3862153e4b97`；
+  - CI 固定 Python 3.11，fail-closed 顺序执行安装的项目/开发依赖、`pip check`、完整
+    pytest、Ruff lint/format、`docker compose config --quiet` 与
+    `python -m pip_audit . --strict`。`pip-audit==2.10.1` 作为 direct dev dependency；
+    它由 PyPA 维护、支持 Python 3.11、采用 Apache-2.0，并通过 PyPI vulnerability service
+    对 project metadata 执行漏洞审计；不使用 `--fix`、`--ignore-vuln` 或非精确 allowlist；
+  - secret gate 固定从 Gitleaks v8.30.1 官方 release 下载 Linux x64 binary，并校验 SHA256
+    `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`，随后执行
+    `gitleaks git . --redact --no-banner --exit-code 1 --log-opts="--all"`。这以完整 history
+    scan 覆盖已提交内容，且不读取 Git 忽略的本地 `.env`；
+  - Day27 只验证 Compose static configuration，不执行 Docker build/up、clean clone、真实
+    Qdrant/E5、真实 LLM 或 Day24 locked evaluator。Day24 seven sealed artifact hashes 与 Day25
+    `citation_support_not_assessable_from_sealed_evidence` blocker 由普通 pytest 静态保护。
+- 原因：CI 必须在不获取云凭据、付费 provider 或开发机缓存的前提下，验证 Python 3.11 项目、
+  依赖完整性、已知漏洞、secret 泄漏与 workflow 自身的最小权限。完整 SHA pin、release asset
+  hash、full-history secret scan 与 strict audit 可以将供应链和安全失败保留为真正的红灯。
+- 替代方案：未采用仅 `pip check`（不含漏洞数据库）、手写 secret regex、浮动 action/tag、
+  Gitleaks Action（会额外引入 action licensing/API 行为）、`pull_request_target`、真实 provider
+  smoke、Docker runtime 或忽略已知漏洞。它们要么覆盖不足，要么扩大权限/凭据边界，或属于
+  Day28/Day29。
+- 影响：新增 workflow 与静态 CI/security contract tests；`pip-audit`、Gitleaks notices、
+  AGENTS 必需门禁与 Day27 evidence/docs 同步。SPEC、业务代码、Day24 sealed artifacts、
+  Day25 blocker、Day26 runtime/load artifacts、部署内容和 Git history 均不改变。

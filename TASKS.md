@@ -1,279 +1,124 @@
 # MigrationLens 当前任务
 
 > 这里只记录当前开发日的真实实施状态。历史细节保留在 Git、`LEARNING_LOG.md`、
-> `DECISIONS.md` 和每日开发计划中；计划值、Fake 结果和未完成命令不写成真实 provider 证据。
+> `DECISIONS.md` 和每日开发计划中；计划值、Fake 结果和未完成命令不写成真实 provider 或
+> GitHub Actions 证据。
 
 ## 1. 当前开发日与状态
 
-MigrationLens Day 26 — 性能、负载与真实 LLM 条件式运行证据
+MigrationLens Day 27 — CI 与安全门禁
 
-状态：`implementation_complete / real_llm_smoke_verified`
+状态：`implementation_complete / github_actions_runtime_pending`
 
-计划日期：2026-09-01；实际日期：2026-09-02。
+实际日期：2026-09-03。
 
-本日已完成 scanner micro benchmark、FakeLLM application load、最小 OpenAI-compatible
-runtime adapter、条件式真实模型 gate、机器可读报告和测试。2026-09-03 用户已在 Git 忽略的
-本地 `.env` 中配置百炼业务空间 endpoint、`qwen3.7-flash-2026-07-15` 与 key，并用只输出
-`has_key=True` 的命令验证 Settings 加载。用户随后明确授权最多 1 个、无重试、不运行
-Locust 的真实 smoke；唯一 provider request 成功，但 N=1 不能作为负载、p95 或端到端性能证据。
+本日只实现离线、确定性、FakeLLM-only 的 GitHub Actions CI/security gate，没有改变
+MigrationLens 业务行为。workflow 尚未由用户 commit/push，因此没有 GitHub-hosted runtime
+evidence，绝不标记为 `completed` 或 `ci_runtime_verified`。
 
-Day24 sealed benchmark、frozen corpus/Gold/EvalLock 与 Day25 blocker 保持原样；locked
-evaluator 没有重跑，也没有按当前代码重建缺失 citation evidence。Day27 尚未开始。
-
-## 2. 开发起点与 baseline
+## 2. 开发起点与基线
 
 - branch：`main`；
-- starting HEAD：`30d08fc65e5c5330a1add9b6944005ed515114e8`；
-- starting subject：`feat(evaluation): add Day25 citation audit evidence guardrails`；
-- 开发前 worktree：clean，没有来源不明的用户修改；
-- Day25 commit 已存在，Day26 尚未开始；
-- Git add/commit/push/tag：均未运行。
+- starting HEAD：`c19c4dd478d894c8dd038cf1ec1a475cca7e6b3a`；
+- starting subject：`feat(llm): add real provider adapter and Day26 performance checks`；
+- `git ls-remote origin refs/heads/main` 与 local `origin/main` 都为同一 SHA；
+- 起始 worktree clean，没有来源不明的用户修改；
+- 系统默认 `python` 为 3.9.13，不符合项目契约；本日所有项目命令使用
+  `D:\conda_envs\pymigrate-agent\python.exe`（CPython 3.11.15）；
+- 起始 `.github/workflows` 不存在；GitHub CLI 未安装，无法本机读取 remote Actions history；
+- 本地 `.env` 存在但由 `.gitignore:27` 精确排除；未读取、复制或输出其内容；
+- Day24 seven sealed artifact hash 在 Day27 static contract/full pytest 中保持不变；
+  Day25 `citation_support_not_assessable_from_sealed_evidence` blocker 保持原样。
 
-解释器：`D:\conda_envs\pymigrate-agent\python.exe`（Python 3.11）。
-
-开发前实际结果：
+开发前实际只读/静态结果：
 
 - `python -m pip check`：exit 0，`No broken requirements found.`；
-- 原样 `python -m pytest -q`：exit 1，collection 5 errors；shell 注入 SOCKS proxy 而环境没有
-  `socksio`，Qdrant client 在 import-time construction 失败；
-- 只在 pytest 子进程移除 proxy variables，并使用仓库内
-  `--basetemp var/tmp/day26-baseline-pytest`：exit 0，
-  `819 passed, 2 warnings in 21.68s`；
-- `python -m ruff check .`：exit 0，`All checks passed!`；
-- `python -m ruff format --check .`：exit 0，`179 files already formatted`；
+- `docker compose config --quiet`：exit 0，保留两条本机 Docker config access-denied warning；
 - `git diff --check`：exit 0；
-- Docker `29.7.2`、Compose `v5.4.0` CLI 可用；`docker info` exit 1，daemon 未运行；
-- `docker compose config --quiet`：exit 0，并出现两条用户级 Docker config access-denied
-  warning；本日未修改部署文件。
+- 起始完整 pytest 命令已以 FakeLLM/proxy isolation 启动，但外层终端没有返回可记录的最终
+  summary；不将其作为 baseline passed evidence。本日最终完整回归的精确结果见第 5 节。
 
-没有安装 `socksio`、过滤 warning 或修改 production 行为来伪造 baseline。
+## 3. Day27 实现
 
-## 3. 实现与调用链
+新增 `.github/workflows/ci.yml`：
 
-```text
-Settings
-  -> MIGRATIONLENS_LLM_BACKEND
-  -> build_llm_client()
-     -> FakeLLM (default/offline)
-     -> RealLLMClient (OpenAI-compatible provider API)
-  -> AnalysisService
-  -> ZIP Guard
-  -> AST / RuleScanner
-  -> Findings
-  -> Retriever
-  -> BoundedAnalysisAgent
-  -> LLMClient.complete()
-  -> typed decision
-  -> Citation Guard
-  -> deterministic fallback when necessary
-  -> report/API persistence
-```
+- trigger：`push` 到 `main`、`pull_request`、`workflow_dispatch`；
+- top-level `permissions: contents: read`；不使用 `pull_request_target`、写权限、OIDC、
+  `secrets.*`、自动 commit/push 或 artifact upload；
+- 环境固定 `MIGRATIONLENS_LLM_BACKEND=fake`，没有 `MIGRATIONLENS_LLM_API_KEY`、
+  `OPENAI_API_KEY`、real-load opt-in 或任何真实 provider secret；
+- Python 固定 3.11；`actions/checkout` 固定 v7.0.1 full SHA
+  `3d3c42e5aac5ba805825da76410c181273ba90b1`，完整 history、
+  `persist-credentials: false`；`actions/setup-python` 固定 v7.0.0 full SHA
+  `5fda3b95a4ea91299a34e894583c3862153e4b97`；
+- fail-closed quality gate：安装 `.[dev]` 后执行 `pip check`、完整 pytest、Ruff lint/format
+  与 `docker compose config --quiet`；没有 Docker build/up/runtime；
+- `pip-audit==2.10.1` 是 direct dev/security dependency。CI 使用
+  `python -m pip_audit . --strict`，没有 `--fix`、`--ignore-vuln` 或 allowlist；
+- Gitleaks v8.30.1 以官方 Linux x64 release asset SHA256
+  `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb` 下载并校验，随后执行
+  `gitleaks git . --redact --no-banner --exit-code 1 --log-opts="--all"`。
 
-实现边界：
+新增 `tests/unit/test_day27_ci_security.py`。它 test-first 初次结果为
+`2 failed, 1 passed in 1.05s`（workflow 尚不存在），最终静态验证 workflow security、完整
+action SHA、FakeLLM-only、quality/audit/secret gates、`.env` ignore、Day24 sealed hashes 与
+Day25 blocker/rerun status。
 
-- `LLMClient.complete(request, timeout_seconds)` 协议保持不变；
-- `RealLLMClient` 使用异步 HTTPX、`POST {base_url}/chat/completions`、固定 non-streaming
-  与有界输出；百炼兼容审计后按 D-030 使用 `max_tokens` 且不显式发送 `n`；
-- timeout、HTTP/provider error、invalid response、empty content 映射为不含 provider 原文与
-  secret 的 `LLMClientError`；取消信号不被吞掉；
-- retry 仍只由 Agent 负责：单次 timeout 20 秒、总 deadline 45 秒、最多一次 retry；adapter
-  不暗加 retry，deterministic fallback 保留；
-- Settings 默认 backend 仍为 `fake`。`openai_compatible` 必须同时提供 base URL、model 和
-  `SecretStr` key；URL 拒绝 userinfo、query、fragment；
-- dependency builder 只构造 client，不执行网络 I/O；API 上传参数不能改变 provider URL；
-- 普通 pytest 清除 provider/opt-in 环境变量，真实 HTTP 契约用 `MockTransport` 测试。
+## 4. 依赖与安全工具选择
 
-## 4. Scanner micro benchmark
+- `pip-audit==2.10.1`：PyPA upstream、Apache-2.0、Python >=3.10；适合严格审计
+  `pyproject.toml` project metadata。`pip check` 只能检查安装一致性，不能替代漏洞数据库。
+- Gitleaks `v8.30.1`：official upstream、MIT；只作为 CI runtime binary，不进入产品镜像或
+  Python runtime。release checksum file 与本机 Windows asset 已实际校验；CI Linux asset hash
+  固定在 workflow。
+- 未采用手写 secret regex、浮动 action/tag、Gitleaks Action、`pull_request_target`、
+  真实 LLM gate、Docker runtime 或漏洞 ignore。选择原因和替代方案见 D-032。
 
-设计：独立 programmatic fixture，generator
-`migrationlens-day26-scanner-fixture-v1`；50 个 `.py` 文件、精确 10,000 LOC，不引用
-DEV/LOCKED evaluation corpus。只运行 `ASTScanner + RuleScanner`，不包含 ZIP、HTTP、SQLite、
-Qdrant、E5 或 LLM。计时器为 `time.perf_counter_ns`，先做 3 次不计时完整 warm-up，再做
-50 次正式重复。
+## 5. 实际测试与门禁结果
 
-- fixture SHA256：
-  `9acb545c710b498c47aca3867714b8913d5b724d3eb5aa756a471129009fd524`；
-- completed/failures：50/0；每次成功产生 200 findings；
-- p50：794.8504 ms；
-- p95：871.5174 ms；
-- median：796.3408 ms；
-- min/max：744.5714/894.7758 ms；
-- raw durations：保存在 `reports/loadtest.json` 的 scanner section；
-- observed commit：starting HEAD；dirty=`true`。
-
-机器：CPython 3.11.15，Windows 10.0.22000，AMD64 Family 25 Model 80 Stepping 0
-AuthenticAMD，12 logical CPUs，RAM 14,894,297,088 bytes；GPU=`not_available`。scanner 结果
-不暗示 GPU 参与，也不是跨机器 SLA。
-
-## 5. FakeLLM application load
-
-Locust `2.46.4` 作为 optional dev dependency。固定 ZIP 为 392 bytes，仅包含
-`load_sample/models.py`，SHA256
-`91d9bd3819c0546c37b62f6783de34b534ae89d2395ce548e4d664a1dd436ec3`；来源为程序化
-Day26 synthetic fixture，不属于 evaluation corpus。
-
-target 实际调用 multipart `POST /v1/analyses`，覆盖 HTTP/ASGI、ZIP Guard、scanner、Agent、
-report 与 SQLite；为避免本机 daemon/模型首次加载污染，使用 offline Qdrant lifecycle double
-且不加载 E5。每档启动前执行一个不计入统计的 warm-up POST。两档核心命令：
-
-```text
-python -m locust -f loadtests/locustfile.py --headless --host http://127.0.0.1:8126 -u 5 -r 5 -t 8s --only-summary
-python -m locust -f loadtests/locustfile.py --headless --host http://127.0.0.1:8126 -u 10 -r 10 -t 8s --only-summary
-```
-
-concurrency 5：
-
-- observed duration 7.5298538 s；requests/completed/failed = 139/139/0；failure rate 0.0；
-- Locust HTTP p50/p95 = 220/360 ms，min/max = 72.2668/745.3396 ms；
-- application envelope total p50/p95 = 126/205 ms，min/max = 40/292 ms；
-- degraded/fallback = 139/139；model identity=`deterministic-fallback`。
-
-concurrency 10：
-
-- observed duration 7.5262728 s；requests/completed/failed = 147/147/0；failure rate 0.0；
-- Locust HTTP p50/p95 = 460/660 ms，min/max = 260.7846/925.5826 ms；
-- application envelope total p50/p95 = 115/264 ms，min/max = 42/383 ms；
-- degraded/fallback = 147/147；model identity=`deterministic-fallback`。
-
-默认 FakeLLM 文本不是合法 Agent JSON，因此两轮均真实经过一次 retry 后 deterministic
-fallback；report 中 retry/LLM call count 标为 `not_available`，未猜数字。HTTP response time
-包含客户端调度、排队、ASGI/multipart 与传输；application envelope total 是服务内部边界，
-两者不能混写。FakeLLM 结果只证明 synthetic model 下的应用基础设施和 fallback 路径，不能
-称为真实 LLM 或完整 production Qdrant/E5 latency。
-
-## 6. End-to-end phase timing
-
-`reports/e2e_latency.json` 固定拆分 `extract/scan/retrieve/llm/total`：
-
-- c5 p50/p95：extract 6/7、scan 6/7、retrieve 0/0、llm 2/2、total 126/205 ms；
-- c10 p50/p95：extract 6/7、scan 6/7、retrieve 0/0、llm 2/2、total 115/264 ms。
-
-retrieve 为 0 是 offline empty retriever 的真实观测值；total 不是 LLM latency。该 artifact
-只包含两档 Fake run，没有 real provider 数据。
-
-## 7. 条件式真实 LLM
-
-真实运行 gate 必须同时满足：
-
-1. `MIGRATIONLENS_REAL_LLM_LOAD_OPT_IN=I_UNDERSTAND_THIS_USES_PAID_REQUESTS`；
-2. `MIGRATIONLENS_LLM_BACKEND=openai_compatible`；
-3. 完整、合法的 base URL、model 与 API key。
-
-上述固定 opt-in 仍是真实 Locust load 的必要条件，本轮没有设置也没有运行 Locust。
-2026-09-03 用户在对话中单独明确授权了最多 1 个 direct adapter smoke request：
-
-- adapter implementation/unit test：completed；
-- provider runtime：`smoke_verified`；
-- smoke requests：1 completed / 0 failed / 0 retry；
-- actual model identity：`qwen3.7-flash-2026-07-15`；
-- direct adapter wall time：1697.8 ms；`finish_reason=stop`；response content length=22；
-- real concurrency level / completed N：`not_run / 0`；
-- load latency / failure rate / fallback / token usage：`not_available`；
-- p95 eligibility：不满足。
-
-请求只含无项目数据的连通性提示，脚本不输出 response 正文、URL 或 key。首次脚本在
-构造客户端时因直接传入 `HttpUrl` 而本地失败，尚未进入 HTTP；改用 production
-`build_llm_client` 路径后才发出上述唯一请求。
-
-每个真实并发档 N>=50 才能报告 p50/p95；N=10–49 只报告 median、min/max、failure rate 与
-N；N<10 只能称 smoke。不同并发档不能合并凑 N。
-
-## 8. Machine-readable artifacts
-
-- `reports/loadtest.json`：schema `migrationlens-day26-loadtest-v1`，SHA256
-  `2cf44766fd946f3e1f24d355150edde66124bb37fde02ce2f7843b5d63502c87`；
-- `reports/e2e_latency.json`：schema `migrationlens-day26-e2e-latency-v1`，SHA256
-  `453bd6d616fbcc98d69242c62e48646b6041311993b23199d12c1b7101126599`。
-
-两者记录 generated_at、Git/dirty、machine、fixture provenance、warm-up、命令、counts、
-latency eligibility 和 limitations。没有 API key、Authorization、raw source、raw prompt、raw
-provider response 或 secret URL query。
-
-## 9. 新增测试与最终门禁
-
-新增/扩展测试覆盖默认 Fake、fake 不需 key、real required config、URL 安全、SecretStr/repr、
-DI client selection、builder no-network、真实 request schema、mock transport success、timeout、
-HTTP error、invalid/empty response、observed model identity、cancellation、Agent fallback、稳定 ZIP、
-确定性 scanner fixture、与 locked corpus 隔离、real percentile eligibility、Fake/real artifact
-分区、E2E phase contract 和 Day24 sealed hashes。
-
-最终实际命令结果：
-
-- Day26 定向 pytest（LLM/config/dependencies/Agent/citation retry/performance/lifespan/API）：
-  exit 0，百炼兼容修正后最终为 `152 passed, 2 warnings in 7.61s`；
-- 移除 pytest 子进程 proxy，并使用 `--basetemp var/tmp/day26-final-pytest` 的完整 pytest：
-  百炼兼容修正前为 `846 passed, 2 warnings in 24.67s`；最终使用
-  `--basetemp var/tmp/day26-bailian-full` 复验为 `847 passed, 2 warnings in 28.36s`；
 - `python -m pip check`：exit 0，`No broken requirements found.`；
+- Day27 定向 pytest：exit 0，`4 passed in 0.16s`；
+- 完整 pytest（清除 proxy、显式 FakeLLM、`--basetemp`）：exit 0，
+  `851 passed, 2 warnings in 26.21s`；warnings 为既有 Starlette TestClient/httpx
+  deprecation 与 qdrant-client server-version compatibility warning，未过滤；
 - `python -m ruff check .`：exit 0，`All checks passed!`；
-- `python -m ruff format --check .`：exit 0，`190 files already formatted`；
-- `git diff --check`：exit 0；
-- `docker compose config --quiet`：exit 0，两条用户 Docker config access-denied warning。
+- `python -m ruff format --check .`：exit 0，`191 files already formatted`；
+- `docker compose config --quiet`：exit 0；仅静态 Compose validation，带两条既有 Docker
+  user-config access-denied warning；
+- direct-declaration dependency audit：exit 0，`No known vulnerabilities found.`。实际命令为
+  `python -m pip_audit -r var/tmp/day27-declared-requirements.txt --no-deps --disable-pip --strict
+  --progress-spinner off --timeout 10`；它覆盖由 `pyproject.toml` 导出的 16 个 exact direct
+  runtime/dev pins，保留了“建议使用 full hashes”的 pip-audit warning；
+- full project-mode `python -m pip_audit . --strict` 在本机创建隔离环境解析 ML dependency tree
+  时超过执行窗口，已按验证 PID 停止，绝未记作通过。该完整 project-mode command 保留在 CI，
+  remote result pending；
+- Gitleaks `8.30.1` history scan：exit 0，`30 commits scanned`、约 2,821,971 bytes、
+  `no leaks found`；只扫描 Git history，不读取 Git 忽略 `.env`；
+- `git diff --check`：exit 0，无输出。
 
-两条 pytest warning 是既有 Starlette TestClient deprecation 和 qdrant-client compatibility
-warning，没有过滤。Docker daemon 未运行，且本日无部署改动，因此没有 build/up/health/down；
-不能称 Docker runtime verified。
+精确原始摘要、scope、工具版本、失败的 preliminary audit commands 和 remote boundary 见
+`reports/test-summary.txt`。
 
-百炼兼容修正后的第一次专项命令未清理既有 SOCKS proxy，collection 得到 1 error；同一命令
-还由新 test bootstrap import 顺序触发两个 Ruff `E402`。只调整 import 顺序并按既有方式移除
-pytest 子进程 proxy 后，兼容专项为 `94 passed, 1 warning in 2.44s`；没有安装 `socksio`、
-放宽断言或访问 provider。
+## 6. 封存证据与 blocker
 
-## 10. E5/Qdrant、secret 与临时文件
+- Day24 seven sealed artifact SHA256 全部由 Day27 test 再次校验；locked evaluator rerun=0；
+- Day25 manifest 仍为 `status=blocked`、`locked_run_consumed=true`、`run_attempt=1`、
+  `rerun_count=0`、`evidence_sufficient=false`；
+  `citation_support_not_assessable_from_sealed_evidence` 未被改写；
+- 没有运行 locked evaluator、没有修改 Gold、locked fixtures、EvalLock、scanner、retrieval、
+  Agent、Day26 report artifacts 或部署文件。
 
-- `var/cache/huggingface/models--intfloat--multilingual-e5-small` 存在；只证明本地 cache path
-  存在，不证明本轮加载成功；
-- Docker daemon 不可用，本日 Fake target 也明确使用 offline Qdrant double/no E5，故真实
-  Qdrant service、document index readiness 和 index provenance 本轮均未验证；
-- high-risk secret pattern scan 唯一命中 `tests/unit/test_llm.py` 中明确的
-  `unit-test-secret-value` mock header；不是凭据。Day26 reports 禁止字段 scan 无命中；
-- 本地 `.env` 存在且由 `.gitignore` 排除；没有读取或记录 key 值。ZIP、SQLite、HTML/CSV、
-  Qdrant data、model cache、benchmark temp、Locust raw temp、pytest temp 和 IDE files 均没有
-  成为 Day26 Git changes；
-- Locust 安装时第一次 sandbox 网络访问失败，随后经批准从 PyPI 安装精确版本 2.46.4；
-  未修改 production image。
+## 7. 文档、假设与下一步
 
-## 11. Locked integrity 与历史 blocker
+已同步 README、AGENTS、DECISIONS（D-032）、每日计划、THIRD_PARTY_NOTICES、
+`pyproject.toml`、`reports/test-summary.txt` 与本文件。SPEC 未修改：Day27 只建立工程门禁，
+没有改变 P0 产品契约。LEARNING_LOG 已记录本日 test-first、least privilege、full-history scan
+与本地/remote evidence 区分。
 
-Day24 七个 sealed artifact 当前 SHA256 与历史记录一致：
+假设：GitHub-hosted Ubuntu runner 可使用固定 action commits、Python 3.11、Docker Compose 和
+公网 PyPI/Gitleaks release。该假设尚未由 remote run 证实；不能以本机结果替代。
 
-- `day24_raw_evidence.json`：`2ef2e5b03c39812655b3f0f59abc3bb97c3d22f750431298c878bdd9af437c2f`；
-- `detection_metrics.json`：`12a16128eef68fcbc0930057168a699186485a7ab453e51e18688a0a08194671`；
-- retrieval metrics/ablation：`c42e89852e64e4a20028040ca20a9f3bea7f5ac76c61b6c3d24ff74ae8f470b2`；
-- `agent_metrics.json`：`5bd9231421c22b4c53a92b45c392d124f5d9e416500a71f497551e511da21c23`；
-- `eval_manifest.json`：`668acfcb42ce1bf988d4cfd25563a6b0faf81d3fb2e6d931de2e380936400258`；
-- `eval.json`：`c0f4ba7977e84f1f2c9a7cada4876c71615adab3d0290e7c1add690e54170159`。
-
-受保护路径 diff 无输出：Day24 reports、frozen evaluation data、EvalLock、locked evaluator、
-production scanner 与 retrieval 均未修改。locked run attempt 仍为 1，rerun count 仍为 0。
-
-Day25 继续为 `blocked / citation_support_not_assessable_from_sealed_evidence`：没有 exact
-finding↔citation sealed mapping，没有 20-item human sample，没有 support counts/rate。Day26
-性能工作没有修饰 Retrieval failure 或 Agent validity failure，也没有解除 blocker。
-
-## 12. 文件、依赖、假设与下一步
-
-主要变更：
-
-- runtime/config/DI：`app/core/{llm,config,dependencies}.py`、Agent/report error boundary；
-- performance/load：`app/performance/`、`loadtests/`；
-- tests：LLM/config/dependencies 扩展与 `test_day26_performance.py`；
-- artifacts：`reports/loadtest.json`、`reports/e2e_latency.json`；
-- docs/config/license：README、TASKS、LEARNING_LOG、每日计划、DECISIONS、`.env.example`、
-  `pyproject.toml`、`THIRD_PARTY_NOTICES.md`。
-
-依赖变化：HTTPX 0.28.1 从 dev 调整为 direct runtime dependency（BSD-3-Clause）；Locust
-2.46.4 新增为 dev dependency（MIT）。用途、上游与 license source 已同步 notices。SPEC 和
-AGENTS 没有需求/规则变化，未修改。
-
-假设：OpenAI-compatible base URL 已包含所需 API version prefix；adapter 只追加
-`/chat/completions`。当前实配 provider 为百炼，故 request dialect 采用其官方列出的
-`max_tokens`；没有实现 multi-provider routing。load target 的 offline retriever 是已记录的
-可复现测试边界，不代表生产 backend。
-
-剩余风险/未完成：真实 provider load、Agent/API 真实模型 E2E、有效样本的 latency/failure/token usage、
-production Qdrant/E5 E2E、Docker runtime、Day25 evidence blocker、CI/security、clean clone 和
-release docs。所有 Day26 changes 保持未提交。
-
-下一步仅为 MigrationLens Day 27 — CI 与安全门禁；不得在本 Day 顺便开始，也不得重新合并
-Day28 clean clone/Docker 或 Day29 release docs。
+下一步仅为用户 review 后提交本日文件并 push 到 `origin/main`，触发 workflow `CI and security
+gate`；必须带回 workflow run URL/ID、每一步 status、pytest warning/count、pip-audit 和
+Gitleaks exact output，才可把 Day27 升级为 `completed / ci_runtime_verified`。Day28 clean
+clone/Docker runtime 与 Day29 release docs 均未开始。

@@ -96,3 +96,33 @@ integration test side effects.
 
 Model weights and tokenizer files are runtime cache artifacts under ignored local
 storage. They are not redistributed in this repository.
+
+## pip-audit
+
+- Component: `pip-audit==2.10.1`
+- Upstream repository: https://github.com/pypa/pip-audit
+- Purpose: Day27 development/security tool that audits declared Python dependencies
+  for known vulnerabilities in CI; it is not an application runtime dependency.
+- License: Apache-2.0
+- License source: https://github.com/pypa/pip-audit/blob/v2.10.1/LICENSE
+- Python requirement: Python 3.10 or newer (MigrationLens CI is Python 3.11).
+
+The tool is maintained by the Python Packaging Authority and uses vulnerability data
+services documented by its upstream project. CI runs strict audit mode without
+`--fix`, `--ignore-vuln`, or a broad allowlist. `pip check` remains a separate
+installed-package consistency check; it is not a vulnerability audit.
+
+## Gitleaks
+
+- Component: Gitleaks `v8.30.1`
+- Upstream repository: https://github.com/gitleaks/gitleaks
+- Release source: https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1
+- CI asset: `gitleaks_8.30.1_linux_x64.tar.gz`
+- CI asset SHA256: `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`
+- License: MIT
+- License source: https://github.com/gitleaks/gitleaks/blob/v8.30.1/LICENSE
+
+CI downloads the checksum-pinned binary only for the secret gate and runs a
+fail-closed full Git-history scan. It is neither shipped with the MigrationLens
+runtime nor granted repository write credentials. The `.env` rule remains enforced
+by Git ignore and is outside the Git-history scan scope.

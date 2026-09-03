@@ -73,16 +73,20 @@
 
 运行与改动文件相关的检查：
 
-1. `python -m pytest -q`
-2. `python -m ruff check .`
-3. `python -m ruff format --check .`
-4. 存在部署文件时运行 `docker compose config`
+1. `python -m pip check`
+2. `python -m pytest -q`
+3. `python -m ruff check .`
+4. `python -m ruff format --check .`
+5. 存在部署文件时运行 `docker compose config --quiet`
+6. Day27 后的 CI/security gate 必须执行 `python -m pip_audit . --strict`，并以固定版本
+   的 Gitleaks 对 Git history 执行 fail-closed secret scan；不得用漏洞 ignore、宽泛 allowlist
+   或 warning-only 结果替代失败。
 
 如果 Docker 可用且任务修改了部署内容：
 
-5. `docker compose up --build -d`
-6. 调用健康检查端点
-7. `docker compose down`
+7. `docker compose up --build -d`
+8. 调用健康检查端点
+9. `docker compose down`
 
 ## 交接格式
 
