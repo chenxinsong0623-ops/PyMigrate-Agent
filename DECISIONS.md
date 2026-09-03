@@ -785,3 +785,89 @@
   observability 后必须使用新的 unseen holdout，不能再次使用 Day24 locked set 证明改进。本决策
   只影响 evaluation governance 与后处理 artifact，不改变 SPEC P0、生产 Scanner、Retriever、
   Agent、Citation Guard、报告行为、依赖或部署。
+
+## D-029 — Day26 可选 OpenAI-compatible LLM adapter 与分层性能证据
+
+- 日期：2026-09-02
+- 状态：已接受；实现与离线测试完成，真实 provider runtime 未验证
+- 决策：
+  - `LLMClient.complete(LLMRequest, timeout_seconds)` 继续作为 Agent 唯一模型边界；默认
+    backend 仍为 `fake`。新增的 `openai_compatible` 只实现异步 Chat Completions HTTP
+    adapter，不让 Agent import provider SDK，也不增加 multi-provider routing；
+  - 真实 backend 必须同时配置 base URL、model 与 `SecretStr` API key，否则 Settings
+    fail closed。base URL 禁止 userinfo、query 与 fragment；builder 只构造 client，不调用
+    provider。HTTP/provider/timeout/invalid response 统一映射为不含 provider 原文和 secret 的
+    `LLMClientError`；Agent 继续唯一负责最多一次 retry、20 秒单次 timeout、45 秒总 deadline
+    与 deterministic fallback；
+  - adapter 使用 `httpx==0.28.1` 的 `AsyncClient` 和当前官方 Chat Completions
+    `model/messages/choices/message.content/finish_reason` 契约；固定 `n=1`、non-streaming 与
+    bounded `max_completion_tokens`。不引入 OpenAI 或其他厂商 SDK；
+  - 性能证据物理和语义拆分为 scanner-only、FakeLLM application、real LLM 与 API
+    end-to-end。scanner fixture 是独立的 programmatic 50 files / 10,000 LOC input，绝不引用
+    DEV/LOCKED corpus。Locust 为 optional dev dependency；普通 pytest 不启动负载、不访问公网；
+  - 真实 load 必须同时满足显式固定 opt-in 值、`openai_compatible` backend 与完整 provider
+    配置。每个并发档独立实施 N>=50 才允许 p50/p95、N=10–49 只允许 median/range、N<10
+    只称 smoke。FakeLLM percentile 永远标为 synthetic infrastructure evidence；
+  - Day26 的 Fake target 保留真实 HTTP、ZIP、scanner、Agent、report 与 SQLite 路径，但以
+    offline Qdrant lifecycle double/no E5 隔离本机 daemon 缺失；因此它不是完整 production
+    backend latency。`reports/loadtest.json` 与 `reports/e2e_latency.json` 明确记录该限制。
+- 原因：P0 已要求 FakeLLM 离线测试、Locust 和条件式真实模型证据，而现有依赖组装无条件
+  注入 FakeLLM。最小 provider adapter、显式 opt-in 与四层证据可以在不破坏 Agent 安全边界、
+  不消费 locked 数据和不产生隐式付费请求的前提下补齐 runtime capability。
+- 替代方案：未采用 Agent 直接依赖厂商 SDK、多 provider/router、adapter 内隐式 retry、
+  API 请求参数覆盖 provider URL、真实 key 写入 `.env.example`/report、普通 pytest 访问公网、
+  把 FakeLLM/HTTP/total latency 冒充真实模型 latency，或在无 key 时伪造 smoke/p95。
+- 影响：新增 `app/performance`、`loadtests`、两个 Day26 reports 和边界测试；HTTPX 从 dev
+  调整为直接 runtime dependency，Locust `2.46.4` 新增为 dev dependency，并同步第三方许可。
+  SPEC、Day24 sealed artifacts、frozen fixtures/Gold/EvalLock、production Scanner/Retrieval
+  参数与 Day25 blocker 均不改变。
+
+## D-030 — 百炼 OpenAI-compatible 请求方言与本地测试隔离
+
+- 日期：2026-09-03
+- 状态：已接受；离线实现与测试完成，百炼 runtime 仍未验证
+- 决策：
+  - 用户选择华北 2（北京）百炼业务空间的 OpenAI-compatible Chat Completions endpoint，
+    模型配置为 `qwen3.7-flash-2026-07-15`；真实 Base URL/API key 只保存在 Git 忽略的本地
+    `.env`，仓库文档、测试、异常与报告不记录其值；
+  - 依据百炼当前官方兼容参数表，adapter 的有界输出字段从 D-029 的
+    `max_completion_tokens` 改为 `max_tokens`，并不再显式发送仅有限模型支持的 `n`；仍固定
+    non-streaming，保留相同 `model/messages`、timeout、错误脱敏、Agent retry/fallback 和
+    provider response model identity 契约；
+  - 本变化只取代 D-029 关于 request payload 中 token-limit 字段与 `n=1` 的两项细节；不引入
+    百炼 SDK、provider router、模型比较、额外 retry 或用户可控 endpoint；
+  - 普通 pytest 在 collection 前用固定测试配置遮蔽开发者本地 provider 配置，并在每个测试
+    期间禁用 Settings dotenv source。测试仍可显式用 `_env_file=None`、构造参数和
+    `MockTransport` 验证 real boundary，但不得读取本地真实 key 或访问 provider。
+- 原因：用户完成本地配置后，官方接口审计确认百炼列出 `max_tokens`，没有列出
+  `max_completion_tokens`，且 `n` 的兼容范围有限；按 D-029 payload 直接 smoke 可能得到 400。
+  同时，真实 `.env` 的存在暴露了 pytest collection 可能加载开发凭据的安全缺口，必须在
+  任何真实 smoke 前封闭。
+- 依据：
+  - https://help.aliyun.com/zh/model-studio/compatibility-of-openai-with-dashscope
+  - https://help.aliyun.com/zh/model-studio/base-url
+- 影响：只修改 `RealLLMClient` 请求 JSON、对应 mock-transport assertion 与 pytest 环境隔离。
+  当前没有 provider call、smoke observation 或新 latency artifact；Day24/Day25 边界保持不变。
+
+## D-031 — 百炼单请求 runtime smoke 证据边界
+
+- 日期：2026-09-03
+- 状态：已接受；direct adapter smoke 已验证，real load 未运行
+- 决策：
+  - 用户明确授权最多 1 个真实 provider request，失败不重试且不运行 Locust。本轮通过
+    production `build_llm_client(Settings())` 路径调用 `RealLLMClient.complete`，发出 1 个
+    不含项目或用户源码的连通性请求，无 retry；
+  - provider 成功返回 observed model `qwen3.7-flash-2026-07-15`、`finish_reason=stop`；
+    direct adapter wall time 为 1697.8 ms，response content length 为 22。不保存或输出 response
+    正文、API key、Authorization header 或完整 endpoint；
+  - N=1 仅证明当前百炼配置、请求方言与 response parser 可完成一次往返。不发布
+    p50/p95、failure rate 或 token usage，也不声称 Agent retry/fallback、FastAPI、Qdrant/E5 或
+    Locust real-load 已验证；
+  - 第一个本地脚本在 `RealLLMClient` 构造阶段因直接传入 Pydantic `HttpUrl` 而失败，
+    没有进入 HTTP 也不计为 provider request；改用已有 production builder 的字符串转换后，
+    才发出并完成唯一请求。
+- 原因：配置加载与 MockTransport 只能证明本地契约；单次小请求能在受控费用和数据
+  边界内验证 provider 连通性，同时必须防止小样本被误报为性能或可用性结论。
+- 影响：Day26 provider 状态从 `not_verified` 更新为 `smoke_verified`；real load、Agent/API
+  E2E、p95、token usage 与 production Qdrant/E5 仍未验证。Day24 sealed artifacts 与 Day25
+  blocker 不变。

@@ -32,6 +32,7 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 23 | `benchmark_frozen` | 正式 Detection corpus 已补齐为 24 single + 8 negative + 8 mixed、DEV 12 + LOCKED 28；40 个 fixture/Gold 已完成两遍独立静态复核且 unresolved=0，最终人工批准、approved prepare、static verify、milestone commit 与 commit binding 已完成；Day23 自身未运行 locked evaluation |
 | MigrationLens Day 24 | `locked_run_completed_with_metric_failure` | frozen commit `3bec58084e13d0734b891d290099a0695ec8dab6` 上首次且单次完成 locked 自动评测；Detection P/R/F1=1.0/1.0/1.0，Retrieval Hybrid R@3=0.9 但低于 BM25 R@3=1.0，Agent citation validity=0.0 且 citation support 留到 Day25 |
 | MigrationLens Day 25 | `blocked / citation_support_not_assessable_from_sealed_evidence` | 七个 Day24 sealed artifacts hash/identity 已复核；Agent artifact 只有 case-level aggregate counts，没有 exact finding ↔ citation mapping，故未生成 20 条假样本、未冒充 human review；已新增 blocked audit、失败归档与版本化 additive aggregate，locked rerun=0 |
+| MigrationLens Day 26 | `implementation_complete / real_llm_smoke_verified` | 50 files/10k LOC scanner benchmark、FakeLLM Locust concurrency 5/10、`reports/loadtest.json`/`e2e_latency.json`、百炼 direct adapter N=1 smoke 成功；真实 Locust load 与 Agent/API E2E 未运行 |
 
 当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite schema version `2` 包含
 `system_metadata`、`analyses` 与 `reports`，支持 v1→v2 事务迁移以及 API envelope、Day 20
@@ -124,7 +125,11 @@ ZIP Guard 的 2 MiB/200/1 MiB/10 MiB/100/200/50,000 七项上限不是普通运�
 |---|---|---|
 | `MIGRATIONLENS_ENVIRONMENT` | `development`, `test`, `production` | 运行环境标签 |
 | `MIGRATIONLENS_LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` | 日志级别 |
-| `MIGRATIONLENS_LLM_BACKEND` | `fake` | 离线 LLM 实现 |
+| `MIGRATIONLENS_LLM_BACKEND` | `fake`, `openai_compatible` | 默认离线；真实 provider 必须显式选择 |
+| `MIGRATIONLENS_LLM_BASE_URL` | 无 userinfo/query/fragment 的 HTTP(S) URL | 仅 real backend 必填；例如 provider 的 `/v1` base |
+| `MIGRATIONLENS_LLM_MODEL` | 1–128 字符稳定 model ID | 仅 real backend 必填 |
+| `MIGRATIONLENS_LLM_API_KEY` | runtime secret | 仅 real backend 必填；使用 `SecretStr`，禁止提交 |
+| `MIGRATIONLENS_LLM_MAX_OUTPUT_TOKENS` | 整数 `1..16384` | Chat Completions bounded output，默认 2048 |
 | `MIGRATIONLENS_SQLITE_PATH` | 本地文件路径 | SQLite 数据库路径 |
 | `MIGRATIONLENS_SQLITE_TIMEOUT_SECONDS` | `>0` 且 `<=30` | SQLite 连接和 busy timeout |
 | `MIGRATIONLENS_READINESS_TIMEOUT_SECONDS` | `>0` 且 `<=5` | 每项 readiness 检查的短 timeout |
@@ -1064,6 +1069,76 @@ rollback、foreign key、duplicate ID、防 raw source 持久化、重启 GET、
 共同门禁和精确最终数字见 [`TASKS.md`](TASKS.md)。普通测试没有运行真实 LLM、真实 E5/
 Qdrant query、locked evaluation、Docker runtime、Locust 或 CI。
 
+### Day 26 性能、负载与真实 LLM 边界
+
+Day26 保留 `FakeLLM` 为默认 backend，并在既有 `LLMClient` 下新增最小
+`RealLLMClient`：
+
+```text
+Settings -> MIGRATIONLENS_LLM_BACKEND -> build_llm_client()
+  -> FakeLLM (offline, default)
+  -> RealLLMClient (OpenAI-compatible Chat Completions)
+-> AnalysisService -> ZIP Guard -> AST/RuleScanner -> Findings -> Retriever
+-> BoundedAnalysisAgent -> LLMClient.complete() -> typed decision
+-> Citation Guard -> deterministic fallback -> report/API persistence
+```
+
+真实 backend 需要同时配置 `MIGRATIONLENS_LLM_BASE_URL`、
+`MIGRATIONLENS_LLM_MODEL` 与 `MIGRATIONLENS_LLM_API_KEY`。缺任一项时 Settings fail
+closed；key 使用 `SecretStr`，不进入 repr、日志、exception、report 或 fixture。adapter 使用
+HTTPX async client、调用方 timeout 与 bounded output；retry 仍由 Agent 统一控制，adapter
+不暗加 retry，deterministic fallback 保留。
+
+当前实配的百炼 OpenAI-compatible endpoint 使用业务空间 Base URL（以
+`/compatible-mode/v1` 结尾，adapter 再追加 `/chat/completions`）。依据百炼兼容参数契约，
+有界输出发送为 `max_tokens`，不显式发送兼容范围有限的 `n`；不引入百炼 SDK 或 provider
+router。
+
+普通 `pytest` 在 collection 前用固定测试值遮蔽本地 provider 配置，在测试期间禁用 dotenv，
+并使用 `MockTransport`/FakeLLM；因此不访问公网、不读取真实 key、不消耗额度。真实 load
+还要求固定显式 opt-in
+`MIGRATIONLENS_REAL_LLM_LOAD_OPT_IN=I_UNDERSTAND_THIS_USES_PAID_REQUESTS`。Day26
+用户已在 Git 忽略的本地 `.env` 中完成百炼配置，并单独授权最多 1 个无重试 direct
+smoke。该请求成功：observed model=`qwen3.7-flash-2026-07-15`、
+`finish_reason=stop`、wall time=1697.8 ms、content length=22。N=1 只是连通性 smoke；
+real concurrency/load/p95、token usage 与 Agent/API E2E 仍为 `not_verified`。
+
+四类数字必须分开理解：
+
+1. scanner-only：programmatic fixture 50 files / 10,000 LOC，3 次 untimed warm-up，
+   `ASTScanner + RuleScanner` 独立 50 次；0 failure。p50/p95 为
+   `794.8504/871.5174 ms`，median `796.3408 ms`，min/max
+   `744.5714/894.7758 ms`；不含 ZIP、HTTP、Qdrant、E5 或 LLM；
+2. FakeLLM application：Locust `2.46.4`，每档前 1 个不计时 warm-up POST；concurrency 5
+   为 139 completed/0 failed，HTTP p50/p95 `220/360 ms`；concurrency 10 为
+   147/0，HTTP p50/p95 `460/660 ms`。全部响应为
+   `deterministic-fallback`/degraded，因为默认 FakeLLM 文本不是合法 Agent JSON；这验证
+   retry/fallback 与应用基础设施，不是真实模型性能；
+3. API end-to-end envelope：同两档内部 `total` p50/p95 分别为
+   `126/205 ms` 与 `115/264 ms`；`extract/scan/retrieve/llm/total` 各阶段见
+   [`reports/e2e_latency.json`](reports/e2e_latency.json)。HTTP 端观察值还包含排队、
+   multipart/ASGI 和传输开销，不能与 envelope total 或 LLM 阶段混写；
+4. real LLM：百炼 direct adapter 完成 N=1 smoke，仅能报告上述单次 observed model、finish
+   reason 与 wall time；没有运行 real load，不能报告 p95、failure rate 或 token usage。
+
+真实模型每个并发档 N>=50 才能报告 p50/p95；N=10–49 只报告 median、min–max、failure
+rate 与 N；N<10 只称 smoke。Fake load target 使用真实 HTTP、ZIP Guard、scanner、Agent、
+report 与 SQLite，但使用 offline Qdrant lifecycle double 且不加载 E5；它不是完整 production
+Qdrant/E5 end-to-end。机器可读证据为 [`reports/loadtest.json`](reports/loadtest.json) 和
+[`reports/e2e_latency.json`](reports/e2e_latency.json)。
+
+显式 scanner 命令：
+
+```powershell
+$Py = 'D:\conda_envs\pymigrate-agent\python.exe'
+& $Py -m app.performance.scanner_benchmark `
+  --output var/tmp/day26-scanner.json --repetitions 50 --warmups 3
+```
+
+Fake target 启动后，Locust 两档命令核心参数分别是 `-u 5 -r 5 -t 8s` 和
+`-u 10 -r 10 -t 8s`；完整本次命令、fixture hash、machine、warm-up 与 observed values
+保存在 `reports/loadtest.json`。Locust 是显式开发命令，不进入普通 pytest。
+
 ## 当前阻塞与下一开发日
 
 MigrationLens Day25 已完成 Day24 artifact integrity、citation evidence sufficiency 与失败归档，
@@ -1080,7 +1155,8 @@ pip check、Ruff check、179-file format check、diff check 与 Compose static c
 D-027 把原 `reports/eval.json`/`eval_manifest.json` 封存，Day25 因此保持其 bytes/hash 不变，
 用 `reports/eval-day25.json` 和 `reports/day25_manifest.json` 保存版本化 additive provenance。
 Day24 evaluator 没有重跑，production、Gold、frozen fixtures、retrieval params 与 Agent behavior
-均未修改。Day26 仍为 `planned`，不能用性能工作掩盖当前 evidence blocker。
+均未修改。Day26 为 `implementation_complete / real_llm_smoke_verified`；性能工作没有
+掩盖或解除当前 evidence blocker。下一开发日 Day27 CI/安全门禁尚未开始。
 
 ## 项目文档
 
@@ -1112,7 +1188,10 @@ reference evaluator、deterministic hash/lock 与 atomic failure rollback。Day 
 40-fixture benchmark、approved manifest/eval lock 和 verified frozen commit。Day 24 已首次且
 单次完成 locked automated evaluation：Detection locked P/R/F1=1.0/1.0/1.0；20 题 locked
 Retrieval 中 BM25/Dense/Hybrid R@3=1.0/0.6/0.9；Agent 自动 citation validity=0.0，support
-因缺少 sealed per-finding mapping 而不可人工评估。真实 LLM、CI、样本量和负载测试等发布证据仍未完成，
-因此 MigrationLens 尚未达到可写入简历的完整发布门槛。不得把 FakeEmbedding、smoke、dev
+因缺少 sealed per-finding mapping 而不可人工评估。Day26 已补齐 scanner 与 FakeLLM
+application 的样本量/负载证据及 real adapter，并完成 N=1 百炼 runtime smoke；但真实
+LLM load/Agent API E2E、CI、clean clone 与 Docker
+发布复验仍未完成，因此 MigrationLens 尚未达到可写入简历的完整发布门槛。不得把
+FakeEmbedding、FakeLLM、smoke、dev
 指标、candidate label、目标阈值、计划数量、自动 citation validity 或未运行命令描述为人工
 support、生产检索质量、GPU 性能或发布证据。

@@ -1,13 +1,18 @@
+import asyncio
+import json
 import socket
 
+import httpx
 import pytest
 
 from app.core.llm import (
     FakeLLM,
     LLMClient,
+    LLMClientError,
     LLMMessage,
     LLMRequest,
     LLMResponse,
+    RealLLMClient,
 )
 
 
@@ -74,3 +79,127 @@ async def test_fake_llm_does_not_open_a_network_connection(
     await fake_llm.complete(_request(), timeout_seconds=1.0)
 
     assert fake_llm.call_count == 1
+
+
+def _real_client(
+    handler: httpx.AsyncBaseTransport,
+    *,
+    api_key: str = "unit-test-secret-value",
+) -> RealLLMClient:
+    return RealLLMClient(
+        base_url="https://provider.example/v1/",
+        model="provider-model",
+        api_key=api_key,
+        max_output_tokens=512,
+        transport=handler,
+    )
+
+
+@pytest.mark.asyncio
+async def test_real_llm_request_and_response_model_identity() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url == "https://provider.example/v1/chat/completions"
+        assert request.headers["authorization"] == "Bearer unit-test-secret-value"
+        payload = json.loads(request.content)
+        assert payload == {
+            "model": "provider-model",
+            "messages": [
+                {"role": "system", "content": "请返回结构化输出。"},
+                {"role": "user", "content": "请审查这个发现。"},
+            ],
+            "max_tokens": 512,
+            "stream": False,
+        }
+        return httpx.Response(
+            200,
+            json={
+                "model": "provider-model-actual",
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": '{"ok":true}'},
+                        "finish_reason": "stop",
+                    }
+                ],
+            },
+        )
+
+    response = await _real_client(httpx.MockTransport(handler)).complete(
+        _request(), timeout_seconds=3.0
+    )
+
+    assert response == LLMResponse(
+        model="provider-model-actual",
+        content='{"ok":true}',
+        finish_reason="stop",
+    )
+
+
+@pytest.mark.asyncio
+async def test_real_llm_maps_timeout_without_leaking_secret() -> None:
+    secret = "unit-test-secret-timeout"
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("provider detail with " + secret)
+
+    client = _real_client(httpx.MockTransport(handler), api_key=secret)
+    with pytest.raises(LLMClientError) as captured:
+        await client.complete(_request(), timeout_seconds=0.01)
+
+    assert str(captured.value) == "LLM provider timeout"
+    assert secret not in str(captured.value)
+    assert secret not in repr(client)
+
+
+@pytest.mark.asyncio
+async def test_real_llm_maps_http_error_without_provider_body() -> None:
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, text="sensitive provider body")
+
+    with pytest.raises(LLMClientError, match="LLM provider request failed") as captured:
+        await _real_client(httpx.MockTransport(handler)).complete(
+            _request(), timeout_seconds=1.0
+        )
+
+    assert "sensitive provider body" not in str(captured.value)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"model": "actual", "choices": []},
+        {
+            "model": "actual",
+            "choices": [{"message": {"content": ""}, "finish_reason": "stop"}],
+        },
+        {
+            "model": "actual",
+            "choices": [{"message": {"content": "ok"}, "finish_reason": None}],
+        },
+    ],
+)
+async def test_real_llm_rejects_invalid_or_empty_response(
+    payload: dict[str, object],
+) -> None:
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload)
+
+    with pytest.raises(
+        LLMClientError,
+        match="LLM provider returned an invalid response",
+    ):
+        await _real_client(httpx.MockTransport(handler)).complete(
+            _request(), timeout_seconds=1.0
+        )
+
+
+@pytest.mark.asyncio
+async def test_real_llm_does_not_swallow_cancellation() -> None:
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        raise asyncio.CancelledError
+
+    with pytest.raises(asyncio.CancelledError):
+        await _real_client(httpx.MockTransport(handler)).complete(
+            _request(), timeout_seconds=1.0
+        )

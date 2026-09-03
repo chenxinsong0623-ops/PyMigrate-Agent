@@ -51,7 +51,7 @@ from app.agent.tool_models import (
     ToolName,
 )
 from app.agent.tools import AnalysisToolSet
-from app.core.llm import LLMClient, LLMMessage, LLMRequest
+from app.core.llm import LLMClient, LLMClientError, LLMMessage, LLMRequest
 from app.scanner import Finding, OneHopImporter, get_rule_spec
 
 _SYSTEM_PROMPT = """你是 MigrationLens 的有界解释编排器。
@@ -68,7 +68,7 @@ AgentToolResult = (
 )
 
 
-class AgentLLMError(RuntimeError):
+class AgentLLMError(LLMClientError):
     """LLM adapter 应映射的预期调用失败；消息不进入 Agent state。"""
 
 
@@ -352,7 +352,7 @@ class BoundedAnalysisAgent:
             except TimeoutError:
                 last_reason = AgentDegradedReason.LLM_TIMEOUT
                 error_type = AgentDegradedReason.LLM_TIMEOUT.value
-            except AgentLLMError:
+            except LLMClientError:
                 last_reason = AgentDegradedReason.LLM_ERROR
                 error_type = AgentDegradedReason.LLM_ERROR.value
             except (ValidationError, TypeError, ValueError):

@@ -9,7 +9,9 @@ from app.core.config import Settings
 from app.core.dependencies import (
     ApplicationDependencies,
     build_application_dependencies,
+    build_llm_client,
 )
+from app.core.llm import FakeLLM, RealLLMClient
 from app.core.readiness import ReadinessService
 from app.retrieval.qdrant import QdrantBackend, QdrantBackendState
 from app.storage.sqlite import SQLiteDatabase, SQLiteInitializationState
@@ -50,6 +52,7 @@ def test_build_application_dependencies_uses_the_app_settings(
     assert dependencies.sqlite is database
     assert dependencies.retriever_backend is retriever_backend
     assert isinstance(dependencies.readiness, ReadinessService)
+    assert isinstance(dependencies.llm_client, FakeLLM)
     database_factory.assert_called_once_with(
         settings.sqlite_path,
         timeout_seconds=settings.sqlite_timeout_seconds,
@@ -67,6 +70,7 @@ def test_build_application_dependencies_returns_independent_containers(
     assert first.sqlite is not second.sqlite
     assert first.retriever_backend is not second.retriever_backend
     assert first.readiness is not second.readiness
+    assert first.llm_client is not second.llm_client
     assert isinstance(first.sqlite, SQLiteDatabase)
     assert isinstance(second.sqlite, SQLiteDatabase)
 
@@ -87,6 +91,28 @@ def test_building_dependencies_does_not_initialize_external_resources(
     assert dependencies.retriever_backend.ping_calls == 0
     assert dependencies.retriever_backend.close_calls == 0
     assert not database_path.exists()
+
+
+def test_llm_builder_selects_real_client_without_network_io(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_network(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("LLM builder 不得执行网络 I/O")
+
+    monkeypatch.setattr("socket.create_connection", fail_network)
+    monkeypatch.setattr("socket.socket.connect", fail_network)
+    settings = Settings(
+        _env_file=None,
+        llm_backend="openai_compatible",
+        llm_base_url="https://provider.example/v1",
+        llm_model="provider-model",
+        llm_api_key="unit-test-secret",
+    )
+
+    client = build_llm_client(settings)
+
+    assert isinstance(client, RealLLMClient)
+    assert "unit-test-secret" not in repr(client)
 
 
 def test_real_qdrant_builder_only_constructs_the_client_without_io(

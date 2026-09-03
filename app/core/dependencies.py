@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
 from app.application import AnalysisService, LazyOfficialDocsRetriever
 from app.core.config import Settings
-from app.core.llm import FakeLLM
+from app.core.llm import FakeLLM, LLMClient, RealLLMClient
 from app.core.readiness import (
     ReadinessService,
     RetrieverReadinessProbe,
@@ -49,7 +49,26 @@ class ApplicationDependencies:
     sqlite: SQLiteLifecycle
     retriever_backend: RetrieverLifecycle
     readiness: ReadinessService
+    llm_client: LLMClient = field(default_factory=FakeLLM)
     analysis_service: AnalysisService | None = None
+
+
+def build_llm_client(settings: Settings) -> LLMClient:
+    """只构造所选 LLM client；不执行 provider 网络请求。"""
+    if settings.llm_backend == "fake":
+        return FakeLLM()
+    if (
+        settings.llm_base_url is None
+        or settings.llm_model is None
+        or settings.llm_api_key is None
+    ):
+        raise ValueError("真实 LLM 配置不完整")
+    return RealLLMClient(
+        base_url=str(settings.llm_base_url),
+        model=settings.llm_model,
+        api_key=settings.llm_api_key.get_secret_value(),
+        max_output_tokens=settings.llm_max_output_tokens,
+    )
 
 
 def build_application_dependencies(settings: Settings) -> ApplicationDependencies:
@@ -59,6 +78,7 @@ def build_application_dependencies(settings: Settings) -> ApplicationDependencie
         timeout_seconds=settings.sqlite_timeout_seconds,
     )
     retriever_backend = build_qdrant_backend(settings)
+    llm_client = build_llm_client(settings)
     repository_root = Path(__file__).resolve().parents[2]
     analysis_service = AnalysisService(
         storage=sqlite,
@@ -70,7 +90,7 @@ def build_application_dependencies(settings: Settings) -> ApplicationDependencie
             embedding_timeout_seconds=settings.embedding_timeout_seconds,
             rrf_k=settings.rrf_k,
         ),
-        llm_client=FakeLLM(),
+        llm_client=llm_client,
         repository_root=repository_root,
     )
     return ApplicationDependencies(
@@ -81,5 +101,6 @@ def build_application_dependencies(settings: Settings) -> ApplicationDependencie
             retriever_backend=retriever_backend,
             timeout_seconds=settings.readiness_timeout_seconds,
         ),
+        llm_client=llm_client,
         analysis_service=analysis_service,
     )

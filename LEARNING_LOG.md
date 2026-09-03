@@ -3780,3 +3780,123 @@ holdout，Day24 locked set 不可重跑作为改进证据。
 21. Hybrid Recall@3=0.9 为什么仍是 failed gate？
 22. 为什么 Day25 不能修改 Citation Guard 或 RRF？
 23. 为什么版本化 aggregate 比覆盖 sealed `eval.json` 更安全？
+
+## MigrationLens Day 26 — 性能、负载与条件式真实 LLM
+
+### 1. 当日目标与范围边界
+
+Day26 只建立四层可以独立解释的工程证据：scanner micro benchmark、FakeLLM application
+load、API 内部端到端阶段耗时，以及满足显式付费 opt-in 后才允许运行的真实模型路径。没有
+重跑 Day24 locked benchmark，没有修改 frozen corpus、Gold、EvalLock、production scanner 或
+retrieval 行为，也没有尝试补造 Day25 缺失的 citation mapping。
+
+### 2. 实际实现
+
+- 增加最小 OpenAI-compatible Chat Completions adapter；URL、model、API key 由设置注入，
+  API key 使用 `SecretStr`，日志和 `repr` 不包含明文；
+- 在依赖组装层选择 FakeLLM 或真实 adapter，构造应用不会发起 provider 网络请求；
+- timeout、HTTP error、无效 JSON、空 content 统一映射为受控错误，复用 Agent 的一次重试与
+  deterministic fallback；取消信号保持可传播；
+- 增加固定 50 files / 10,000 LOC scanner fixture、3 次 warm-up、50 次正式重复；
+- 增加 Locust headless 负载脚本，真实调用 `POST /v1/analyses`，同时记录 HTTP response time
+  与服务内部 extract/scan/retrieve/llm/total timing；
+- 增加真实负载 fail-closed gate：必须同时提供精确 opt-in、真实 backend、URL、model 和 key；
+- 生成 `reports/loadtest.json` 与 `reports/e2e_latency.json`，Fake 和 real 证据分区保存。
+
+### 3. 实测结果
+
+scanner 正式样本为 50/50 successful，p50 `794.8504 ms`、p95 `871.5174 ms`，fixture
+SHA256 为 `9acb545c710b498c47aca3867714b8913d5b724d3eb5aa756a471129009fd524`。
+
+FakeLLM application load 在每轮前执行一次不计入统计的 warm-up：concurrency 5 完成 139
+requests、0 failures，Locust HTTP p50/p95 为 `220/360 ms`；concurrency 10 完成 147
+requests、0 failures，HTTP p50/p95 为 `460/660 ms`。两轮响应均为
+`deterministic-fallback`，这证明 fallback application path 的容量，不代表 provider 质量或
+真实模型延迟。服务内部 total 与 Locust HTTP 时间不是同一统计边界，不能混写。
+
+本机没有真实 backend opt-in、provider URL、model 或 API key，所以真实模型样本数为 0，状态
+为 `not_verified`。这不是失败率 0，也不能给出 p50/p95、retry rate 或模型身份。真实 p95 只有
+在 N >= 50 时才允许报告；N=10–49 只报告 median/range，N<10 只能称为 smoke。
+
+### 4. 当日学习结论
+
+1. micro benchmark 只隔离 scanner，application load 才包含 ASGI、multipart、存储和 Agent；
+2. HTTP response time 包含客户端调度与传输，服务内部 total 只覆盖 AnalysisService envelope；
+3. warm-up 必须明确是否计入样本，不能事后选择性丢弃慢样本；
+4. 并发数、spawn rate、持续时间、fixture hash、机器信息和 commit 必须随结果保存；
+5. FakeLLM 可以验证确定性、容量和故障路径，但不能代理真实 provider 的延迟与质量；
+6. p95 需要足够样本，少量真实请求只能称 smoke；
+7. opt-in 与 provider 配置必须同时存在，避免意外产生付费请求；
+8. adapter 构造阶段不应访问网络，便于测试和安全审计；
+9. secret 应在配置模型、异常、日志、repr 与证据文件各层防泄漏；
+10. timeout 必须由调用方显式传入并映射到客户端，不能依赖无限默认值；
+11. `CancelledError` 不是普通 provider failure，不应被降级逻辑吞掉；
+12. provider 返回的实际 model identity 与配置请求值应分别理解；
+13. load test 中 0 HTTP failures 不等于业务未降级，必须同时统计 fallback/degraded；
+14. fixed fixture 与 SHA256 使不同机器的结果至少可以确认输入一致；
+15. 机器差异会显著影响性能数字，因此本次数字不是跨机器 SLA；
+16. 离线 Qdrant double 与无 E5 路径使 Fake load 可重复，但不是完整生产 backend 证明；
+17. performance artifacts 必须与 locked evaluation artifacts 分离，避免证据语义污染；
+18. Day25 blocker 与 Day26 性能结果相互独立，后者不能解除前者；
+19. Docker CLI 可用不等于 daemon 可用，static config 也不等于 runtime 验证；
+20. 只有实际运行的命令、成功解析的原始样本和明确边界才能写成实测证据。
+
+### Day 26 后应能回答的 22 个问题
+
+1. scanner micro benchmark 与 application load 分别隔离了哪些成本？
+2. 为什么 Locust HTTP p95 可能高于服务内部 total p95？
+3. warm-up 请求为什么必须明确排除或纳入正式样本？
+4. 为什么 50 files / 10,000 LOC fixture 需要固定 SHA256？
+5. nearest-rank p95 如何从有限样本中选取？
+6. 为什么 N<10 的真实模型结果只能称 smoke？
+7. 为什么 N=10–49 不应发布 p95？
+8. FakeLLM 负载能够证明什么，不能证明什么？
+9. 0 HTTP failures 为什么不等于 0 degraded responses？
+10. concurrency 和 spawn rate 的区别是什么？
+11. 为什么每轮负载要记录实际 observed duration？
+12. 为什么 adapter 构造阶段不能访问网络？
+13. 为什么真实请求需要显式付费 opt-in？
+14. API key 在配置、日志、异常和 `repr` 中分别如何保护？
+15. provider timeout、HTTP error、invalid JSON 与 empty content 如何进入 fallback？
+16. 为什么 `CancelledError` 必须继续传播？
+17. configured model 与 observed response model 有什么区别？
+18. 为什么 offline Qdrant double 不能当作生产 Qdrant readiness 证据？
+19. 为什么没有真实配置时不能把真实 failure rate 写成 0？
+20. machine metadata 对解释性能数字有什么作用？
+21. Day26 为什么不能重跑 Day24 locked benchmark？
+22. Day26 的完成为什么不能解除 Day25 citation support blocker？
+
+### 5. 2026-09-03 百炼配置后的兼容与测试隔离复核
+
+用户已在 Git 忽略的本地 `.env` 中配置百炼业务空间 OpenAI-compatible Base URL、
+`qwen3.7-flash-2026-07-15` 与 API key；只输出非敏感字段的 Settings 验证得到
+`backend=openai_compatible`、正确 model 和 `has_key=True`。没有记录或读取 key 明文，也没有
+发起 provider request。
+
+进一步核对百炼官方兼容参数后发现，D-029 初版 adapter 使用的
+`max_completion_tokens` 不在百炼当前支持参数表中；百炼使用 `max_tokens`，而 `n` 的支持范围
+有限。因此在 smoke 前把 payload 收敛为 `model/messages/max_tokens/stream=false`，并以
+MockTransport 精确断言。真实 `.env` 同时暴露普通 pytest collection 可能加载开发者凭据的
+边界，现已在 test process 中用固定测试配置遮蔽 collection，并在 test fixture 中禁用 dotenv。
+
+这次复核说明“OpenAI-compatible”仍需核对目标 provider 的实际参数子集；接口形状相似不代表
+所有新旧字段都兼容。配置加载成功也不等于 runtime verified，只有获得显式授权并实际完成
+smoke 后才能更新证据状态。
+
+首次兼容专项没有移除 shell SOCKS proxy，保存为 collection 1 error；bootstrap 环境遮蔽代码
+的位置同时产生两个 Ruff `E402`。调整 import 顺序、沿用既有 pytest 子进程 proxy workaround
+后，兼容专项为 `94 passed, 1 warning in 2.44s`。最终 Day26 定向为
+`152 passed, 2 warnings in 7.61s`，完整回归为
+`847 passed, 2 warnings in 28.36s`；pip、Ruff、190-file format、diff 与 Compose static
+config 均通过。所有这些仍是离线测试证据，不是百炼 runtime evidence。
+
+### 6. 2026-09-03 百炼单请求 smoke
+
+用户明确授权最多 1 个真实请求、失败不重试且不运行 Locust。首次本地命令在 client
+构造时就因 `HttpUrl` 未转字符串而失败，未发出 HTTP。改用 production
+`build_llm_client(Settings())` 路径后发出且仅发出 1 个不含项目数据的连通性请求，无 retry。
+
+实测成功：observed model=`qwen3.7-flash-2026-07-15`、`finish_reason=stop`、direct
+adapter wall time=`1697.8 ms`、response content length=22。命令未输出正文、endpoint 或 key。
+当前只能将 provider runtime 标记为 `smoke_verified`；N=1 不支持 p50/p95、failure rate、
+token usage、Agent retry/fallback、FastAPI 或 production Qdrant/E5 E2E 结论。

@@ -6,12 +6,20 @@ from pydantic import ValidationError
 from app.core.config import Settings
 
 
+def test_pytest_disables_local_dotenv_loading() -> None:
+    assert Settings.model_config["env_file"] is None
+
+
 def test_settings_have_offline_defaults() -> None:
     settings = Settings(_env_file=None)
 
     assert settings.environment == "development"
     assert settings.log_level == "INFO"
     assert settings.llm_backend == "fake"
+    assert settings.llm_base_url is None
+    assert settings.llm_model is None
+    assert settings.llm_api_key is None
+    assert settings.llm_max_output_tokens == 2048
     assert settings.sqlite_path == Path("var/data/migrationlens.sqlite3")
     assert settings.sqlite_timeout_seconds == 2.0
     assert settings.readiness_timeout_seconds == 1.0
@@ -30,6 +38,7 @@ def test_settings_read_prefixed_environment_variables(
     monkeypatch.setenv("MIGRATIONLENS_ENVIRONMENT", "test")
     monkeypatch.setenv("MIGRATIONLENS_LOG_LEVEL", "DEBUG")
     monkeypatch.setenv("MIGRATIONLENS_LLM_BACKEND", "fake")
+    monkeypatch.setenv("MIGRATIONLENS_LLM_MAX_OUTPUT_TOKENS", "1024")
     monkeypatch.setenv("MIGRATIONLENS_SQLITE_PATH", "var/test/custom.sqlite3")
     monkeypatch.setenv("MIGRATIONLENS_SQLITE_TIMEOUT_SECONDS", "3.5")
     monkeypatch.setenv("MIGRATIONLENS_READINESS_TIMEOUT_SECONDS", "0.75")
@@ -46,6 +55,7 @@ def test_settings_read_prefixed_environment_variables(
     assert settings.environment == "test"
     assert settings.log_level == "DEBUG"
     assert settings.llm_backend == "fake"
+    assert settings.llm_max_output_tokens == 1024
     assert settings.sqlite_path == Path("var/test/custom.sqlite3")
     assert settings.sqlite_timeout_seconds == 3.5
     assert settings.readiness_timeout_seconds == 0.75
@@ -169,3 +179,59 @@ def test_settings_reject_blank_embedding_cache_path() -> None:
 def test_settings_reject_invalid_rrf_k(invalid_rrf_k: object) -> None:
     with pytest.raises(ValidationError):
         Settings(_env_file=None, rrf_k=invalid_rrf_k)
+
+
+def test_fake_backend_does_not_require_real_provider_configuration() -> None:
+    settings = Settings(_env_file=None, llm_backend="fake")
+
+    assert settings.llm_api_key is None
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"llm_model": "provider-model", "llm_api_key": "secret"},
+        {"llm_base_url": "https://provider.example/v1", "llm_api_key": "secret"},
+        {"llm_base_url": "https://provider.example/v1", "llm_model": "model"},
+    ],
+)
+def test_real_backend_requires_base_url_model_and_api_key(
+    values: dict[str, str],
+) -> None:
+    with pytest.raises(ValidationError, match="真实 LLM 配置不完整"):
+        Settings(_env_file=None, llm_backend="openai_compatible", **values)
+
+
+def test_real_backend_uses_secret_type_and_redacts_repr() -> None:
+    secret = "unit-test-real-api-secret"
+    settings = Settings(
+        _env_file=None,
+        llm_backend="openai_compatible",
+        llm_base_url="https://provider.example/v1",
+        llm_model="provider-model",
+        llm_api_key=secret,
+    )
+
+    assert settings.llm_api_key is not None
+    assert settings.llm_api_key.get_secret_value() == secret
+    assert secret not in repr(settings)
+    assert secret not in str(settings.model_dump())
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://user:password@provider.example/v1",
+        "https://provider.example/v1?api_key=secret",
+        "https://provider.example/v1#fragment",
+    ],
+)
+def test_real_backend_rejects_secret_bearing_base_url(url: str) -> None:
+    with pytest.raises(ValidationError, match="LLM base URL"):
+        Settings(
+            _env_file=None,
+            llm_backend="openai_compatible",
+            llm_base_url=url,
+            llm_model="provider-model",
+            llm_api_key="secret",
+        )

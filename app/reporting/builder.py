@@ -17,7 +17,7 @@ from app.agent import (
     HumanReviewItem,
     SelectedDocCandidate,
 )
-from app.core.llm import LLMClient, LLMMessage, LLMRequest
+from app.core.llm import LLMClient, LLMClientError, LLMMessage, LLMRequest
 from app.scanner import get_rule_spec
 
 from .citation import CitationGuard
@@ -219,6 +219,7 @@ class FinalReportBuilder:
             selection = _RETRY_ADAPTER.validate_json(response.content, strict=True)
         except (
             AgentLLMError,
+            LLMClientError,
             TimeoutError,
             ValidationError,
             ValueError,

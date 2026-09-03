@@ -58,6 +58,32 @@ The package is a direct runtime dependency because FastAPI file/form parameters 
 its streaming multipart parser. MigrationLens still performs an independent bounded
 read, MIME check, and ZipGuard validation before analysis.
 
+## HTTPX
+
+- Component: `httpx==0.28.1`
+- Upstream repository: https://github.com/encode/httpx
+- Purpose: Send bounded asynchronous requests from the optional OpenAI-compatible
+  LLM runtime adapter; tests inject `MockTransport` and do not access a provider.
+- License: BSD-3-Clause
+- License source: https://github.com/encode/httpx/blob/0.28.1/LICENSE.md
+
+HTTPX is a direct runtime dependency because production code imports its async client.
+The adapter performs no request during dependency construction and uses the timeout
+supplied by the existing bounded Agent contract.
+
+## Locust
+
+- Component: `locust==2.46.4`
+- Upstream repository: https://github.com/locustio/locust
+- Purpose: Run the Day26 HTTP application load profiles at explicit concurrency
+  levels without adding load execution to ordinary pytest.
+- License: MIT
+- License source: https://github.com/locustio/locust/blob/2.46.4/LICENSE
+
+Locust is an optional development dependency. It is not installed in the production
+image by `pip install .`, and load tests remain explicit commands rather than unit or
+integration test side effects.
+
 ## multilingual-e5-small
 
 - Component: `intfloat/multilingual-e5-small`

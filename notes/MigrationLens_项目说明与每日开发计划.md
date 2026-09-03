@@ -1,6 +1,6 @@
 # MigrationLens 项目说明与每日开发计划
 
-更新时间：2026-09-01
+更新时间：2026-09-03
 产品：MigrationLens — Pydantic v1→v2 升级影响分析 Agent
 权威范围：`SPEC.md`
 
@@ -1305,7 +1305,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 23 | 2026-08-27 | `benchmark_frozen` | 正式 Detection corpus、全量 Gold review 与 final approval | 40 fixtures、51 Python files、24/8/8、DEV 12/LOCKED 28、APPROVE 40、unresolved 0、approved Manifest/EvalLock、deterministic rebuild 与 static verify passed | 仅 source/contract/provenance 静态复核；24 项 freeze tests；最终共同门禁见 `TASKS.md` | corpus 独立性、Gold/approval/commit binding 分层 | locked scoring、自动 Git 操作、修改 production |
 | MigrationLens Day 24 | 2026-08-27 | `locked_run_completed_with_metric_failure` | 首次且单次 locked 自动评测 | verified frozen commit `3bec58084e13d0734b891d290099a0695ec8dab6` 上一次性消费 Detection 28、Retrieval 20 与 Agent 28；runner SHA `872536341dfb0492801c0140a12f8613b074a3a35ba669b37b47949ac50add6d`；sealed reports 已生成且 rerun=0 | Detection P/R/F1=1.0/1.0/1.0；negative FP fixtures=0；one-hop=1.0；BM25 R@3=1.0，Dense R@3=0.6，Hybrid R@3=0.9；Hybrid 达到 0.90 且高于 Dense，但低于 BM25；Agent structured/finding completeness=1.0，citation validity=0.0，support NOT_EVALUATED/Day25；共同门禁见 `TASKS.md` | 一次性 holdout 消费、sealed evidence、自动 validity 与人工 support 分离 | 人工 citation support、性能测试、据 locked 修改或重跑 |
 | MigrationLens Day 25 | 2026-09-01 | `blocked / citation_support_not_assessable_from_sealed_evidence` | 人工 citation support 与失败归档 | Day24 七个 sealed artifact integrity；evidence sufficiency fail closed；单一 blocker CSV、`failures.md`、版本化 `eval-day25.json`/Day25 manifest；0 假样本、0 human verdict | Python 3.11 专项 34 passed；完整 819 passed、2 warnings；pip/Ruff/format/diff/Compose static config 退出码 0；locked rerun=0，production/Gold/fixtures unchanged；精确命令见 `TASKS.md` | validity/support 分离、sealed evidence、deterministic sampling 与 failure governance | 性能、重建缺失 evidence、修复或重跑 locked |
-| MigrationLens Day 26 | 2026-09-01 | `planned` | 性能与负载证据 | scanner、FakeLLM、条件式真实模型、硬件/commit/hash/sample | Locust、loadtest；样本规则和 Fake/real 分离；共同门禁 | 统计口径与样本量 | 样本不足填 p95、CI、发布文档 |
+| MigrationLens Day 26 | 计划 2026-09-01；实际 2026-09-02；兼容/smoke 复核 2026-09-03 | `implementation_complete / real_llm_smoke_verified` | 性能与负载证据 | 50 files/10k LOC scanner 50 次；Locust FakeLLM concurrency 5/10；OpenAI-compatible adapter、DI、SecretStr/opt-in；百炼 `max_tokens` 方言；loadtest/e2e artifacts | scanner 50/50、p50/p95 794.8504/871.5174 ms；Fake c5 139/0、HTTP p50/p95 220/360 ms，c10 147/0、460/660 ms；百炼 direct adapter N=1 成功、observed model `qwen3.7-flash-2026-07-15`、wall time 1697.8 ms；real load/Agent API E2E 未运行；共同门禁见 `TASKS.md` | micro/load/e2e/real 分层、样本门槛、cold/warm、provider dialect | 真实结果伪造、Day24 rerun、CI、发布文档 |
 | MigrationLens Day 27 | 2026-09-02 | `planned` | CI 与安全门禁 | FakeLLM GitHub Actions、依赖检查、secret 扫描和发布候选安全测试摘要 | CI 实际运行；pytest/Ruff/安全测试精确结果写入 `reports/test-summary.txt`；共同门禁 | 离线 CI 与发布安全 | clean clone、Docker 复验、自动 commit/push |
 | MigrationLens Day 28 | 2026-09-03 | `planned` | clean clone 与 Docker 复现 | 从干净目录按 README 构建；API+Qdrant compose；live、ready 和代表性分析请求 | clean clone pytest/Ruff/compose；实际 build/up/health/request/down；保存复现日志 | 可复现部署与真实 backend | 改业务行为、补写未运行结果、发布文案 |
 | MigrationLens Day 29 | 2026-09-04 | `planned` | 发布文档与工程发布门槛 | README、架构、复现、安全、限制、许可证、演示脚本和全部证据索引一致；形成 v1.0 候选清单 | 全部发布门槛逐项映射到真实文件、命令、commit/hash；未通过项阻断发布 | 证据化交接与简历边界 | P1、补数字、自动 commit/push/tag 或公开发布 |
@@ -1321,8 +1321,11 @@ commit 上首次且单次消费 locked benchmark，并把 Detection、Retrieval 
 封存到 `reports/`；其中 Hybrid locked R@3 低于 BM25 是真实 metric failure，不能通过调参或
 重跑修正。Day 25 已执行 evidence sufficiency 与失败归档，但因 Day24 缺少 finding-level
 citation mapping 而 blocked；没有伪造人工结果。Day 24 后若改变行为，旧 locked 结果不能继续
-作为最终证据。Days 26–29 分别负责性能、CI/安全、clean clone/Docker 和发布文档，
-不得重新合并成一个发布日。
+作为最终证据。Day 26 已完成 scanner micro benchmark、FakeLLM application load、条件式
+OpenAI-compatible runtime adapter 与分层证据；用户随后完成百炼本地配置加载验证并按 D-030
+校正 request dialect，再明确授权并完成 D-031 的 N=1 direct adapter smoke。真实 LLM runtime 因此为
+`smoke_verified`，但 real load、Agent/API E2E 和 p95 仍未验证。Day25 blocker 不因性能工作而解除。Days 27–29 分别负责
+CI/安全、clean clone/Docker 和发布文档，不得重新合并成一个发布日。
 
 ## 12. 历史编号迁移说明
 
