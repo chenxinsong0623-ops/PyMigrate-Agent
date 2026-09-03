@@ -1,6 +1,6 @@
 MigrationLens Day27 CI/security evidence summary
 format_version = migrationlens-day27-ci-security-evidence-v1
-status = implementation_complete / github_actions_runtime_pending
+status = completed / ci_runtime_verified
 
 LOCAL PRE-FLIGHT
 branch = main
@@ -37,11 +37,15 @@ provider_secret_references = none
 pull_request_target = absent
 checkout = actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 (v7.0.1); fetch-depth=0; persist-credentials=false
 setup_python = actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 (v7.0.0)
-remote_workflow_run_id = not_verified
-remote_workflow_url = not_verified
-github_actions_runtime = not_verified
+remote_workflow_run_id = 1
+remote_workflow_url = not_recorded
+remote_workflow_result = success
+remote_workflow_runtime = approximately 2m 2s
+github_actions_runtime = verified
 
-CI has no docker compose build/up, no Docker runtime job, no real LLM smoke/load, no secret injection, no artifact upload, and no auto commit/push. A future committed workflow will fail closed on pip check, pytest, Ruff, Compose static config, pip-audit, or Gitleaks failure.
+GitHub-hosted verification: workflow=`CI and security gate`; Run #1; job=`Python 3.11 offline verification`; result=`success`; runtime=approximately 2m 2s. The declared project/development install, dependency consistency, offline FakeLLM test suite, Ruff lint, Ruff formatting, Compose static configuration, dependency vulnerability audit, checksum-pinned Gitleaks download, and complete Git history secret scan all passed. No workflow URL was recorded.
+
+CI has no docker compose build/up, no Docker runtime job, no real LLM smoke/load, no secret injection, no artifact upload, and no auto commit/push. The verified workflow remains fail closed on pip check, pytest, Ruff, Compose static config, pip-audit, or Gitleaks failure.
 
 DEPENDENCY AUDIT
 tool = pip-audit 2.10.1
@@ -55,7 +59,7 @@ local_result = exit 0; No known vulnerabilities found.
 local_warnings = pip-audit warned that --no-deps works best with fully hashed requirements; warnings were retained, not suppressed.
 ci_command = python -m pip_audit . --strict
 ci_scope = project metadata and resolved dependency tree after fresh Python 3.11 install
-ci_runtime = not_verified
+ci_runtime = verified; GitHub-hosted Run #1 project-mode audit passed
 
 Local project-mode attempts were not treated as a pass: --index-url with project mode exited 2 because pip-audit only permits that option with -r; plain project-mode resolution exceeded the local execution window while creating an isolated environment for the ML dependency tree, so its verified child processes were stopped. The successful direct-declaration audit above is the local vulnerability evidence; remote CI retains the full project-mode audit.
 
@@ -83,7 +87,7 @@ locked_evaluator = not rerun.
 day25_blocker = unchanged; status=blocked; locked_run_consumed=true; run_attempt=1; rerun_count=0; evidence_sufficient=false; citation_support_not_assessable_from_sealed_evidence remains in reports/failures.md.
 
 KNOWN BLOCKERS
-- GitHub-hosted CI has not run because the workflow has not been committed or pushed by the user.
+- Day27 GitHub-hosted CI is verified: `CI and security gate` Run #1 succeeded; no workflow URL was recorded.
 - Day25 citation support remains blocked by missing sealed finding-to-citation evidence.
 - Day26 real-provider load, Agent/API real-provider E2E, and real-provider p95 evidence remain unverified; no such work was performed here.
 - Day28 clean clone and Docker runtime verification remain unstarted.

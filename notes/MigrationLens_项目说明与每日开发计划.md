@@ -769,7 +769,7 @@ Agent 或 Citation Guard。Day26 保持 `planned`，Day25 不能标记 completed
 
 ### 2.24 MigrationLens Day 27 CI 与安全门禁
 
-状态：`implementation_complete / github_actions_runtime_pending`
+状态：`completed / ci_runtime_verified`
 实际开发日期：2026-09-03
 
 Day27 新增单一 GitHub Actions workflow：触发范围为 `push` 至 `main`、`pull_request` 与
@@ -785,9 +785,11 @@ pytest、Ruff check/format、`docker compose config --quiet`、`pip-audit==2.10.
 Day25 `citation_support_not_assessable_from_sealed_evidence` / rerun=0 状态。
 
 本日没有 Docker build/up、clean clone、Qdrant/E5 runtime、真实 LLM、Day24 locked rerun 或
-Day29 release 工作。所有本地 gate 的精确实际结果记录于 `reports/test-summary.txt`。workflow
-尚未 commit/push，故 GitHub-hosted run 为 `not_verified`；在真实 Actions 成功前 Day27 不能标记
-`completed`。
+Day29 release 工作。所有本地 gate 的精确实际结果记录于 `reports/test-summary.txt`。GitHub-hosted
+`CI and security gate` Run #1 的 `Python 3.11 offline verification` job 已成功，运行约 2m 2s；
+project/development install、dependency consistency、offline FakeLLM test suite、Ruff lint/format、
+Compose static configuration、dependency vulnerability audit、checksum-pinned Gitleaks download 和完整
+Git history secret scan 均通过。没有保存或编造 workflow URL。
 
 ## 3. P0、P1 和不做范围
 
@@ -1328,7 +1330,7 @@ build/up/health/down。外部网络、Docker、CI 或真实模型没有运行时
 | MigrationLens Day 24 | 2026-08-27 | `locked_run_completed_with_metric_failure` | 首次且单次 locked 自动评测 | verified frozen commit `3bec58084e13d0734b891d290099a0695ec8dab6` 上一次性消费 Detection 28、Retrieval 20 与 Agent 28；runner SHA `872536341dfb0492801c0140a12f8613b074a3a35ba669b37b47949ac50add6d`；sealed reports 已生成且 rerun=0 | Detection P/R/F1=1.0/1.0/1.0；negative FP fixtures=0；one-hop=1.0；BM25 R@3=1.0，Dense R@3=0.6，Hybrid R@3=0.9；Hybrid 达到 0.90 且高于 Dense，但低于 BM25；Agent structured/finding completeness=1.0，citation validity=0.0，support NOT_EVALUATED/Day25；共同门禁见 `TASKS.md` | 一次性 holdout 消费、sealed evidence、自动 validity 与人工 support 分离 | 人工 citation support、性能测试、据 locked 修改或重跑 |
 | MigrationLens Day 25 | 2026-09-01 | `blocked / citation_support_not_assessable_from_sealed_evidence` | 人工 citation support 与失败归档 | Day24 七个 sealed artifact integrity；evidence sufficiency fail closed；单一 blocker CSV、`failures.md`、版本化 `eval-day25.json`/Day25 manifest；0 假样本、0 human verdict | Python 3.11 专项 34 passed；完整 819 passed、2 warnings；pip/Ruff/format/diff/Compose static config 退出码 0；locked rerun=0，production/Gold/fixtures unchanged；精确命令见 `TASKS.md` | validity/support 分离、sealed evidence、deterministic sampling 与 failure governance | 性能、重建缺失 evidence、修复或重跑 locked |
 | MigrationLens Day 26 | 计划 2026-09-01；实际 2026-09-02；兼容/smoke 复核 2026-09-03 | `implementation_complete / real_llm_smoke_verified` | 性能与负载证据 | 50 files/10k LOC scanner 50 次；Locust FakeLLM concurrency 5/10；OpenAI-compatible adapter、DI、SecretStr/opt-in；百炼 `max_tokens` 方言；loadtest/e2e artifacts | scanner 50/50、p50/p95 794.8504/871.5174 ms；Fake c5 139/0、HTTP p50/p95 220/360 ms，c10 147/0、460/660 ms；百炼 direct adapter N=1 成功、observed model `qwen3.7-flash-2026-07-15`、wall time 1697.8 ms；real load/Agent API E2E 未运行；共同门禁见 `TASKS.md` | micro/load/e2e/real 分层、样本门槛、cold/warm、provider dialect | 真实结果伪造、Day24 rerun、CI、发布文档 |
-| MigrationLens Day 27 | 2026-09-03 | `implementation_complete / github_actions_runtime_pending` | CI 与安全门禁 | FakeLLM-only Python 3.11 workflow、最小权限、pinned actions、pip-audit、Gitleaks、workflow security contract 与 evidence summary | 本地 CI-equivalent gates 与 Day24/25 static guards；remote Actions 必须在用户 commit/push 后真实运行 | 离线 CI、供应链与 secret safety | clean clone、Docker runtime、真实 LLM、自动 commit/push |
+| MigrationLens Day 27 | 2026-09-03 | `completed / ci_runtime_verified` | CI 与安全门禁 | FakeLLM-only Python 3.11 workflow、最小权限、pinned actions、pip-audit、Gitleaks、workflow security contract 与 evidence summary | GitHub-hosted `CI and security gate` Run #1 success（约 2m 2s）；全部 quality/security gates 通过，Day24/25 static guards 保持 | 离线 CI、供应链与 secret safety | clean clone、Docker runtime、真实 LLM、自动 commit/push |
 | MigrationLens Day 28 | 2026-09-03 | `planned` | clean clone 与 Docker 复现 | 从干净目录按 README 构建；API+Qdrant compose；live、ready 和代表性分析请求 | clean clone pytest/Ruff/compose；实际 build/up/health/request/down；保存复现日志 | 可复现部署与真实 backend | 改业务行为、补写未运行结果、发布文案 |
 | MigrationLens Day 29 | 2026-09-04 | `planned` | 发布文档与工程发布门槛 | README、架构、复现、安全、限制、许可证、演示脚本和全部证据索引一致；形成 v1.0 候选清单 | 全部发布门槛逐项映射到真实文件、命令、commit/hash；未通过项阻断发布 | 证据化交接与简历边界 | P1、补数字、自动 commit/push/tag 或公开发布 |
 
@@ -1347,7 +1349,7 @@ citation mapping 而 blocked；没有伪造人工结果。Day 24 后若改变行
 OpenAI-compatible runtime adapter 与分层证据；用户随后完成百炼本地配置加载验证并按 D-030
 校正 request dialect，再明确授权并完成 D-031 的 N=1 direct adapter smoke。真实 LLM runtime 因此为
 `smoke_verified`，但 real load、Agent/API E2E 和 p95 仍未验证。Day25 blocker 不因性能工作而解除。Day27 已实现
-FakeLLM-only CI/security gate，但尚无用户 commit/push 后的 GitHub-hosted runtime 证据；Days 28–29 仍分别负责
+FakeLLM-only CI/security gate，GitHub-hosted `CI and security gate` Run #1 已成功；Days 28–29 仍分别负责
 clean clone/Docker 和发布文档，不得重新合并成一个发布日。
 
 ## 12. 历史编号迁移说明

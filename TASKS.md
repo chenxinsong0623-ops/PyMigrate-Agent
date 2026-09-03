@@ -8,13 +8,13 @@
 
 MigrationLens Day 27 — CI 与安全门禁
 
-状态：`implementation_complete / github_actions_runtime_pending`
+状态：`completed / ci_runtime_verified`
 
 实际日期：2026-09-03。
 
 本日只实现离线、确定性、FakeLLM-only 的 GitHub Actions CI/security gate，没有改变
-MigrationLens 业务行为。workflow 尚未由用户 commit/push，因此没有 GitHub-hosted runtime
-evidence，绝不标记为 `completed` 或 `ci_runtime_verified`。
+MigrationLens 业务行为。Day27 CI commit 已推送；GitHub-hosted Runner 已完成 workflow
+`CI and security gate` 的 Run #1，并成功验证离线 security gates。
 
 ## 2. 开发起点与基线
 
@@ -90,13 +90,19 @@ Day25 blocker/rerun status。
   --progress-spinner off --timeout 10`；它覆盖由 `pyproject.toml` 导出的 16 个 exact direct
   runtime/dev pins，保留了“建议使用 full hashes”的 pip-audit warning；
 - full project-mode `python -m pip_audit . --strict` 在本机创建隔离环境解析 ML dependency tree
-  时超过执行窗口，已按验证 PID 停止，绝未记作通过。该完整 project-mode command 保留在 CI，
-  remote result pending；
+  时超过执行窗口，已按验证 PID 停止，绝未记作通过。该完整 project-mode command 已在
+  GitHub-hosted Run #1 成功通过；
 - Gitleaks `8.30.1` history scan：exit 0，`30 commits scanned`、约 2,821,971 bytes、
   `no leaks found`；只扫描 Git history，不读取 Git 忽略 `.env`；
 - `git diff --check`：exit 0，无输出。
 
-精确原始摘要、scope、工具版本、失败的 preliminary audit commands 和 remote boundary 见
+GitHub Actions remote verification：workflow=`CI and security gate`；Run=`#1`；job=
+`Python 3.11 offline verification`；result=`success`；runtime=approximately `2m 2s`。项目/开发
+依赖安装、dependency consistency、offline FakeLLM test suite、Ruff lint、Ruff formatting、Compose
+static configuration、Python dependency vulnerability audit、checksum-pinned Gitleaks download 与完整
+Git history secret scan 均成功。未保存或编造 workflow URL。
+
+精确原始摘要、scope、工具版本、失败的 preliminary audit commands 和 remote evidence 见
 `reports/test-summary.txt`。
 
 ## 6. 封存证据与 blocker
@@ -115,10 +121,7 @@ Day25 blocker/rerun status。
 没有改变 P0 产品契约。LEARNING_LOG 已记录本日 test-first、least privilege、full-history scan
 与本地/remote evidence 区分。
 
-假设：GitHub-hosted Ubuntu runner 可使用固定 action commits、Python 3.11、Docker Compose 和
-公网 PyPI/Gitleaks release。该假设尚未由 remote run 证实；不能以本机结果替代。
+GitHub-hosted Runner 已实际证实固定 action commits、Python 3.11、Docker Compose 和公网
+PyPI/Gitleaks release 可用于此 workflow。没有将本机结果替代 remote evidence。
 
-下一步仅为用户 review 后提交本日文件并 push 到 `origin/main`，触发 workflow `CI and security
-gate`；必须带回 workflow run URL/ID、每一步 status、pytest warning/count、pip-audit 和
-Gitleaks exact output，才可把 Day27 升级为 `completed / ci_runtime_verified`。Day28 clean
-clone/Docker runtime 与 Day29 release docs 均未开始。
+Day27 已完成；Day28 clean clone/Docker runtime 与 Day29 release docs 均未开始。

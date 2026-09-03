@@ -875,7 +875,8 @@
 ## D-032 — Day27 离线 FakeLLM CI 与 fail-closed 安全门禁
 
 - 日期：2026-09-03
-- 状态：已接受；本地实现完成，GitHub-hosted runtime 待用户 commit/push 后验证
+- 状态：已接受；GitHub-hosted runtime 已在 `CI and security gate` Run #1 的
+  `Python 3.11 offline verification` job 成功验证（约 2m 2s；未记录 workflow URL）
 - 决策：
   - 以单一 `.github/workflows/ci.yml` 覆盖 `push` 到 `main`、`pull_request` 与
     `workflow_dispatch`。顶层权限固定为 `contents: read`，不使用

@@ -33,7 +33,7 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 24 | `locked_run_completed_with_metric_failure` | frozen commit `3bec58084e13d0734b891d290099a0695ec8dab6` 上首次且单次完成 locked 自动评测；Detection P/R/F1=1.0/1.0/1.0，Retrieval Hybrid R@3=0.9 但低于 BM25 R@3=1.0，Agent citation validity=0.0 且 citation support 留到 Day25 |
 | MigrationLens Day 25 | `blocked / citation_support_not_assessable_from_sealed_evidence` | 七个 Day24 sealed artifacts hash/identity 已复核；Agent artifact 只有 case-level aggregate counts，没有 exact finding ↔ citation mapping，故未生成 20 条假样本、未冒充 human review；已新增 blocked audit、失败归档与版本化 additive aggregate，locked rerun=0 |
 | MigrationLens Day 26 | `implementation_complete / real_llm_smoke_verified` | 50 files/10k LOC scanner benchmark、FakeLLM Locust concurrency 5/10、`reports/loadtest.json`/`e2e_latency.json`、百炼 direct adapter N=1 smoke 成功；真实 Locust load 与 Agent/API E2E 未运行 |
-| MigrationLens Day 27 | `implementation_complete / github_actions_runtime_pending` | Python 3.11 FakeLLM-only CI、pinned actions、`pip check`/pytest/Ruff/Compose static gate、strict pip-audit 与 checksum-pinned Gitleaks full-history secret scan 已实现；尚未 push，remote Actions 未验证 |
+| MigrationLens Day 27 | `completed / ci_runtime_verified` | GitHub Actions `CI and security gate` Run #1 成功（约 2m 2s）；Python 3.11 FakeLLM-only CI、pinned actions、`pip check`/pytest/Ruff/Compose static gate、strict pip-audit 与 checksum-pinned Gitleaks full-history secret scan 均已在 GitHub-hosted Runner 验证 |
 
 当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite schema version `2` 包含
 `system_metadata`、`analyses` 与 `reports`，支持 v1→v2 事务迁移以及 API envelope、Day 20
@@ -93,7 +93,7 @@ was rerun。
 
 仍未验证或未完成：
 
-- GitHub Actions remote runtime：Day27 workflow 尚未由用户 commit/push，不能写成已通过；
+- GitHub Actions remote runtime：Day27 `CI and security gate` Run #1 已成功；未保存 workflow URL，故不提供或编造链接；
 - 可计算的人工 citation support：Day25 已归档失败，但因 sealed finding-level evidence
   缺失而 blocked；
 - 真实 LLM load 与 Agent/API real-provider E2E；
@@ -798,8 +798,9 @@ docker compose config --quiet
 `pull_request_target`、写权限或自动 Git 操作；top-level permission 仅为 `contents: read`。
 workflow 以完整 commit SHA 固定 checkout/setup actions，完整执行 pytest、Ruff、`pip check`、
 Compose static config 和 `pip-audit`，再下载 SHA256 校验的 Gitleaks v8.30.1 扫描全部 Git
-history。任何 gate 失败都会使 job 失败；它不运行 Docker runtime 或真实 LLM。remote run 状态
-在 `reports/test-summary.txt` 中如实保留为 `not_verified`，直到用户提交并推送。
+history。任何 gate 失败都会使 job 失败；它不运行 Docker runtime 或真实 LLM。GitHub-hosted
+`CI and security gate` Run #1 已成功（约 2m 2s）；具体 evidence 保存在
+`reports/test-summary.txt`，未保存或编造 workflow URL。
 
 ### 当前基线证据
 
@@ -1168,9 +1169,8 @@ D-027 把原 `reports/eval.json`/`eval_manifest.json` 封存，Day25 因此保�
 用 `reports/eval-day25.json` 和 `reports/day25_manifest.json` 保存版本化 additive provenance。
 Day24 evaluator 没有重跑，production、Gold、frozen fixtures、retrieval params 与 Agent behavior
 均未修改。Day26 为 `implementation_complete / real_llm_smoke_verified`；性能工作没有
-掩盖或解除当前 evidence blocker。Day27 CI/安全门禁现为
-`implementation_complete / github_actions_runtime_pending`；用户 commit/push 后的 GitHub-hosted
-run 是升级为 completed 的必要证据。
+掩盖或解除当前 evidence blocker。Day27 CI/安全门禁已为
+`completed / ci_runtime_verified`：GitHub-hosted `CI and security gate` Run #1 成功，运行时间约 2m 2s。
 
 ## 项目文档
 

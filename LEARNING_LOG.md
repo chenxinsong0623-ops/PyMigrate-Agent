@@ -3930,7 +3930,7 @@ Python 3.11 和 `pyproject.toml` project audit。CI 对完整项目使用 `pytho
 
 选择 MIT 的 Gitleaks 8.30.1 作真实 Git history 扫描；本地执行扫描了 30 commits、
 约 2,821,971 bytes，结果 `no leaks found`（exit 0）。它不读取 Git 忽略的 `.env`；未提交的
-Day27 文件由 security contract test 覆盖，提交后将由 CI history scan 覆盖。没有使用宽泛
+Day27 文件由 security contract test 覆盖，并已在提交后的 CI history scan 中覆盖。没有使用宽泛
 忽略或 vulnerability allowlist。
 
 ### 4. Evidence discipline
@@ -3938,5 +3938,8 @@ Day27 文件由 security contract test 覆盖，提交后将由 CI history scan 
 完整回归实测为 `851 passed, 2 warnings in 26.21s`；`pip check`、Ruff、191-file format、
 Compose static config 和 `git diff --check` 通过。Day24 的七个 sealed artifact SHA256 仍匹配，
 Day25 的 `citation_support_not_assessable_from_sealed_evidence` blocker 及其 no-rerun
-状态不变。新的 workflow 尚未由用户 commit/push，故 GitHub-hosted runtime 只能标记为
-`not_verified`，并未开始 Day28 或 Day29。
+状态不变。提交后 GitHub-hosted `CI and security gate` Run #1 的
+`Python 3.11 offline verification` job 已成功，运行约 2m 2s。declared project/development install、
+dependency consistency、offline FakeLLM test suite、Ruff lint/format、Compose static configuration、
+dependency vulnerability audit、checksum-pinned Gitleaks download 与完整 Git history secret scan 均通过。
+没有保存或编造 workflow URL；Day28 与 Day29 仍未开始。
