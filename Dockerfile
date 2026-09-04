@@ -8,6 +8,9 @@ WORKDIR /app
 
 COPY pyproject.toml README.md ./
 COPY app ./app
+COPY data/chunks/pydantic-v2-migration.json ./data/chunks/
+COPY data/manifests/pydantic-v2-migration.json ./data/manifests/
+COPY data/snapshots/pydantic-v2-migration/migration.md ./data/snapshots/pydantic-v2-migration/
 
 RUN python -m pip install . \
     && mkdir -p /app/var/data \

@@ -1,0 +1,179 @@
+{
+  "schema_version": "migrationlens-day28-reproducibility-v1",
+  "generated_at": "2026-09-04T09:59:25.7232953+08:00",
+  "recorded_date": "2026-09-04",
+  "status": "blocked",
+  "blocker": "fixes_pending_commit_and_clean_clone_rerun_and_docker_daemon_unhealthy",
+  "source": {
+    "branch": "main",
+    "head_commit": "75bfb75b538a8b0c8c18b986eb0f5afc2d5d142d",
+    "origin_main_commit": "75bfb75b538a8b0c8c18b986eb0f5afc2d5d142d",
+    "clean_clone_commit": "75bfb75b538a8b0c8c18b986eb0f5afc2d5d142d",
+    "clone_method": "network_git_clone_branch_main",
+    "clone_path": "<day28-clean-root>/migrationlens-day28-clean-75bfb75",
+    "initial_tracked_status": "clean",
+    "preexisting_environment_artifacts": [],
+    "final_tracked_status": "clean",
+    "final_diff_check_exit_code": 0,
+    "final_ignored_artifacts": ["var", ".pytest_cache", ".ruff_cache"],
+    "final_env_file_present": false,
+    "final_sqlite_files": 0,
+    "final_model_cache_present": false,
+    "final_qdrant_storage_present": false
+  },
+  "clean_python": {
+    "version": "3.11.15",
+    "venv_location": "outside_clone",
+    "install": {
+      "command": "python -m pip install --index-url https://pypi.org/simple --no-cache-dir .[dev]",
+      "exit_code": 0,
+      "reused_repository_environment": false
+    }
+  },
+  "clean_gates": {
+    "pip_check": {"exit_code": 0, "result": "No broken requirements found"},
+    "ruff_check": {"exit_code": 0, "result": "All checks passed"},
+    "ruff_format_check": {"exit_code": 0, "result": "191 files already formatted"},
+    "compose_config": {"exit_code": 0},
+    "git_diff_check": {"exit_code": 0},
+    "pytest_with_inherited_proxy": {
+      "exit_code": 1,
+      "result": "5 collection errors",
+      "cause": "SOCKS proxy variables present but optional socksio dependency absent"
+    },
+    "pytest_without_proxy": {
+      "exit_code": 1,
+      "passed": 845,
+      "failed": 6,
+      "warnings": 2,
+      "seconds": 36.94,
+      "cause": "sealed report CSV checkout bytes changed by Windows EOL conversion"
+    },
+    "pip_audit_strict": {
+      "exit_code": 0,
+      "result": "No known vulnerabilities found",
+      "environment_normalization": "PYTHONUTF8=1"
+    },
+    "gitleaks": {
+      "version": "8.30.1",
+      "checksums_file_sha256": "061476c21adaf5441516f96f185c1a4706a83cd6329b9b38762271b3d4a52fae",
+      "windows_asset_sha256": "d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e",
+      "exit_code": 0,
+      "commits_scanned": 32,
+      "bytes_scanned_approx": 2858851,
+      "result": "no leaks found"
+    }
+  },
+  "root_causes": [
+    {
+      "id": "sealed_csv_checkout_eol",
+      "expected_sha256": "c42e89852e64e4a20028040ca20a9f3bea7f5ac76c61b6c3d24ff74ae8f470b2",
+      "clean_clone_sha256": "8e8546f4f196f5e413029d7f24569c6a782ccb8d19523d45698941bae1403085",
+      "candidate_fix": "reports/*.csv text eol=lf"
+    },
+    {
+      "id": "runtime_image_missing_trusted_bundle",
+      "missing_paths": [
+        "data/chunks/pydantic-v2-migration.json",
+        "data/manifests/pydantic-v2-migration.json",
+        "data/snapshots/pydantic-v2-migration/migration.md"
+      ],
+      "candidate_fix": "copy only the three tracked runtime inputs into the image"
+    }
+  ],
+  "docker": {
+    "engine_version": "29.7.2",
+    "compose_version": "v5.4.0",
+    "project_name": "migrationlens-day28-repro",
+    "preexisting_project_containers": 0,
+    "preexisting_project_volumes": 0,
+    "preexisting_project_networks": 0,
+    "build_command": "docker compose -p migrationlens-day28-repro build --pull --no-cache api",
+    "build_exit_code": 1,
+    "build_result": "interrupted_after_stalled_unpacking",
+    "pip_layer_seconds": 615.5,
+    "layer_export_seconds": 217.0,
+    "observed_image_size_bytes": 3270615935,
+    "observed_image_id": "sha256:a9d3970e9b20b8824e9a941d8702ae11968933ffb4d42107f035b7b36c51023c",
+    "container_create_result": "502_bad_gateway",
+    "image_cleanup_result": "blocked_by_daemon_500",
+    "compose_runtime_started": false,
+    "pre_index_live_checked": false,
+    "pre_index_ready_checked": false,
+    "fresh_e5_downloaded": false,
+    "index_bootstrap_completed": false,
+    "post_index_ready_checked": false,
+    "synthetic_zip_posted": false,
+    "persisted_gets_checked": false,
+    "compose_down_v_completed": false
+  },
+  "runtime_contract_not_verified": {
+    "configured_collection": "migrationlens-documents",
+    "configured_embedding_model": "intfloat/multilingual-e5-small",
+    "configured_embedding_revision": "614241f622f53c4eeff9890bdc4f31cfecc418b3",
+    "configured_vector_size": 384,
+    "configured_distance": "Cosine",
+    "observed_qdrant_health": null,
+    "observed_collection": null,
+    "observed_vector_size": null,
+    "observed_distance": null,
+    "observed_point_count": null,
+    "observed_document_index_status": null,
+    "index_bootstrap_command": null,
+    "initial_live_http_status": null,
+    "initial_ready_http_status": null,
+    "post_index_ready_http_status": null,
+    "synthetic_zip": null,
+    "analysis_post": null,
+    "persisted_gets": null
+  },
+  "candidate_fix_validation": {
+    "test_first": {"exit_code": 1, "failed": 2, "seconds": 1.58},
+    "targeted_after_fix": {"exit_code": 0, "passed": 2, "seconds": 0.14},
+    "full_pytest_after_fix": {
+      "exit_code": 0,
+      "passed": 853,
+      "warnings": 2,
+      "seconds": 40.15
+    },
+    "pip_check": 0,
+    "ruff_check": 0,
+    "ruff_format_check": 0,
+    "compose_config": 0,
+    "git_diff_check": 0,
+    "origin_clean_clone_validated": false
+  },
+  "first_failures": [
+    "configured package mirror install did not complete and was interrupted",
+    "sandboxed official PyPI install did not complete and was interrupted",
+    "pytest inherited SOCKS proxy variables and failed collection",
+    "clean-clone sealed CSV hashes changed after Windows checkout",
+    "pip-audit initially failed on non-UTF-8 pip version output",
+    "Docker build stalled during unpacking and returned non-zero after interruption",
+    "Docker daemon returned 502 for container create and 500 for image cleanup"
+  ],
+  "network_dependent_steps": {
+    "origin_clone": "completed",
+    "official_pypi_install": "completed",
+    "pip_audit_vulnerability_query": "completed",
+    "gitleaks_release_download": "completed",
+    "docker_base_and_dependency_download": "completed_before_unpack_stall",
+    "fixed_revision_e5_download": "not_run"
+  },
+  "secret_boundary": {
+    "env_file_copied_or_read": false,
+    "provider_key_used": false,
+    "provider_request_sent": false,
+    "docker_credentials_recorded": false,
+    "private_source_used": false
+  },
+  "limitations": [
+    "candidate executable fixes are uncommitted and therefore absent from origin/main",
+    "Docker build command did not return success",
+    "Docker runtime, Qdrant, index, health, analysis, persistence and graceful shutdown were not run",
+    "the exact Day28 image may remain because Docker daemon rejected cleanup",
+    "Linux transitive ML dependencies produced a 3.27 GB CUDA-bearing image"
+  ],
+  "locked_evaluator_rerun_count": 0,
+  "required_next_step": "user commits and pushes candidate fixes, then rerun the complete Day28 workflow from a new origin/main clone on a healthy Docker daemon"
+}

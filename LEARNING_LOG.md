@@ -3942,4 +3942,90 @@ Day25 的 `citation_support_not_assessable_from_sealed_evidence` blocker 及其 
 `Python 3.11 offline verification` job 已成功，运行约 2m 2s。declared project/development install、
 dependency consistency、offline FakeLLM test suite、Ruff lint/format、Compose static configuration、
 dependency vulnerability audit、checksum-pinned Gitleaks download 与完整 Git history secret scan 均通过。
-没有保存或编造 workflow URL；Day28 与 Day29 仍未开始。
+没有保存或编造 workflow URL；Day28 与 Day29 当时仍未开始。
+
+# MigrationLens Day 28 — clean clone 失败证据与候选修复
+
+## 1. clean clone 验证的是提交历史，不是当前目录
+
+本轮先确认主工作区 HEAD 与 `origin/main` 同为
+`75bfb75b538a8b0c8c18b986eb0f5afc2d5d142d`，再通过网络真实 clone。clone 初始没有
+`.env`、cache、venv、SQLite、Qdrant storage 或模型目录；Python 3.11.15 venv 也位于 clone
+之外。这个边界排除了“旧 checkout bytes、已装依赖或本地 cache 恰好让验证通过”。
+
+候选修复完成后不能继续把原 clone 当成修复后的 origin。只有用户 commit/push，新 clone
+指向新 commit，才有资格重做 Day28 completion verdict。这也是为什么当前状态是 blocked，
+而不是“本地已修好所以 completed”。
+
+## 2. EOL 是 artifact identity 的一部分
+
+Windows 全局 `core.autocrlf=true` 与 `* text=auto` 使新 checkout 的 sealed report CSV 从 LF
+变为 CRLF。Git status 仍可 clean，但文件的 SHA256 已变；清除 proxy 后完整测试因此得到
+`845 passed, 6 failed, 2 warnings`。这说明 clean worktree 只表示 index 与 Git 的规范化比较
+没有差异，不表示工作树 bytes 等于 blob 或封存 hash 所针对的 bytes。
+
+最小修复是在 `.gitattributes` 为 `reports/*.csv` 固定 `text eol=lf`。不能把新 CRLF hash
+写回测试，因为这会把平台偶然行为冒充新的 sealed evidence；也不能重跑 locked evaluator。
+
+## 3. 镜像中的代码不等于可运行应用
+
+原 Dockerfile 复制 `pyproject.toml`、README 与 `app`，因此 import 和 `/health/live` 可能工作，
+但 explicit dense index 需要 `/app/data/chunks/...`，Citation Guard 还需要 manifest 与原始
+snapshot。缺少这些只读输入时，镜像不是完整的 production runtime artifact。
+
+候选修复只复制三个精确、已跟踪路径。没有复制整个 `data`、reports、locked benchmark、
+third-party 开发材料、`.env`、模型 cache 或用户代码，保持最小镜像信任边界。
+
+## 4. 环境泄漏必须与产品失败分开记录
+
+首次 clean pytest 因宿主 SOCKS proxy 环境变量触发 httpx 的 optional `socksio` 缺失，得到
+5 个 collection errors。清除四个 proxy 变量后，才暴露真正的 6 个 sealed-hash 失败。
+`pip-audit` 在含中文用户名的路径中还曾因 pip-api 解码失败；`PYTHONUTF8=1` 消除编码问题，
+严格 project audit 最终为 `No known vulnerabilities found`。
+
+环境隔离不是删掉失败记录。报告同时保存 preliminary failure 和规范化重跑结果，使读者知道
+哪些是宿主输入、哪些是仓库缺陷。
+
+## 5. Docker build success 必须以退出码为准
+
+原 clean clone 用 `--pull --no-cache` 从固定 Python digest 构建。传递依赖解析出 Torch 2.14.0
+及 CUDA 13 组件，最终镜像约 3.27 GB；pip layer 约 615.5 秒、export layers 约 217 秒。
+BuildKit 在 unpacking 长时间无 CPU 增量，build 客户端中止后 exit 1。镜像名称和 digest 虽已
+出现，也不能把非零 build 记作成功。随后 container create 502、image inspect/remove 500，
+说明 daemon 状态已不足以继续 runtime 或可靠清理。
+
+因此本轮没有声称 compose up、fresh Qdrant/SQLite、ready 503→200、E5 fresh download、index
+bootstrap、ZIP POST/GET 或 down -v 已完成。它们必须在提交修复并恢复健康 daemon 后重跑。
+
+## 6. Test-first 与当前证据
+
+新增 Day28 契约测试用正确项目解释器首次为 `2 failed in 1.58s`，修复后为
+`2 passed in 0.14s`。修复后的主工作区完整回归为
+`853 passed, 2 warnings in 40.15s`；Ruff、format、pip check、Compose config 与 diff check
+通过。origin/main clean venv 的 strict pip-audit 通过；checksum-verified Gitleaks 8.30.1 对
+32 commits、约 2.86 MB history 扫描无泄漏。
+
+## 7. 复习题
+
+1. 为什么现有工作区测试通过不能证明 fresh clone 可复现？
+2. `git status clean` 为什么不能证明工作树文件 bytes 等于 Git blob bytes？
+3. `core.autocrlf=true` 如何影响 CSV 的 SHA256？
+4. 为什么应固定 checkout EOL，而不是更新 sealed expected hash？
+5. 为什么不允许为修复 Day28 重跑 locked evaluator？
+6. 为什么 fresh venv 必须位于 clean clone 之外？
+7. 为什么首次 proxy collection error 与仓库回归失败要分别记录？
+8. `PYTHONUTF8=1` 修复的是什么边界，它没有证明什么？
+9. 为什么 `pip check` 不能替代 strict `pip-audit`？
+10. 为什么 Gitleaks 要校验官方 release checksum 并扫描 `--all` history？
+11. 为什么 Dockerfile 只复制 `app` 仍不足以运行 dense index？
+12. Citation Guard 需要 trusted bundle 中的哪三类文件？
+13. 为什么不把整个仓库或整个 `data` 目录复制进镜像？
+14. 为什么 live 200 与 ready 200 不是同一个语义？
+15. 为什么 fresh index 前 ready 应为 503？
+16. index bootstrap 如何证明与 API 共用同一 Qdrant 和 SQLite 状态？
+17. 为什么镜像 tag/digest 已出现仍不能把 exit 1 的 build 记作成功？
+18. 未锁定传递依赖为什么会改变镜像体积与构建时间？
+19. daemon 500/502 后为什么不能继续编造 health/request/down 结果？
+20. 为什么未提交候选修复不能完成 origin/main clean-clone 验收？
+21. 下一轮重跑为什么必须使用新的 origin commit 和 fresh volumes？
+22. 什么条件满足后才能把 Day28 从 blocked 改为 completed？

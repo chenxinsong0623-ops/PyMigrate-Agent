@@ -34,6 +34,7 @@ MigrationLens 是一个正在开发的 Pydantic v1→v2 升级影响分析 Agent
 | MigrationLens Day 25 | `blocked / citation_support_not_assessable_from_sealed_evidence` | 七个 Day24 sealed artifacts hash/identity 已复核；Agent artifact 只有 case-level aggregate counts，没有 exact finding ↔ citation mapping，故未生成 20 条假样本、未冒充 human review；已新增 blocked audit、失败归档与版本化 additive aggregate，locked rerun=0 |
 | MigrationLens Day 26 | `implementation_complete / real_llm_smoke_verified` | 50 files/10k LOC scanner benchmark、FakeLLM Locust concurrency 5/10、`reports/loadtest.json`/`e2e_latency.json`、百炼 direct adapter N=1 smoke 成功；真实 Locust load 与 Agent/API E2E 未运行 |
 | MigrationLens Day 27 | `completed / ci_runtime_verified` | GitHub Actions `CI and security gate` Run #1 成功（约 2m 2s）；Python 3.11 FakeLLM-only CI、pinned actions、`pip check`/pytest/Ruff/Compose static gate、strict pip-audit 与 checksum-pinned Gitleaks full-history secret scan 均已在 GitHub-hosted Runner 验证 |
+| MigrationLens Day 28 | `blocked / fixes_pending_commit_and_clean_clone_rerun` | origin/main 真实 clean clone 揭示 sealed CSV checkout 行尾变化与镜像缺少可信检索 bundle；候选修复及 853-test 回归已通过，但尚未 commit/push，且 Docker daemon 在 3.27 GB 镜像解包后出现 500/502，故全链路未完成 |
 
 当前 SQLite 和 Qdrant 都已接入 FastAPI lifespan。SQLite schema version `2` 包含
 `system_metadata`、`analyses` 与 `reports`，支持 v1→v2 事务迁移以及 API envelope、Day 20
@@ -97,7 +98,8 @@ was rerun。
 - 可计算的人工 citation support：Day25 已归档失败，但因 sealed finding-level evidence
   缺失而 blocked；
 - 真实 LLM load 与 Agent/API real-provider E2E；
-- Day28 clean clone / Docker runtime 复现；
+- Day28 修复提交后的全新 origin/main clean clone 与 Docker runtime 复现；当前证据与 blocker
+  见 [`reports/day28-reproducibility.json`](reports/day28-reproducibility.json)；
 - Day29 release documentation；
 - WDI-ClaimCheck 的任何业务代码。
 
@@ -715,6 +717,32 @@ docker compose up --build -d
 docker compose ps
 ```
 
+### Clean Docker bootstrap（Day28 候选流程，等待提交后最终复验）
+
+Docker API 的 SQLite 位于 `api_data:/app/var`，默认模型 cache 也位于该 volume 下的
+`/app/var/cache/huggingface`；Qdrant 使用 `qdrant_data`。因此 Docker 复现不能先在 host
+执行 `app.ingestion.dense_index`：host SQLite 与容器 SQLite 不是同一份状态。候选的隔离流程是：
+
+```powershell
+$Project = 'migrationlens-day28-repro'
+docker compose -p $Project build --pull
+docker compose -p $Project up -d qdrant api
+curl.exe -i http://127.0.0.1:8000/health/live
+curl.exe -i http://127.0.0.1:8000/health/ready
+docker compose -p $Project run --rm api python -m app.ingestion.dense_index
+curl.exe -i http://127.0.0.1:8000/health/ready
+docker compose -p $Project ps
+```
+
+第一次 ready 应在 fresh volume 中诚实反映 `document_index_status=not_built`；显式 index
+container 复用同一 `api_data` 和同一 Compose 网络/Qdrant，只有它完成固定 revision E5、
+Qdrant read-back verification 与 SQLite ready transition 后，第二次 ready 才应成为 200。
+这些状态必须读取真实 HTTP 响应，不能按文档预设为成功。
+
+本流程在 Day28 已由代码/Compose 契约审计确认，但包含当前候选 Dockerfile 修复，尚未在
+提交后的新 origin/main clone 上完成 runtime。当前不得把它描述为已验证成功；阻塞细节见
+[`reports/day28-reproducibility.json`](reports/day28-reproducibility.json)。
+
 API 使用 `python:3.11.15-slim-bookworm`，以 UID/GID `10001:10001` 非 root 运行；
 Qdrant 使用 `qdrant/qdrant:v1.18.3-unprivileged`。`api_data` 保存容器内 SQLite/var，
 `qdrant_data` 保存 Qdrant storage，均不绑定个人 Windows 路径。API healthcheck 使用
@@ -726,6 +754,14 @@ Qdrant API 创建或校验 collection，构成更强的应用级验证。
 
 ```powershell
 docker compose down
+```
+
+若使用了上面的唯一 `$Project`，并已先确认其 named volumes 全是本轮新建且没有用户数据，
+验证结束后才可执行：
+
+```powershell
+docker compose -p $Project down -v --remove-orphans
+docker compose -p $Project ps
 ```
 
 不要对未知或已有项目盲目使用 `down -v`。Day 7 验证使用隔离 project name

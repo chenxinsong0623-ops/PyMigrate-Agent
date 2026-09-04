@@ -8,6 +8,7 @@
 *.yml text eol=lf
 *.json text eol=lf
 *.env.example text eol=lf
+reports/*.csv text eol=lf
 
 *.bat text eol=crlf
 *.cmd text eol=crlf

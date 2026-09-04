@@ -124,4 +124,61 @@ Git history secret scan 均成功。未保存或编造 workflow URL。
 GitHub-hosted Runner 已实际证实固定 action commits、Python 3.11、Docker Compose 和公网
 PyPI/Gitleaks release 可用于此 workflow。没有将本机结果替代 remote evidence。
 
-Day27 已完成；Day28 clean clone/Docker runtime 与 Day29 release docs 均未开始。
+Day27 已完成；Day28 已执行但被 origin/main 可复现性缺陷与本机 Docker daemon 故障阻断，
+Day29 release docs 尚未开始。
+
+# MigrationLens Day 28 — blocked / fixes pending commit and clean-clone rerun
+
+## 1. 真实基线与清洁来源
+
+- 执行日期跨 2026-09-03 至 2026-09-04；本轮源分支为 `main`，本地 HEAD 与
+  `origin/main` 均为 `75bfb75b538a8b0c8c18b986eb0f5afc2d5d142d`，开始时主工作区 clean；
+- 通过网络从正式 origin 执行真实 `git clone --branch main`，不是复制现有目录；清洁克隆
+  初始 tracked status clean，且不存在 `.env`、`var`、`.venv`、`.pytest_cache`、
+  `.ruff_cache`、`qdrant_storage` 或模型目录；
+- 在克隆目录之外创建全新 Python 3.11.15 venv。机器默认镜像源的首次安装与 sandbox
+  网络尝试均失败/中止；使用官方 PyPI、`--no-cache-dir` 的真实安装最终 exit 0。
+
+## 2. origin/main 清洁克隆失败（不得记作完成）
+
+- 首次 pytest 因宿主 `ALL_PROXY`/`HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` 泄漏且未安装
+  `socksio`，collection 为 5 errors；清除 proxy 后重跑得到
+  `845 passed, 6 failed, 2 warnings in 36.94s`；
+- 六个失败全部来自 Day24 sealed CSV bytes hash 不匹配。Windows 全局
+  `core.autocrlf=true`，原 `.gitattributes` 仅有 `* text=auto`，使新 clone 中
+  `reports/retrieval_metrics.csv` 从期望
+  `c42e89852e64e4a20028040ca20a9f3bea7f5ac76c61b6c3d24ff74ae8f470b2`
+  变为 `8e8546f4f196f5e413029d7f24569c6a782ccb8d19523d45698941bae1403085`；
+- 原清洁镜像 Dockerfile 只复制 `app`，没有复制运行时 index/Citation Guard 所需的
+  `data/chunks/pydantic-v2-migration.json`、source manifest 与 snapshot；
+- 原始 `docker compose -p migrationlens-day28-repro build --pull --no-cache api` 从固定
+  Python digest 真实构建，传递解析得到 Linux Torch 2.14.0 与 CUDA 13 组件，镜像达到
+  3.27 GB。依赖安装步骤约 615.5 秒、layers export 约 217 秒；最终 unpacking 长时间无
+  CPU 进展，命令由本轮中止并 exit 1。随后 daemon 对 container create 返回 502、对
+  image inspect/remove 返回 500，故没有执行 compose up、pre-index readiness、E5 下载、
+  index bootstrap、post-index readiness 或真实 ZIP HTTP 分析。
+
+## 3. 已完成的最小候选修复
+
+- `.gitattributes` 新增 `reports/*.csv text eol=lf`，不改任何 sealed artifact bytes；
+- Dockerfile 只新增复制已跟踪的正式 chunk、manifest 和 snapshot，不复制 benchmark、
+  locked evidence、`.env`、用户数据或 cache；
+- 新增 `tests/unit/test_day28_reproducibility.py`。test-first 使用正确 Python 解释器时初次为
+  `2 failed in 1.58s`，修复后为 `2 passed in 0.14s`；
+- 修复后主工作区（清除 proxy）完整回归为 `853 passed, 2 warnings in 40.15s`；
+  `pip check`、Ruff lint、192-file format check、Compose static config 与
+  `git diff --check` 均 exit 0；
+- origin/main 清洁 venv 中 `python -m pip_audit . --strict` 在 `PYTHONUTF8=1` 下 exit 0、
+  `No known vulnerabilities found`；官方 checksums 校验后的 Gitleaks 8.30.1 扫描完整
+  history，exit 0、32 commits、约 2.86 MB、no leaks found。
+
+## 4. 当前 blocker 与下一步
+
+Day28 状态保持 `blocked / fixes_pending_commit_and_clean_clone_rerun`。候选修复尚未由用户
+commit/push，因此它不能证明 origin/main 可复现。用户提交并推送后，必须从新的 origin/main
+commit 重新 clone，在 clean venv 重跑全部门禁，并用恢复健康的 Docker daemon 从零完成：
+fresh volumes → live 200/ready 503 → 同 Qdrant/SQLite 显式 index bootstrap 与固定 revision
+E5 fresh cache → ready 200 → 合成 ZIP POST/GET 持久化 → `down -v` 清理。不得把本轮未运行
+阶段补写为成功，也不得自动 commit、push、tag 或重跑 locked evaluator。
+
+机器可读明细见 `reports/day28-reproducibility.json`。

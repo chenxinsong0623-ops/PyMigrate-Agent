@@ -908,3 +908,30 @@
 - 影响：新增 workflow 与静态 CI/security contract tests；`pip-audit`、Gitleaks notices、
   AGENTS 必需门禁与 Day27 evidence/docs 同步。SPEC、业务代码、Day24 sealed artifacts、
   Day25 blocker、Day26 runtime/load artifacts、部署内容和 Git history 均不改变。
+
+## D-033 — Day28 clean-clone byte identity 与容器运行时输入
+
+- 日期：2026-09-04
+- 状态：候选修复已验证；等待用户 commit/push 后从 origin/main 重跑
+- 决策：
+  - 对会被 SHA256 封存校验的 `reports/*.csv` 明确设置 Git attribute
+    `text eol=lf`。不修改 sealed CSV 内容、期望 hash、locked evaluator 或既有评测结果；
+  - API 镜像必须包含 production runtime 实际读取的固定 Day8/Day9 trusted bundle：chunk
+    artifact、source manifest 与 source snapshot。只复制这三类精确路径，不把 benchmark、
+    locked evidence、开发 cache、`.env` 或用户上传数据扩大进镜像；
+  - clean-clone 验证必须使用 origin 的已提交 commit。未提交工作区上的测试或镜像即使成功，
+    也只能证明候选修复，不能把 Day28 标记 completed；
+  - 宿主 proxy、Git EOL 策略、非 ASCII temp path 与 Docker daemon 状态必须作为环境输入记录。
+    可通过清除 proxy、`PYTHONUTF8=1` 等显式运行条件隔离环境差异，但不得通过增加无关产品
+    依赖、修改 sealed hash 或复用旧卷/镜像掩盖失败；
+  - 当前不在 Day28 临时改变 Torch/CPU wheel 依赖策略。Linux PyPI 解析产生 3.27 GB CUDA
+    镜像的事实记录为发布风险；如要优化，必须另行评估可复现 lock、官方 CPU wheel index、
+    许可证与 CI/部署影响，不能与本次功能修复混为一项。
+- 原因：Windows `core.autocrlf=true` 的真实 clone 已把封存 CSV checkout bytes 改写，导致
+  6 个完整回归失败；Dockerfile 又遗漏 Citation Guard 与 dense index 的正式只读输入。两者都
+  会让“旧工作区通过”与“新环境可复现”产生假等价。
+- 替代方案：未采用改 expected SHA、重新生成 sealed artifacts、关闭 hash test、全局修改用户
+  Git 配置、把整个仓库复制进镜像、自动启动时建索引、复用现有模型/Qdrant/SQLite volume、
+  自动 commit/push，或在 daemon 500/502 时把未运行 runtime 阶段写成成功。
+- 影响：新增 Day28 静态契约测试、Git EOL 规则、三条精确 Docker COPY 与 blocked evidence。
+  SPEC、业务行为、Day24/25 evidence、Gold、locked fixtures、检索参数和模型 revision 不变。
